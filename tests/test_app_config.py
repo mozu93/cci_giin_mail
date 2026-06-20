@@ -1,14 +1,5 @@
-import json
 import pytest
 from pathlib import Path
-
-
-@pytest.fixture
-def tmp_config(tmp_path, monkeypatch):
-    config_file = tmp_path / "app_config.json"
-    monkeypatch.setattr("app.utils.app_config._CONFIG_DIR",
-                        lambda: tmp_path)
-    return config_file
 
 
 def test_get_config_returns_empty_when_no_file(tmp_path, monkeypatch):
