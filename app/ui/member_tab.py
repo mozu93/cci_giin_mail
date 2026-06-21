@@ -2,9 +2,10 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLineEdit, QComboBox, QLabel, QHeaderView,
-    QMessageBox
+    QMessageBox, QCheckBox
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 from app.database.connection import get_session
 from app.database.models import Position
 from app.services.member_service import get_members, delete_member
@@ -31,19 +32,22 @@ class MemberTab(QWidget):
         self._pos_filter = QComboBox()
         self._pos_filter.addItem("すべての役職", None)
         self._pos_filter.currentIndexChanged.connect(self._load)
-        btn_add = QPushButton("追加")
-        btn_add.clicked.connect(self._add)
-        btn_edit = QPushButton("編集")
-        btn_edit.clicked.connect(self._edit)
-        btn_delete = QPushButton("退任")
-        btn_delete.clicked.connect(self._delete)
+        self._show_inactive = QCheckBox("退任者を含む")
+        self._show_inactive.stateChanged.connect(self._load)
+        btn_add     = QPushButton("追加")
+        btn_edit    = QPushButton("編集")
+        btn_delete  = QPushButton("退任")
         btn_history = QPushButton("変更履歴")
+        btn_import  = QPushButton("インポート")
+        btn_add.clicked.connect(self._add)
+        btn_edit.clicked.connect(self._edit)
+        btn_delete.clicked.connect(self._delete)
         btn_history.clicked.connect(self._show_history)
-        btn_import = QPushButton("インポート")
         btn_import.clicked.connect(self._import)
         toolbar.addWidget(self._search, 2)
         toolbar.addWidget(QLabel("役職:"))
         toolbar.addWidget(self._pos_filter)
+        toolbar.addWidget(self._show_inactive)
         toolbar.addStretch()
         toolbar.addWidget(btn_add)
         toolbar.addWidget(btn_edit)
@@ -91,34 +95,58 @@ class MemberTab(QWidget):
 
     def _load(self):
         self._load_positions()
+        active_only = not self._show_inactive.isChecked()
         session = get_session()
         try:
             members = get_members(
                 session,
                 position_id=self._pos_filter.currentData(),
                 keyword=self._search.text().strip() or None,
+                active_only=active_only,
             )
             self._members = members
             self._table.setRowCount(0)
+            gray = QColor("#9CA3AF")
             for m in members:
                 row = self._table.rowCount()
                 self._table.insertRow(row)
-                self._table.setItem(row, 0, QTableWidgetItem(m.member_number))
+                is_retired = not m.is_active
                 pos_name = m.position.name if m.position else ""
-                self._table.setItem(row, 1, QTableWidgetItem(pos_name))
-                self._table.setItem(row, 2, QTableWidgetItem(m.organization_name))
-                self._table.setItem(row, 3, QTableWidgetItem(m.organization_kana or ""))
-                self._table.setItem(row, 4, QTableWidgetItem(m.name))
-                self._table.setItem(row, 5, QTableWidgetItem(m.name_kana or ""))
-                self._table.setItem(row, 6, QTableWidgetItem(m.title or ""))
+                values = [
+                    m.member_number,
+                    pos_name,
+                    m.organization_name,
+                    m.organization_kana or "",
+                    m.name,
+                    m.name_kana or "",
+                    m.title or "",
+                ]
+                for col, val in enumerate(values):
+                    item = QTableWidgetItem(val)
+                    if is_retired:
+                        item.setForeground(gray)
+                    self._table.setItem(row, col, item)
                 for ei, ea in enumerate(m.email_addresses[:5]):
                     label = f"（{ea.label}）" if ea.label else ""
-                    self._table.setItem(row, 7 + ei, QTableWidgetItem(f"{ea.address}{label}"))
-                self._table.setItem(row, 12, QTableWidgetItem(
-                    m.updated_at.strftime("%Y/%m/%d") if m.updated_at else ""))
-                self._table.item(row, 0).setData(
-                    Qt.ItemDataRole.UserRole, m.id)
-            self._count_label.setText(f"{len(members)} 件")
+                    item = QTableWidgetItem(f"{ea.address}{label}")
+                    if is_retired:
+                        item.setForeground(gray)
+                    self._table.setItem(row, 7 + ei, item)
+                upd = m.updated_at.strftime("%Y/%m/%d") if m.updated_at else ""
+                item = QTableWidgetItem(upd)
+                if is_retired:
+                    item.setForeground(gray)
+                self._table.setItem(row, 12, item)
+                self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, m.id)
+                self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole + 1,
+                                                  m.is_active)
+            active_count = sum(1 for m in members if m.is_active)
+            if active_only:
+                self._count_label.setText(f"{len(members)} 件")
+            else:
+                retired_count = len(members) - active_count
+                self._count_label.setText(
+                    f"{active_count} 件（退任者 {retired_count} 件を含む）")
         finally:
             session.close()
 
@@ -128,6 +156,16 @@ class MemberTab(QWidget):
             return None
         item = self._table.item(row, 0)
         return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def _selected_is_active(self) -> bool:
+        row = self._table.currentRow()
+        if row < 0:
+            return False
+        item = self._table.item(row, 0)
+        if item is None:
+            return False
+        val = item.data(Qt.ItemDataRole.UserRole + 1)
+        return bool(val)
 
     def _add(self):
         from app.ui.dialogs.member_edit_dialog import MemberEditDialog
@@ -155,6 +193,9 @@ class MemberTab(QWidget):
         member_id = self._selected_member_id()
         if member_id is None:
             return
+        if not self._selected_is_active():
+            QMessageBox.information(self, "退任済み", "この会員はすでに退任処理済みです。")
+            return
         ret = QMessageBox.question(
             self, "退任処理確認",
             "この会員を退任処理しますか？\n一覧から非表示になりますが、変更履歴は保持されます。",
@@ -165,13 +206,16 @@ class MemberTab(QWidget):
         session = get_session()
         delete_member(session, member_id, changed_by=self._staff_name)
         session.close()
-        self._load()
-        # 退任後に変更履歴を自動表示して記録を確認できるようにする
-        from app.ui.dialogs.member_history_dialog import MemberHistoryDialog
-        session2 = get_session()
-        dlg = MemberHistoryDialog(session2, member_id, parent=self)
-        dlg.exec()
-        session2.close()
+        self._show_inactive.setChecked(True)  # 退任者を含む表示に切り替え
+        # _load() は setChecked によって自動的に呼ばれる
+        # 退任した行を選択状態に戻す
+        for r in range(self._table.rowCount()):
+            item = self._table.item(r, 0)
+            if item and item.data(Qt.ItemDataRole.UserRole) == member_id:
+                self._table.selectRow(r)
+                break
+        QMessageBox.information(self, "退任完了",
+                                "退任処理が完了しました。\n変更履歴ボタンで履歴を確認できます。")
 
     def _show_history(self):
         member_id = self._selected_member_id()
