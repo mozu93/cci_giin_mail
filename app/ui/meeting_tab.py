@@ -158,6 +158,19 @@ class MeetingTab(QWidget):
         btn_row.addWidget(btn_csv)
         layout.addLayout(btn_row)
 
+        # ステータス抽出チェックボックス
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("表示:"))
+        self._status_filter_checks: dict[str, QCheckBox] = {}
+        for s in STATUS_OPTIONS:
+            cb = QCheckBox(s)
+            cb.setChecked(True)
+            cb.stateChanged.connect(self._apply_status_filter)
+            filter_row.addWidget(cb)
+            self._status_filter_checks[s] = cb
+        filter_row.addStretch()
+        layout.addLayout(filter_row)
+
         self._pre_table = QTableWidget(0, len(_PRE_HEADERS))
         self._pre_table.setHorizontalHeaderLabels(_PRE_HEADERS)
         h = self._pre_table.horizontalHeader()
@@ -217,6 +230,14 @@ class MeetingTab(QWidget):
             self._pre_table.setCellWidget(i, 6, title_edit)
             self._pre_table.setCellWidget(i, 7, name_edit)
         self._pre_table.setUpdatesEnabled(True)
+        self._apply_status_filter()
+
+    def _apply_status_filter(self):
+        visible = {s for s, cb in self._status_filter_checks.items() if cb.isChecked()}
+        for row in range(self._pre_table.rowCount()):
+            if row < len(self._preentry_data):
+                self._pre_table.setRowHidden(
+                    row, self._preentry_data[row]["status"] not in visible)
 
     def _on_pre_header_click(self, col: int):
         shift = bool(
@@ -289,6 +310,7 @@ class MeetingTab(QWidget):
             if name_edit:
                 name_edit.setText("")
         self._save_row(row)
+        self._apply_status_filter()
 
     def _save_proxy(self, row: int):
         if row >= len(self._preentry_data):
