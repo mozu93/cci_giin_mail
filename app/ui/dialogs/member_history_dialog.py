@@ -26,6 +26,7 @@ class MemberHistoryDialog(QDialog):
         super().__init__(parent)
         self._session = session
         self._member_id = member_id
+        self._history = []  # _build() でシグナル接続前に初期化
         member = get_member(session, member_id)
         self.setWindowTitle(f"変更履歴: {member.organization_name if member else ''}")
         self.resize(700, 500)
@@ -62,17 +63,17 @@ class MemberHistoryDialog(QDialog):
         for h in self._history:
             row = self._table.rowCount()
             self._table.insertRow(row)
-            self._table.setItem(row, 0, QTableWidgetItem(
-                h.changed_at.strftime("%Y/%m/%d %H:%M")))
+            ts = h.changed_at.strftime("%Y/%m/%d %H:%M") if h.changed_at else ""
+            self._table.setItem(row, 0, QTableWidgetItem(ts))
             self._table.setItem(row, 1, QTableWidgetItem(h.changed_by))
             self._table.setItem(row, 2, QTableWidgetItem(h.change_reason))
 
     def _show_snapshot(self, row: int):
         if row < 0 or row >= len(self._history):
             return
-        snap = self._history[row].snapshot
+        snap = self._history[row].snapshot or ""
         try:
-            data = json.loads(snap)
+            data = json.loads(snap) if snap else {}
             lines = []
             for k, v in data.items():
                 if k == "email_addresses":
@@ -92,4 +93,4 @@ class MemberHistoryDialog(QDialog):
                     lines.append(f"メール{i}: {addr}" + (f"（{lbl}）" if lbl else ""))
             self._snapshot_view.setPlainText("\n".join(lines))
         except Exception:
-            self._snapshot_view.setPlainText(snap)
+            self._snapshot_view.setPlainText(snap or "")
