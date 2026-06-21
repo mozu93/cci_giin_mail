@@ -154,7 +154,7 @@ class AttendanceRecord(Base):
     id = Column(Integer, primary_key=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
     member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
-    status = Column(String, nullable=False, default="未入力")
+    status = Column(String, nullable=False, default="未回答")
     proxy_title = Column(String, default="")
     proxy_name = Column(String, default="")
     meeting = relationship("Meeting", back_populates="records")

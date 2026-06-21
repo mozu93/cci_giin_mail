@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database.models import Meeting, AttendanceRecord
 from app.services.member_service import get_members
 
-STATUS_OPTIONS = ["未入力", "出席", "代理", "委任", "欠席"]
+STATUS_OPTIONS = ["未回答", "出席", "代理", "委任", "欠席"]
 
 
 def create_meeting(session: Session, name: str, meeting_date: date,
@@ -45,7 +45,7 @@ def upsert_attendance(session: Session, meeting_id: int, member_id: int,
 
 
 def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
-    """対象会員の出欠データをdictリストで返す（レコード未作成は未入力）"""
+    """対象会員の出欠データをdictリストで返す（レコード未作成は未回答）"""
     meeting = session.get(Meeting, meeting_id)
     members = get_members(session, active_only=True)
     if meeting and meeting.target_position_ids:
@@ -65,7 +65,7 @@ def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
             "org_name":     m.organization_name,
             "name":         m.name,
             "position":     m.position.name if m.position else "",
-            "status":       r.status if r else "未入力",
+            "status":       r.status if r else "未回答",
             "proxy_title":  r.proxy_title if r else "",
             "proxy_name":   r.proxy_name if r else "",
         })
@@ -74,7 +74,7 @@ def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
 
 def get_summary(session: Session, meeting_id: int) -> dict:
     data = get_attendance_data(session, meeting_id)
-    counts: dict[str, int] = {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未入力": 0}
+    counts: dict[str, int] = {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未回答": 0}
     for d in data:
         s = d["status"]
         counts[s] = counts.get(s, 0) + 1
@@ -85,7 +85,7 @@ def get_summary(session: Session, meeting_id: int) -> dict:
 def get_member_ids_by_status(session: Session, meeting_id: int,
                              statuses: list[str]) -> set[int]:
     """指定した会議・ステータスに該当する会員IDのセットを返す。
-    ステータス未登録の会員は「未入力」として扱う。"""
+    ステータス未登録の会員は「未回答」として扱う。"""
     meeting = session.get(Meeting, meeting_id)
     if not meeting:
         return set()
@@ -100,7 +100,7 @@ def get_member_ids_by_status(session: Session, meeting_id: int,
     }
     return {
         m.id for m in members
-        if records.get(m.id, "未入力") in statuses
+        if records.get(m.id, "未回答") in statuses
     }
 
 

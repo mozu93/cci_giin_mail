@@ -130,7 +130,7 @@ class SendTab(QWidget):
         _srow = QHBoxLayout()
         _srow.addWidget(QLabel("対象:"))
         self._status_checks: dict[str, QCheckBox] = {}
-        for _s in ["未入力", "欠席", "出席", "委任", "代理"]:
+        for _s in ["未回答", "欠席", "出席", "委任", "代理"]:
             _cb = QCheckBox(_s)
             _cb.stateChanged.connect(self._on_attend_filter)
             _srow.addWidget(_cb)
