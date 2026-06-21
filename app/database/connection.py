@@ -13,16 +13,23 @@ def _configure_sqlite(dbapi_conn, connection_record):
 
 def _migrate(engine):
     """既存DBにカラム追加が必要な場合だけALTER TABLEを実行する"""
+    from sqlalchemy import text
     with engine.connect() as conn:
-        existing = {
-            row[1]
-            for row in conn.execute(
-                __import__("sqlalchemy").text("PRAGMA table_info(meetings)")
-            )
+        meetings_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(meetings)"))
         }
-        if "target_position_ids" not in existing:
-            conn.execute(__import__("sqlalchemy").text(
+        if "target_position_ids" not in meetings_cols:
+            conn.execute(text(
                 "ALTER TABLE meetings ADD COLUMN target_position_ids TEXT"
+            ))
+            conn.commit()
+
+        members_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
+        }
+        if "display_order" not in members_cols:
+            conn.execute(text(
+                "ALTER TABLE members ADD COLUMN display_order INTEGER"
             ))
             conn.commit()
 

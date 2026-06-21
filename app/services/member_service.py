@@ -1,8 +1,8 @@
 import json
 from datetime import datetime
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, contains_eager, selectinload
 from sqlalchemy.exc import IntegrityError
-from app.database.models import Member, EmailAddress, MemberHistory
+from app.database.models import Member, EmailAddress, MemberHistory, Position
 
 
 def member_to_snapshot(member: Member) -> str:
@@ -64,10 +64,10 @@ def get_member(session: Session, member_id: int) -> Member | None:
 def get_members(session: Session, position_id: int | None = None,
                 keyword: str | None = None,
                 active_only: bool = True) -> list[Member]:
-    q = session.query(Member).options(
-        joinedload(Member.position),
-        selectinload(Member.email_addresses),
-    )
+    q = (session.query(Member)
+         .outerjoin(Member.position)
+         .options(contains_eager(Member.position),
+                  selectinload(Member.email_addresses)))
     if active_only:
         q = q.filter(Member.is_active == True)
     if position_id is not None:
@@ -79,7 +79,11 @@ def get_members(session: Session, position_id: int | None = None,
             Member.name.like(like) |
             Member.member_number.like(like)
         )
-    return q.order_by(Member.member_number).all()
+    return q.order_by(
+        Position.sort_order.asc().nullslast(),
+        Member.display_order.asc().nullslast(),
+        Member.organization_kana.asc(),
+    ).all()
 
 
 def set_email_addresses(session: Session, member_id: int,

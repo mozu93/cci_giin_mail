@@ -39,11 +39,13 @@ class MemberTab(QWidget):
         btn_delete  = QPushButton("退任")
         btn_history = QPushButton("変更履歴")
         btn_import  = QPushButton("インポート")
+        btn_order   = QPushButton("順番設定")
         btn_add.clicked.connect(self._add)
         btn_edit.clicked.connect(self._edit)
         btn_delete.clicked.connect(self._delete)
         btn_history.clicked.connect(self._show_history)
         btn_import.clicked.connect(self._import)
+        btn_order.clicked.connect(self._order_settings)
         toolbar.addWidget(self._search, 2)
         toolbar.addWidget(QLabel("役職:"))
         toolbar.addWidget(self._pos_filter)
@@ -54,6 +56,7 @@ class MemberTab(QWidget):
         toolbar.addWidget(btn_delete)
         toolbar.addWidget(btn_history)
         toolbar.addWidget(btn_import)
+        toolbar.addWidget(btn_order)
         layout.addLayout(toolbar)
 
         # 一覧テーブル
@@ -226,6 +229,14 @@ class MemberTab(QWidget):
         session = get_session()
         dlg = MemberHistoryDialog(session, member_id, parent=self)
         dlg.exec()
+        session.close()
+
+    def _order_settings(self):
+        from app.ui.dialogs.order_settings_dialog import OrderSettingsDialog
+        session = get_session()
+        dlg = OrderSettingsDialog(session, parent=self)
+        if dlg.exec():
+            self._load()
         session.close()
 
     def _import(self):

@@ -31,6 +31,7 @@ class Member(Base):
     name_kana = Column(String, default="")
     notes = Column(Text, default="")
     is_active = Column(Boolean, default=True)
+    display_order = Column(Integer, nullable=True)  # 役職内の手動表示順（副会頭等）
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False,
                         default=datetime.now, onupdate=datetime.now)
