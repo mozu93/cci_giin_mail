@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QCheckBox, QLineEdit, QTextEdit,
     QProgressBar, QFileDialog, QMessageBox, QSizePolicy,
-    QListWidget, QListWidgetItem
+    QListWidget, QListWidgetItem, QRadioButton, QButtonGroup
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from app.database.connection import get_session
@@ -90,12 +90,56 @@ class SendTab(QWidget):
         # Step 2: 宛先選択
         grp2 = QGroupBox("Step 2：宛先選択")
         v2 = QVBoxLayout(grp2)
-        v2.addWidget(QLabel("会議所役職で絞り込み（複数選択可 / Ctrl+クリックで追加選択）："))
+
+        # 選択方式切り替え
+        mode_row = QHBoxLayout()
+        self._rb_by_pos = QRadioButton("役職で選ぶ")
+        self._rb_by_attend = QRadioButton("会議の出欠で選ぶ")
+        self._rb_by_pos.setChecked(True)
+        _bg = QButtonGroup(self)
+        _bg.addButton(self._rb_by_pos)
+        _bg.addButton(self._rb_by_attend)
+        self._rb_by_pos.toggled.connect(self._on_mode_change)
+        mode_row.addWidget(self._rb_by_pos)
+        mode_row.addWidget(self._rb_by_attend)
+        mode_row.addStretch()
+        v2.addLayout(mode_row)
+
+        # 役職パネル
+        self._pos_panel = QWidget()
+        _pp = QVBoxLayout(self._pos_panel)
+        _pp.setContentsMargins(0, 0, 0, 0)
+        _pp.addWidget(QLabel("会議所役職（複数選択可 / Ctrl+クリックで追加選択）："))
         self._pos_list = QListWidget()
         self._pos_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         self._pos_list.setMaximumHeight(90)
         self._pos_list.itemSelectionChanged.connect(self._on_pos_select)
-        v2.addWidget(self._pos_list)
+        _pp.addWidget(self._pos_list)
+        v2.addWidget(self._pos_panel)
+
+        # 会議出欠パネル
+        self._attend_panel = QWidget()
+        _ap = QVBoxLayout(self._attend_panel)
+        _ap.setContentsMargins(0, 0, 0, 0)
+        _mrow = QHBoxLayout()
+        _mrow.addWidget(QLabel("会議:"))
+        self._meeting_combo = QComboBox()
+        self._meeting_combo.currentIndexChanged.connect(self._on_attend_filter)
+        _mrow.addWidget(self._meeting_combo, 1)
+        _ap.addLayout(_mrow)
+        _srow = QHBoxLayout()
+        _srow.addWidget(QLabel("対象:"))
+        self._status_checks: dict[str, QCheckBox] = {}
+        for _s in ["未入力", "欠席", "出席", "委任", "代理"]:
+            _cb = QCheckBox(_s)
+            _cb.stateChanged.connect(self._on_attend_filter)
+            _srow.addWidget(_cb)
+            self._status_checks[_s] = _cb
+        _srow.addStretch()
+        _ap.addLayout(_srow)
+        self._attend_panel.setVisible(False)
+        v2.addWidget(self._attend_panel)
+
         v2.addWidget(QLabel("企業で選択："))
         self._member_table = QTableWidget(0, 3)
         self._member_table.setHorizontalHeaderLabels(["選択", "事業所名", "氏名"])
@@ -261,6 +305,65 @@ class SendTab(QWidget):
                         break
         finally:
             session.close()
+
+    def _on_mode_change(self):
+        is_pos = self._rb_by_pos.isChecked()
+        self._pos_panel.setVisible(is_pos)
+        self._attend_panel.setVisible(not is_pos)
+        if not is_pos:
+            self._load_meeting_combo()
+        self._clear_member_checks()
+
+    def _load_meeting_combo(self):
+        from app.services.meeting_service import get_meetings
+        session = get_session()
+        try:
+            meetings = get_meetings(session)
+            self._meeting_combo.blockSignals(True)
+            self._meeting_combo.clear()
+            self._meeting_combo.addItem("（会議を選択）", None)
+            for m in meetings:
+                scope = "全員" if not m.target_position_ids else "役職指定"
+                self._meeting_combo.addItem(
+                    f"{m.date.strftime('%Y/%m/%d')}　{m.name}　（{scope}）", m.id)
+            self._meeting_combo.blockSignals(False)
+        finally:
+            session.close()
+
+    def _on_attend_filter(self):
+        meeting_id = self._meeting_combo.currentData()
+        statuses = [s for s, cb in self._status_checks.items() if cb.isChecked()]
+        if not meeting_id or not statuses:
+            self._clear_member_checks()
+            return
+        from app.services.meeting_service import get_member_ids_by_status
+        session = get_session()
+        try:
+            member_ids = get_member_ids_by_status(session, meeting_id, statuses)
+        finally:
+            session.close()
+        self._member_table.setUpdatesEnabled(False)
+        for row in range(self._member_table.rowCount()):
+            item = self._member_table.item(row, 1)
+            mid = item.data(Qt.ItemDataRole.UserRole) if item else None
+            cb = self._member_table.cellWidget(row, 0)
+            if cb and mid is not None:
+                cb.blockSignals(True)
+                cb.setChecked(mid in member_ids)
+                cb.blockSignals(False)
+        self._member_table.setUpdatesEnabled(True)
+        self._update_selection_label()
+
+    def _clear_member_checks(self):
+        self._member_table.setUpdatesEnabled(False)
+        for row in range(self._member_table.rowCount()):
+            cb = self._member_table.cellWidget(row, 0)
+            if cb:
+                cb.blockSignals(True)
+                cb.setChecked(False)
+                cb.blockSignals(False)
+        self._member_table.setUpdatesEnabled(True)
+        self._update_selection_label()
 
     def _on_pos_select(self):
         selected_pos_ids = {

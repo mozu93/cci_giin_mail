@@ -82,6 +82,28 @@ def get_summary(session: Session, meeting_id: int) -> dict:
     return counts
 
 
+def get_member_ids_by_status(session: Session, meeting_id: int,
+                             statuses: list[str]) -> set[int]:
+    """指定した会議・ステータスに該当する会員IDのセットを返す。
+    ステータス未登録の会員は「未入力」として扱う。"""
+    meeting = session.get(Meeting, meeting_id)
+    if not meeting:
+        return set()
+    members = get_members(session, active_only=True)
+    if meeting.target_position_ids:
+        target_ids = set(json.loads(meeting.target_position_ids))
+        members = [m for m in members if m.position_id in target_ids]
+    records = {
+        r.member_id: r.status
+        for r in session.query(AttendanceRecord)
+        .filter_by(meeting_id=meeting_id).all()
+    }
+    return {
+        m.id for m in members
+        if records.get(m.id, "未入力") in statuses
+    }
+
+
 def export_csv(session: Session, meeting_id: int, filepath: str) -> None:
     meeting = session.get(Meeting, meeting_id)
     data = get_attendance_data(session, meeting_id)
