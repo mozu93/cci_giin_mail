@@ -133,7 +133,7 @@ def delete_member(session: Session, member_id: int,
         session.add(MemberHistory(
             member_id=member_id,
             changed_by=changed_by or "システム",
-            change_reason="退任",
+            change_reason="議員退任",
             snapshot=member_to_snapshot(member),
         ))
         member.is_active = False

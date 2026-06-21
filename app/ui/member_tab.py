@@ -32,11 +32,11 @@ class MemberTab(QWidget):
         self._pos_filter = QComboBox()
         self._pos_filter.addItem("すべての役職", None)
         self._pos_filter.currentIndexChanged.connect(self._load)
-        self._show_inactive = QCheckBox("退任者を含む")
+        self._show_inactive = QCheckBox("議員退任者を含む")
         self._show_inactive.stateChanged.connect(self._load)
         btn_add     = QPushButton("追加")
         btn_edit    = QPushButton("編集")
-        btn_delete  = QPushButton("退任")
+        btn_delete  = QPushButton("議員退任")
         btn_history = QPushButton("変更履歴")
         btn_import  = QPushButton("インポート")
         btn_order   = QPushButton("順番設定")
@@ -149,7 +149,7 @@ class MemberTab(QWidget):
             else:
                 retired_count = len(members) - active_count
                 self._count_label.setText(
-                    f"{active_count} 件（退任者 {retired_count} 件を含む）")
+                    f"{active_count} 件（議員退任者 {retired_count} 件を含む）")
         finally:
             session.close()
 
@@ -197,11 +197,11 @@ class MemberTab(QWidget):
         if member_id is None:
             return
         if not self._selected_is_active():
-            QMessageBox.information(self, "退任済み", "この会員はすでに退任処理済みです。")
+            QMessageBox.information(self, "議員退任済み", "この会員はすでに議員退任処理済みです。")
             return
         ret = QMessageBox.question(
-            self, "退任処理確認",
-            "この会員を退任処理しますか？\n一覧から非表示になりますが、変更履歴は保持されます。",
+            self, "議員退任処理確認",
+            "この会員を議員退任処理しますか？\n一覧から非表示になりますが、変更履歴は保持されます。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
@@ -217,8 +217,8 @@ class MemberTab(QWidget):
             if item and item.data(Qt.ItemDataRole.UserRole) == member_id:
                 self._table.selectRow(r)
                 break
-        QMessageBox.information(self, "退任完了",
-                                "退任処理が完了しました。\n変更履歴ボタンで履歴を確認できます。")
+        QMessageBox.information(self, "議員退任完了",
+                                "議員退任処理が完了しました。\n変更履歴ボタンで履歴を確認できます。")
 
     def _show_history(self):
         member_id = self._selected_member_id()

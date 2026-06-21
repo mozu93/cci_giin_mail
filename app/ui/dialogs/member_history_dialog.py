@@ -105,7 +105,7 @@ class MemberHistoryDialog(QDialog):
 
     def _fmt(self, k: str, v) -> str:
         if k == "is_active":
-            return "在任中" if v else "退任"
+            return "在任中" if v else "議員退任"
         if v is None or v == "":
             return "（なし）"
         return str(v)
