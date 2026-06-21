@@ -14,6 +14,7 @@ _MEMBER_FIELDS = [
     ("title",            "役職名"),
     ("name",             "氏名 *"),
     ("name_kana",        "氏名フリガナ"),
+    ("position_name",    "会議所役職"),
     ("email_1_address",  "メール1 アドレス"),
     ("email_1_label",    "メール1 ラベル"),
     ("email_2_address",  "メール2 アドレス"),
@@ -106,6 +107,8 @@ class ImportDialog(QDialog):
             "役職名": "title",
             "氏名": "name",
             "氏名フリガナ": "name_kana",
+            "会議所役職": "position_name",
+            "会議所役職名": "position_name",
         }
         for i, h in enumerate(headers):
             if h in auto_map:

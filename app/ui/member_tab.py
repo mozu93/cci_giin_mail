@@ -53,9 +53,12 @@ class MemberTab(QWidget):
         layout.addLayout(toolbar)
 
         # 一覧テーブル
-        self._table = QTableWidget(0, 6)
-        self._table.setHorizontalHeaderLabels(
-            ["会員番号", "会議所役職", "事業所名", "氏名", "役職名", "メール件数"])
+        self._table = QTableWidget(0, 12)
+        self._table.setHorizontalHeaderLabels([
+            "会員番号", "会議所役職", "事業所名", "事業所名フリガナ",
+            "氏名", "氏名フリガナ", "役職名",
+            "メール1", "メール2", "メール3", "メール4", "メール5",
+        ])
         self._table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -103,10 +106,13 @@ class MemberTab(QWidget):
                 pos_name = m.position.name if m.position else ""
                 self._table.setItem(row, 1, QTableWidgetItem(pos_name))
                 self._table.setItem(row, 2, QTableWidgetItem(m.organization_name))
-                self._table.setItem(row, 3, QTableWidgetItem(m.name))
-                self._table.setItem(row, 4, QTableWidgetItem(m.title or ""))
-                self._table.setItem(row, 5, QTableWidgetItem(
-                    str(len(m.email_addresses))))
+                self._table.setItem(row, 3, QTableWidgetItem(m.organization_kana or ""))
+                self._table.setItem(row, 4, QTableWidgetItem(m.name))
+                self._table.setItem(row, 5, QTableWidgetItem(m.name_kana or ""))
+                self._table.setItem(row, 6, QTableWidgetItem(m.title or ""))
+                for ei, ea in enumerate(m.email_addresses[:5]):
+                    label = f"（{ea.label}）" if ea.label else ""
+                    self._table.setItem(row, 7 + ei, QTableWidgetItem(f"{ea.address}{label}"))
                 self._table.item(row, 0).setData(
                     Qt.ItemDataRole.UserRole, m.id)
             self._count_label.setText(f"{len(members)} 件")

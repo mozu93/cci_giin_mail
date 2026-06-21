@@ -1,5 +1,6 @@
 from pathlib import Path
 from sqlalchemy.orm import Session
+from app.database.models import Position
 from app.services.member_service import (
     create_member, update_member, set_email_addresses, get_members
 )
@@ -30,6 +31,7 @@ def load_member_file(filepath: str) -> tuple[list[str], list[list]]:
 def import_members(session: Session, rows: list[list],
                    column_map: dict, changed_by: str) -> dict:
     existing = {m.member_number: m for m in get_members(session, active_only=False)}
+    position_map = {p.name: p.id for p in session.query(Position).all()}
     created = updated = 0
     errors: list[str] = []
 
@@ -51,10 +53,12 @@ def import_members(session: Session, rows: list[list],
             errors.append(f"行{i} ({member_number}): 事業所名または氏名が空です")
             continue
 
+        position_name = _cell(row, "position_name")
         kwargs = {
             "organization_kana": _cell(row, "organization_kana"),
             "title":             _cell(row, "title"),
             "name_kana":         _cell(row, "name_kana"),
+            "position_id":       position_map.get(position_name) if position_name else None,
         }
 
         addresses = []
