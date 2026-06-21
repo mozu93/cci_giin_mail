@@ -164,6 +164,7 @@ class MemberEditDialog(QDialog):
             else:
                 m = create_member(
                     self._session, member_number, org_name, name,
+                    created_by=self._staff_name,
                     organization_kana=self._org_kana.text().strip(),
                     title=self._title.text().strip(),
                     name_kana=self._name_kana.text().strip(),

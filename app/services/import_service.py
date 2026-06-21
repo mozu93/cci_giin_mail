@@ -112,7 +112,8 @@ def import_members(session: Session, rows: list[list],
                 updated += 1
             else:
                 m = create_member(session, member_number,
-                                  organization_name, name, **kwargs)
+                                  organization_name, name,
+                                  created_by=changed_by, **kwargs)
                 existing[member_number] = m  # 同一ファイル内の重複を更新扱いにする
                 if addresses:
                     set_email_addresses(session, m.id, addresses)

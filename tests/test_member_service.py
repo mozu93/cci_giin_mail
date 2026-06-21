@@ -53,7 +53,9 @@ def test_update_member_records_history(db_session):
     update_member(db_session, m.id, changed_by="田中", change_reason="社名変更",
                   organization_name="○○商事（新）")
     history = get_member_history(db_session, m.id)
-    assert len(history) == 1
+    # create_member が「新規登録」履歴を作るため合計2件
+    assert len(history) == 2
+    # 新しい順なので history[0] が社名変更、history[1] が新規登録
     assert history[0].change_reason == "社名変更"
     assert history[0].changed_by == "田中"
     snap = json.loads(history[0].snapshot)
@@ -70,8 +72,15 @@ def test_update_member_changes_field(db_session):
 
 def test_delete_member(db_session):
     m = create_member(db_session, "A-001", "○○商事", "山田 太郎")
-    delete_member(db_session, m.id)
-    assert get_member(db_session, m.id) is None
+    delete_member(db_session, m.id, changed_by="管理者")
+    # ソフト削除: レコードは残るが is_active=False になる
+    fetched = get_member(db_session, m.id)
+    assert fetched is not None
+    assert fetched.is_active is False
+    # 退会処理履歴が記録されている
+    history = get_member_history(db_session, m.id)
+    reasons = [h.change_reason for h in history]
+    assert "退会処理" in reasons
 
 
 def test_get_members_filter_by_position(db_session):

@@ -6,16 +6,16 @@ from app.database.models import Member, EmailAddress, MemberHistory
 
 def member_to_snapshot(member: Member) -> str:
     data = {
-        "member_number":    member.member_number,
-        "position_id":      member.position_id,
+        "member_number":     member.member_number,
+        "position_name":     member.position.name if member.position else "",
         "organization_name": member.organization_name,
         "organization_kana": member.organization_kana,
-        "title":            member.title,
-        "name":             member.name,
-        "name_kana":        member.name_kana,
-        "notes":            member.notes,
-        "is_active":        member.is_active,
-        "email_addresses":  [
+        "title":             member.title,
+        "name":              member.name,
+        "name_kana":         member.name_kana,
+        "notes":             member.notes,
+        "is_active":         member.is_active,
+        "email_addresses":   [
             {"address": e.address, "label": e.label, "sort_order": e.sort_order}
             for e in member.email_addresses
         ],
@@ -24,7 +24,8 @@ def member_to_snapshot(member: Member) -> str:
 
 
 def create_member(session: Session, member_number: str,
-                  organization_name: str, name: str, **kwargs) -> Member:
+                  organization_name: str, name: str,
+                  created_by: str = "", **kwargs) -> Member:
     member = Member(
         member_number=member_number,
         organization_name=organization_name,
@@ -37,6 +38,14 @@ def create_member(session: Session, member_number: str,
     except IntegrityError:
         session.rollback()
         raise
+    history = MemberHistory(
+        member_id=member.id,
+        changed_by=created_by or "システム",
+        change_reason="新規登録",
+        snapshot=member_to_snapshot(member),
+    )
+    session.add(history)
+    session.commit()
     return member
 
 
@@ -96,10 +105,19 @@ def update_member(session: Session, member_id: int,
     return member
 
 
-def delete_member(session: Session, member_id: int) -> None:
+def delete_member(session: Session, member_id: int,
+                  changed_by: str = "") -> None:
+    """退会処理: is_active=Falseに変更し、履歴を保持する"""
     member = session.get(Member, member_id)
     if member:
-        session.delete(member)
+        history = MemberHistory(
+            member_id=member_id,
+            changed_by=changed_by or "システム",
+            change_reason="退会処理",
+            snapshot=member_to_snapshot(member),
+        )
+        session.add(history)
+        member.is_active = False
         session.commit()
 
 

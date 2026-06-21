@@ -1,12 +1,24 @@
-# app/ui/dialogs/member_history_dialog.py
 import json
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QPushButton, QTextEdit, QSplitter, QLabel
+    QHeaderView, QPushButton, QTextEdit, QSplitter
 )
 from PyQt6.QtCore import Qt
 from sqlalchemy.orm import Session
 from app.services.member_service import get_member_history, get_member
+
+_FIELD_LABELS = {
+    "member_number":     "会員番号",
+    "position_name":     "会議所役職",
+    "organization_name": "事業所名",
+    "organization_kana": "事業所名フリガナ",
+    "title":             "役職名",
+    "name":              "氏名",
+    "name_kana":         "氏名フリガナ",
+    "notes":             "備考",
+    "is_active":         "状態",
+    "position_id":       "会議所役職ID（旧）",
+}
 
 
 class MemberHistoryDialog(QDialog):
@@ -35,7 +47,7 @@ class MemberHistoryDialog(QDialog):
 
         self._snapshot_view = QTextEdit()
         self._snapshot_view.setReadOnly(True)
-        self._snapshot_view.setPlaceholderText("行を選択すると変更前のデータを表示します")
+        self._snapshot_view.setPlaceholderText("行を選択するとその時点のデータを表示します")
         splitter.addWidget(self._snapshot_view)
 
         layout.addWidget(splitter)
@@ -61,10 +73,23 @@ class MemberHistoryDialog(QDialog):
         snap = self._history[row].snapshot
         try:
             data = json.loads(snap)
-            lines = [f"{k}: {v}" for k, v in data.items() if k != "email_addresses"]
+            lines = []
+            for k, v in data.items():
+                if k == "email_addresses":
+                    continue
+                label = _FIELD_LABELS.get(k, k)
+                if k == "is_active":
+                    v = "有効" if v else "無効（退会）"
+                elif v is None or v == "":
+                    v = "（なし）"
+                lines.append(f"{label}: {v}")
             emails = data.get("email_addresses", [])
-            for i, e in enumerate(emails, 1):
-                lines.append(f"メール{i}: {e['address']} ({e['label']})")
+            if emails:
+                lines.append("")
+                for i, e in enumerate(emails, 1):
+                    addr = e.get("address", "")
+                    lbl = e.get("label", "")
+                    lines.append(f"メール{i}: {addr}" + (f"（{lbl}）" if lbl else ""))
             self._snapshot_view.setPlainText("\n".join(lines))
         except Exception:
             self._snapshot_view.setPlainText(snap)

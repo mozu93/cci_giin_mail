@@ -153,14 +153,14 @@ class MemberTab(QWidget):
         if member_id is None:
             return
         ret = QMessageBox.question(
-            self, "削除確認",
-            "この会員を削除しますか？\n関連する変更履歴もすべて削除されます。",
+            self, "退会処理確認",
+            "この会員を退会処理しますか？\n一覧から非表示になりますが、変更履歴は保持されます。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
             return
         session = get_session()
-        delete_member(session, member_id)
+        delete_member(session, member_id, changed_by=self._staff_name)
         session.close()
         self._load()
 
