@@ -158,6 +158,21 @@ class MeetingTab(QWidget):
         w = QWidget()
         layout = QVBoxLayout(w)
 
+        # 事前入力集計バー（最上部）
+        pre_grp = QGroupBox("出欠集計")
+        pre_cnt = QHBoxLayout(pre_grp)
+        self._pre_lbl_attend     = self._count_label("出席: 0",  "#16A34A")
+        self._pre_lbl_proxy      = self._count_label("代理: 0",  "#2563EB")
+        self._pre_lbl_delegate   = self._count_label("委任: 0",  "#CA8A04")
+        self._pre_lbl_absent     = self._count_label("欠席: 0",  "#DC2626")
+        self._pre_lbl_unanswered = self._count_label("未回答: 0", "#6B7280")
+        self._pre_lbl_total      = self._count_label("合計: 0",  "#1E40AF", bold=True)
+        for lbl in [self._pre_lbl_attend, self._pre_lbl_proxy, self._pre_lbl_delegate,
+                    self._pre_lbl_absent, self._pre_lbl_unanswered, self._pre_lbl_total]:
+            pre_cnt.addWidget(lbl)
+        pre_cnt.addStretch()
+        layout.addWidget(pre_grp)
+
         btn_row = QHBoxLayout()
         btn_reset = QPushButton("並び替え解除")
         btn_reset.clicked.connect(self._reset_sort)
@@ -190,21 +205,6 @@ class MeetingTab(QWidget):
         filter_row.addWidget(btn_all_off)
         filter_row.addStretch()
         layout.addLayout(filter_row)
-
-        # 事前入力集計バー
-        pre_grp = QGroupBox("出欠集計")
-        pre_cnt = QHBoxLayout(pre_grp)
-        self._pre_lbl_attend   = self._count_label("出席: 0",  "#16A34A")
-        self._pre_lbl_proxy    = self._count_label("代理: 0",  "#2563EB")
-        self._pre_lbl_delegate = self._count_label("委任: 0",  "#CA8A04")
-        self._pre_lbl_absent   = self._count_label("欠席: 0",  "#DC2626")
-        self._pre_lbl_unanswered = self._count_label("未回答: 0", "#6B7280")
-        self._pre_lbl_total    = self._count_label("合計: 0",  "#1E40AF", bold=True)
-        for lbl in [self._pre_lbl_attend, self._pre_lbl_proxy, self._pre_lbl_delegate,
-                    self._pre_lbl_absent, self._pre_lbl_unanswered, self._pre_lbl_total]:
-            pre_cnt.addWidget(lbl)
-        pre_cnt.addStretch()
-        layout.addWidget(pre_grp)
 
         self._pre_table = QTableWidget(0, len(_PRE_HEADERS))
         self._pre_table.setHorizontalHeaderLabels(_PRE_HEADERS)
