@@ -33,6 +33,20 @@ _PRE_COL_KEYS = ["position", "org_name", "org_kana", "title", "name",
 _PRE_HEADERS  = ["会議所役職名", "事業所名", "事業所名フリガナ", "役職名", "氏名",
                  "ステータス", "代理役職名", "代理者氏名"]
 
+
+class _NoWheelComboBox(QComboBox):
+    """ホイールスクロールで値が変わらないコンボボックス"""
+    def wheelEvent(self, event):
+        event.ignore()
+
+
+class _ReceptionTable(QTableWidget):
+    """コンボボックスのポップアップ表示中にクリックで行選択が変わらないテーブル"""
+    def mousePressEvent(self, event):
+        if QApplication.activePopupWidget() is not None:
+            return   # ドロップダウン表示中のクリックを無視
+        super().mousePressEvent(event)
+
 _STATUS_COLORS = {
     "出席": "#DCFCE7",
     "代理": "#DBEAFE",
@@ -451,7 +465,7 @@ class MeetingTab(QWidget):
         layout.addLayout(search_row)
 
         # 一覧（7列）: 会員番号, 事業所名, 会議所役職, 氏名, 事前, 当日受付, 代理情報
-        self._rec_table = QTableWidget(0, 7)
+        self._rec_table = _ReceptionTable(0, 7)
         self._rec_table.setHorizontalHeaderLabels(
             ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"])
         h = self._rec_table.horizontalHeader()
@@ -512,7 +526,7 @@ class MeetingTab(QWidget):
                     item.setBackground(QColor(bg))
                 self._rec_table.setItem(row, col, item)
             # 列 5: 当日受付 QComboBox
-            combo = QComboBox()
+            combo = _NoWheelComboBox()
             combo.addItems(self._ACTUAL_OPTIONS)
             combo.blockSignals(True)
             combo.setCurrentText(d.get("actual_status") or "")
