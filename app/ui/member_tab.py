@@ -68,7 +68,8 @@ class MemberTab(QWidget):
             "最終更新日",
         ])
         self._table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch)
+            2, QHeaderView.ResizeMode.Interactive)
+        self._table.setColumnWidth(2, 200)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.doubleClicked.connect(self._edit)
