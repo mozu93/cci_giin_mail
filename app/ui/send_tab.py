@@ -5,7 +5,8 @@ from PyQt6.QtWidgets import (
     QGroupBox, QFormLayout, QComboBox, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QCheckBox, QLineEdit, QTextEdit,
-    QProgressBar, QFileDialog, QMessageBox, QSizePolicy
+    QProgressBar, QFileDialog, QMessageBox, QSizePolicy,
+    QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from app.database.connection import get_session
@@ -67,11 +68,9 @@ class _SendWorker(QThread):
 class SendTab(QWidget):
     def __init__(self):
         super().__init__()
-        self._selected_member_ids: list[int] = []
         self._merge_data: dict[str, dict] = {}
         self._common_attachments: list[str] = []
         self._individual_folder: str = ""
-        self._individual_rule: str = ""
         self._attach_list: list[dict] = []
         self._build()
 
@@ -91,10 +90,12 @@ class SendTab(QWidget):
         # Step 2: 宛先選択
         grp2 = QGroupBox("Step 2：宛先選択")
         v2 = QVBoxLayout(grp2)
-        v2.addWidget(QLabel("役職で選択："))
-        self._pos_checks: dict[int, QCheckBox] = {}
-        self._pos_check_layout = QHBoxLayout()
-        v2.addLayout(self._pos_check_layout)
+        v2.addWidget(QLabel("会議所役職で絞り込み（複数選択可 / Ctrl+クリックで追加選択）："))
+        self._pos_list = QListWidget()
+        self._pos_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self._pos_list.setMaximumHeight(90)
+        self._pos_list.itemSelectionChanged.connect(self._on_pos_select)
+        v2.addWidget(self._pos_list)
         v2.addWidget(QLabel("企業で選択："))
         self._member_table = QTableWidget(0, 3)
         self._member_table.setHorizontalHeaderLabels(["選択", "事業所名", "氏名"])
@@ -213,16 +214,15 @@ class SendTab(QWidget):
             for s in staff_list:
                 self._staff_combo.addItem(s.name, s.id)
 
-            # 役職チェックボックス
-            for cb in self._pos_checks.values():
-                cb.deleteLater()
-            self._pos_checks.clear()
+            # 会議所役職リスト
+            self._pos_list.blockSignals(True)
+            self._pos_list.clear()
             positions = get_positions(session)
             for p in positions:
-                cb = QCheckBox(p.name)
-                cb.stateChanged.connect(self._on_pos_check)
-                self._pos_check_layout.addWidget(cb)
-                self._pos_checks[p.id] = cb
+                item = QListWidgetItem(p.name)
+                item.setData(Qt.ItemDataRole.UserRole, p.id)
+                self._pos_list.addItem(item)
+            self._pos_list.blockSignals(False)
 
             # 会員テーブル
             members = get_members(session)
@@ -262,25 +262,22 @@ class SendTab(QWidget):
         finally:
             session.close()
 
-    def _on_pos_check(self):
-        session = get_session()
-        try:
-            checked_pos_ids = {pid for pid, cb in self._pos_checks.items()
-                               if cb.isChecked()}
-            for row in range(self._member_table.rowCount()):
-                item = self._member_table.item(row, 1)
-                mid = item.data(Qt.ItemDataRole.UserRole) if item else None
-                if mid is None:
-                    continue
-                m = next((x for x in self._members if x.id == mid), None)
-                if m and m.position_id in checked_pos_ids:
-                    cb = self._member_table.cellWidget(row, 0)
-                    if cb:
-                        cb.blockSignals(True)
-                        cb.setChecked(True)
-                        cb.blockSignals(False)
-        finally:
-            session.close()
+    def _on_pos_select(self):
+        selected_pos_ids = {
+            item.data(Qt.ItemDataRole.UserRole)
+            for item in self._pos_list.selectedItems()
+        }
+        for row in range(self._member_table.rowCount()):
+            item = self._member_table.item(row, 1)
+            mid = item.data(Qt.ItemDataRole.UserRole) if item else None
+            if mid is None:
+                continue
+            m = next((x for x in self._members if x.id == mid), None)
+            cb = self._member_table.cellWidget(row, 0)
+            if cb and m:
+                cb.blockSignals(True)
+                cb.setChecked(m.position_id in selected_pos_ids)
+                cb.blockSignals(False)
         self._update_selection_label()
 
     def _on_member_check(self):

@@ -78,13 +78,15 @@ def import_members(session: Session, rows: list[list],
         }
         if "position_name" in column_map:
             position_name = _cell(row, "position_name")
-            resolved_id = position_map.get(position_name) if position_name else None
-            if position_name and resolved_id is None:
-                errors.append(
-                    f"行{i} ({member_number}): 会議所役職「{position_name}」が見つかりません（スキップ）"
-                )
+            if position_name:
+                if position_name not in position_map:
+                    new_pos = Position(name=position_name, sort_order=0)
+                    session.add(new_pos)
+                    session.flush()
+                    position_map[position_name] = new_pos.id
+                kwargs["position_id"] = position_map[position_name]
             else:
-                kwargs["position_id"] = resolved_id
+                kwargs["position_id"] = None
 
         addresses = []
         for n in range(1, 6):

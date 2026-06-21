@@ -2,7 +2,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem,
-    QCheckBox, QMessageBox, QHeaderView, QLabel, QSpinBox
+    QCheckBox, QMessageBox, QHeaderView, QLabel
 )
 from PyQt6.QtCore import Qt
 from app.utils.app_config import get_config, save_config
@@ -10,9 +10,6 @@ from app.database.connection import get_session
 from app.services.signature_service import (
     get_signatures, create_signature, update_signature,
     delete_signature, set_default
-)
-from app.services.position_service import (
-    get_positions, create_position, update_position, delete_position
 )
 from app.services.staff_service import get_all_staff, create_staff, set_active
 
@@ -24,7 +21,6 @@ class SettingsTab(QWidget):
         inner = QTabWidget()
         inner.addTab(_GraphSettingsWidget(), "Microsoft 365")
         inner.addTab(_SignatureWidget(), "署名管理")
-        inner.addTab(_PositionWidget(), "会議所役職")
         inner.addTab(_StaffWidget(), "職員管理")
         layout.addWidget(inner)
 
@@ -202,97 +198,6 @@ class _SignatureWidget(QWidget):
             return
         session = get_session()
         set_default(session, sig_id)
-        session.close()
-        self._load()
-
-
-class _PositionWidget(QWidget):
-    def __init__(self):
-        super().__init__()
-        layout = QVBoxLayout(self)
-        self._table = QTableWidget(0, 2)
-        self._table.setHorizontalHeaderLabels(["役職名", "表示順"])
-        self._table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch)
-        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.itemSelectionChanged.connect(self._on_select)
-        layout.addWidget(self._table)
-
-        form = QFormLayout()
-        self._name = QLineEdit()
-        self._sort_order = QSpinBox()
-        self._sort_order.setRange(0, 9999)
-        form.addRow("役職名", self._name)
-        form.addRow("表示順", self._sort_order)
-        layout.addLayout(form)
-
-        btn_row = QHBoxLayout()
-        btn_add = QPushButton("追加")
-        btn_add.clicked.connect(self._add)
-        btn_update = QPushButton("更新")
-        btn_update.clicked.connect(self._update)
-        btn_delete = QPushButton("削除")
-        btn_delete.clicked.connect(self._delete)
-        btn_row.addWidget(btn_add)
-        btn_row.addWidget(btn_update)
-        btn_row.addWidget(btn_delete)
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
-        self._load()
-
-    def _load(self):
-        session = get_session()
-        try:
-            self._positions = get_positions(session)
-        finally:
-            session.close()
-        self._table.setRowCount(0)
-        for p in self._positions:
-            row = self._table.rowCount()
-            self._table.insertRow(row)
-            self._table.setItem(row, 0, QTableWidgetItem(p.name))
-            self._table.setItem(row, 1, QTableWidgetItem(str(p.sort_order)))
-            self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, p.id)
-
-    def _on_select(self):
-        row = self._table.currentRow()
-        if row < 0 or row >= len(self._positions):
-            return
-        p = self._positions[row]
-        self._name.setText(p.name)
-        self._sort_order.setValue(p.sort_order)
-
-    def _selected_id(self) -> int | None:
-        row = self._table.currentRow()
-        if row < 0:
-            return None
-        return self._table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-
-    def _add(self):
-        name = self._name.text().strip()
-        if not name:
-            return
-        session = get_session()
-        create_position(session, name, self._sort_order.value())
-        session.close()
-        self._load()
-
-    def _update(self):
-        pos_id = self._selected_id()
-        if pos_id is None:
-            return
-        session = get_session()
-        update_position(session, pos_id, name=self._name.text().strip(),
-                        sort_order=self._sort_order.value())
-        session.close()
-        self._load()
-
-    def _delete(self):
-        pos_id = self._selected_id()
-        if pos_id is None:
-            return
-        session = get_session()
-        delete_position(session, pos_id)
         session.close()
         self._load()
 
