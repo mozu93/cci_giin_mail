@@ -102,11 +102,19 @@ class ImportDialog(QDialog):
         # ヘッダー名で自動マッピング
         auto_map = {
             "会員番号": "member_number",
+            "会員No": "member_number",
+            "会員NO": "member_number",
+            "会員ＮＯ": "member_number",
             "事業所名": "organization_name",
+            "会社名": "organization_name",
+            "法人名": "organization_name",
             "事業所名フリガナ": "organization_kana",
+            "事業所名かな": "organization_kana",
             "役職名": "title",
+            "役職": "title",
             "氏名": "name",
             "氏名フリガナ": "name_kana",
+            "氏名かな": "name_kana",
             "会議所役職": "position_name",
             "会議所役職名": "position_name",
         }

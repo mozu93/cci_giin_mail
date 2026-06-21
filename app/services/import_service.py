@@ -1,4 +1,5 @@
 from pathlib import Path
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database.models import Position
 from app.services.member_service import (
@@ -103,10 +104,13 @@ def import_members(session: Session, rows: list[list],
             else:
                 m = create_member(session, member_number,
                                   organization_name, name, **kwargs)
+                existing[member_number] = m  # 同一ファイル内の重複を更新扱いにする
                 if addresses:
                     set_email_addresses(session, m.id, addresses)
                     session.commit()
                 created += 1
+        except IntegrityError:
+            errors.append(f"行{i} ({member_number}): 会員番号が重複しています")
         except Exception as e:
             errors.append(f"行{i} ({member_number}): {e}")
 
