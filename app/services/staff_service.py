@@ -20,6 +20,10 @@ def get_all_staff(session: Session) -> list[Staff]:
     return session.query(Staff).order_by(Staff.name).all()
 
 
+def get_staff_by_name(session: Session, name: str) -> Staff | None:
+    return session.query(Staff).filter_by(name=name).first()
+
+
 def set_active(session: Session, staff_id: int, is_active: bool) -> None:
     s = session.get(Staff, staff_id)
     if s:
