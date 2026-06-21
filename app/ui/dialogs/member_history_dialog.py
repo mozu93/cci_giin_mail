@@ -43,7 +43,9 @@ class MemberHistoryDialog(QDialog):
             2, QHeaderView.ResizeMode.Stretch)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._table.currentRowChanged.connect(self._show_snapshot)
+        self._table.currentItemChanged.connect(
+            lambda cur, _: self._show_snapshot(self._table.currentRow())
+        )
         splitter.addWidget(self._table)
 
         self._snapshot_view = QTextEdit()

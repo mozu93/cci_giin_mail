@@ -223,15 +223,10 @@ class MemberTab(QWidget):
             QMessageBox.information(self, "選択なし", "会員を選択してください。")
             return
         from app.ui.dialogs.member_history_dialog import MemberHistoryDialog
-        import traceback
         session = get_session()
-        try:
-            dlg = MemberHistoryDialog(session, member_id, parent=self)
-            dlg.exec()
-        except Exception:
-            QMessageBox.critical(self, "エラー詳細", traceback.format_exc())
-        finally:
-            session.close()
+        dlg = MemberHistoryDialog(session, member_id, parent=self)
+        dlg.exec()
+        session.close()
 
     def _import(self):
         from app.ui.dialogs.import_dialog import ImportDialog
