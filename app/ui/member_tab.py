@@ -166,10 +166,17 @@ class MemberTab(QWidget):
         delete_member(session, member_id, changed_by=self._staff_name)
         session.close()
         self._load()
+        # 退任後に変更履歴を自動表示して記録を確認できるようにする
+        from app.ui.dialogs.member_history_dialog import MemberHistoryDialog
+        session2 = get_session()
+        dlg = MemberHistoryDialog(session2, member_id, parent=self)
+        dlg.exec()
+        session2.close()
 
     def _show_history(self):
         member_id = self._selected_member_id()
         if member_id is None:
+            QMessageBox.information(self, "選択なし", "会員を選択してください。")
             return
         from app.ui.dialogs.member_history_dialog import MemberHistoryDialog
         session = get_session()
