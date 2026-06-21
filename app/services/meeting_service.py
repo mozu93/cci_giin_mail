@@ -60,18 +60,46 @@ def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
     for m in members:
         r = records.get(m.id)
         result.append({
-            "member_id":    m.id,
+            "member_id":     m.id,
             "member_number": m.member_number,
-            "org_name":     m.organization_name,
-            "org_kana":     m.organization_kana or "",
-            "title":        m.title or "",
-            "name":         m.name,
-            "position":     m.position.name if m.position else "",
-            "status":       r.status if r else "未回答",
-            "proxy_title":  r.proxy_title if r else "",
-            "proxy_name":   r.proxy_name if r else "",
+            "org_name":      m.organization_name,
+            "org_kana":      m.organization_kana or "",
+            "title":         m.title or "",
+            "name":          m.name,
+            "position":      m.position.name if m.position else "",
+            "status":        r.status if r else "未回答",
+            "actual_status": (r.actual_status or "") if r else "",
+            "proxy_title":   r.proxy_title if r else "",
+            "proxy_name":    r.proxy_name if r else "",
         })
     return result
+
+
+def update_actual_status(session: Session, meeting_id: int,
+                         member_id: int, actual_status: str) -> None:
+    """当日受付ステータスを更新する"""
+    r = (session.query(AttendanceRecord)
+         .filter_by(meeting_id=meeting_id, member_id=member_id)
+         .first())
+    if r is None:
+        r = AttendanceRecord(meeting_id=meeting_id, member_id=member_id)
+        session.add(r)
+    r.actual_status = actual_status
+    session.commit()
+
+
+def get_reception_summary(session: Session, meeting_id: int) -> dict:
+    """当日受付ステータス（actual_status）による集計"""
+    data = get_attendance_data(session, meeting_id)
+    counts: dict[str, int] = {"出席": 0, "代理": 0, "欠席": 0, "未受付": 0}
+    for d in data:
+        s = d.get("actual_status") or ""
+        if s in ("出席", "代理", "欠席"):
+            counts[s] += 1
+        else:
+            counts["未受付"] += 1
+    counts["合計"] = counts["出席"] + counts["代理"]
+    return counts
 
 
 def get_summary(session: Session, meeting_id: int) -> dict:

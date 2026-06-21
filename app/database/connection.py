@@ -33,6 +33,15 @@ def _migrate(engine):
             ))
             conn.commit()
 
+        attendance_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(attendance_records)"))
+        }
+        if "actual_status" not in attendance_cols:
+            conn.execute(text(
+                "ALTER TABLE attendance_records ADD COLUMN actual_status TEXT DEFAULT ''"
+            ))
+            conn.commit()
+
 
 def get_engine(db_path: str | None = None):
     global _engine

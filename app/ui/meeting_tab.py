@@ -14,7 +14,8 @@ from PyQt6.QtGui import QColor
 from app.database.connection import get_session
 from app.services.meeting_service import (
     STATUS_OPTIONS, create_meeting, get_meetings, delete_meeting,
-    upsert_attendance, get_attendance_data, get_summary, export_csv
+    upsert_attendance, get_attendance_data, get_summary, export_csv,
+    update_actual_status, get_reception_summary
 )
 from app.services.position_service import get_positions
 
@@ -426,16 +427,16 @@ class MeetingTab(QWidget):
         w = QWidget()
         layout = QVBoxLayout(w)
 
-        # 集計バー
-        count_grp = QGroupBox("出欠集計（3秒ごと自動更新）")
+        # 集計バー（当日受付ベース）
+        count_grp = QGroupBox("当日受付集計（3秒ごと自動更新）")
         count_layout = QHBoxLayout(count_grp)
-        self._lbl_attend   = self._count_label("出席: 0", "#16A34A")
-        self._lbl_proxy    = self._count_label("代理: 0", "#2563EB")
-        self._lbl_delegate = self._count_label("委任: 0", "#CA8A04")
-        self._lbl_absent   = self._count_label("欠席: 0", "#DC2626")
-        self._lbl_total    = self._count_label("合計: 0", "#1E40AF", bold=True)
+        self._lbl_attend  = self._count_label("出席: 0",   "#16A34A")
+        self._lbl_proxy   = self._count_label("代理: 0",   "#2563EB")
+        self._lbl_absent  = self._count_label("欠席: 0",   "#DC2626")
+        self._lbl_pending = self._count_label("未受付: 0", "#6B7280")
+        self._lbl_total   = self._count_label("合計: 0",   "#1E40AF", bold=True)
         for lbl in [self._lbl_attend, self._lbl_proxy,
-                    self._lbl_delegate, self._lbl_absent, self._lbl_total]:
+                    self._lbl_absent, self._lbl_pending, self._lbl_total]:
             count_layout.addWidget(lbl)
         count_layout.addStretch()
         layout.addWidget(count_grp)
@@ -449,15 +450,15 @@ class MeetingTab(QWidget):
         search_row.addWidget(self._search, 1)
         layout.addLayout(search_row)
 
-        # 一覧
-        self._rec_table = QTableWidget(0, 6)
+        # 一覧（7列）: 会員番号, 事業所名, 会議所役職, 氏名, 事前, 当日受付, 代理情報
+        self._rec_table = QTableWidget(0, 7)
         self._rec_table.setHorizontalHeaderLabels(
-            ["会員番号", "事業所名", "会議所役職", "氏名", "ステータス", "代理情報"])
+            ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"])
         h = self._rec_table.horizontalHeader()
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-        h.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        h.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
         self._rec_table.setColumnWidth(1, 200)
-        self._rec_table.setColumnWidth(5, 150)
+        self._rec_table.setColumnWidth(6, 150)
         self._rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         layout.addWidget(self._rec_table)
@@ -470,6 +471,8 @@ class MeetingTab(QWidget):
             f"font-size: 15px; font-weight: {weight}; color: {color}; padding: 4px 14px;")
         return lbl
 
+    _ACTUAL_OPTIONS = ["", "出席", "代理", "欠席"]
+
     def _refresh_reception(self):
         if not self._current_meeting_id:
             return
@@ -477,14 +480,14 @@ class MeetingTab(QWidget):
         try:
             self._rec_data = get_attendance_data(
                 session, self._current_meeting_id)
-            summary = get_summary(session, self._current_meeting_id)
+            summary = get_reception_summary(session, self._current_meeting_id)
         finally:
             session.close()
 
         self._lbl_attend.setText(f"出席: {summary['出席']}")
         self._lbl_proxy.setText(f"代理: {summary['代理']}")
-        self._lbl_delegate.setText(f"委任: {summary['委任']}")
         self._lbl_absent.setText(f"欠席: {summary['欠席']}")
+        self._lbl_pending.setText(f"未受付: {summary['未受付']}")
         self._lbl_total.setText(f"合計: {summary['合計']}")
 
         scrollbar = self._rec_table.verticalScrollBar()
@@ -495,20 +498,47 @@ class MeetingTab(QWidget):
             row = self._rec_table.rowCount()
             self._rec_table.insertRow(row)
             proxy_info = ""
-            if d["status"] == "代理":
+            if d["status"] in ("代理",) or d.get("actual_status") == "代理":
                 proxy_info = " ".join(
                     p for p in [d["proxy_title"], d["proxy_name"]] if p)
-            cells = [d["member_number"], d["org_name"], d["position"],
-                     d["name"], d["status"], proxy_info]
-            bg = _STATUS_COLORS.get(d["status"])
-            for col, val in enumerate(cells):
+            # 行の背景色: actual_status が設定済みならその色、未受付なら事前ステータスの色
+            effective = d.get("actual_status") or d["status"]
+            bg = _STATUS_COLORS.get(effective)
+            # 列 0-4: テキストアイテム
+            for col, val in enumerate([d["member_number"], d["org_name"],
+                                       d["position"], d["name"], d["status"]]):
                 item = QTableWidgetItem(val)
                 if bg:
                     item.setBackground(QColor(bg))
                 self._rec_table.setItem(row, col, item)
+            # 列 5: 当日受付 QComboBox
+            combo = QComboBox()
+            combo.addItems(self._ACTUAL_OPTIONS)
+            combo.blockSignals(True)
+            combo.setCurrentText(d.get("actual_status") or "")
+            combo.blockSignals(False)
+            mid = d["member_id"]
+            combo.currentTextChanged.connect(
+                lambda text, m=mid: self._save_actual_status(m, text))
+            self._rec_table.setCellWidget(row, 5, combo)
+            # 列 6: 代理情報
+            item6 = QTableWidgetItem(proxy_info)
+            if bg:
+                item6.setBackground(QColor(bg))
+            self._rec_table.setItem(row, 6, item6)
         self._rec_table.setUpdatesEnabled(True)
         scrollbar.setValue(scroll_pos)
         self._filter_reception()
+
+    def _save_actual_status(self, member_id: int, actual_status: str):
+        if not self._current_meeting_id:
+            return
+        session = get_session()
+        try:
+            update_actual_status(
+                session, self._current_meeting_id, member_id, actual_status)
+        finally:
+            session.close()
 
     def _filter_reception(self):
         keyword = self._search.text().strip().lower()
