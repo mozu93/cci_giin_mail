@@ -487,7 +487,8 @@ class MeetingTab(QWidget):
 
     _ACTUAL_OPTIONS = ["", "出席", "代理", "欠席"]
 
-    def _refresh_reception(self):
+    def _load_reception(self):
+        """会議切り替え・タブ切り替え時に全行を再構築する"""
         if not self._current_meeting_id:
             return
         session = get_session()
@@ -498,11 +499,7 @@ class MeetingTab(QWidget):
         finally:
             session.close()
 
-        self._lbl_attend.setText(f"出席: {summary['出席']}")
-        self._lbl_proxy.setText(f"代理: {summary['代理']}")
-        self._lbl_absent.setText(f"欠席: {summary['欠席']}")
-        self._lbl_pending.setText(f"未受付: {summary['未受付']}")
-        self._lbl_total.setText(f"合計: {summary['合計']}")
+        self._update_rec_summary(summary)
 
         scrollbar = self._rec_table.verticalScrollBar()
         scroll_pos = scrollbar.value()
@@ -512,20 +509,17 @@ class MeetingTab(QWidget):
             row = self._rec_table.rowCount()
             self._rec_table.insertRow(row)
             proxy_info = ""
-            if d["status"] in ("代理",) or d.get("actual_status") == "代理":
+            if d["status"] == "代理" or d.get("actual_status") == "代理":
                 proxy_info = " ".join(
                     p for p in [d["proxy_title"], d["proxy_name"]] if p)
-            # 行の背景色: actual_status が設定済みならその色、未受付なら事前ステータスの色
             effective = d.get("actual_status") or d["status"]
             bg = _STATUS_COLORS.get(effective)
-            # 列 0-4: テキストアイテム
             for col, val in enumerate([d["member_number"], d["org_name"],
                                        d["position"], d["name"], d["status"]]):
                 item = QTableWidgetItem(val)
                 if bg:
                     item.setBackground(QColor(bg))
                 self._rec_table.setItem(row, col, item)
-            # 列 5: 当日受付 QComboBox
             combo = _NoWheelComboBox()
             combo.addItems(self._ACTUAL_OPTIONS)
             combo.blockSignals(True)
@@ -535,7 +529,6 @@ class MeetingTab(QWidget):
             combo.currentTextChanged.connect(
                 lambda text, m=mid: self._save_actual_status(m, text))
             self._rec_table.setCellWidget(row, 5, combo)
-            # 列 6: 代理情報
             item6 = QTableWidgetItem(proxy_info)
             if bg:
                 item6.setBackground(QColor(bg))
@@ -543,6 +536,53 @@ class MeetingTab(QWidget):
         self._rec_table.setUpdatesEnabled(True)
         scrollbar.setValue(scroll_pos)
         self._filter_reception()
+
+    def _refresh_reception(self):
+        """タイマーから呼ばれる差分更新。行は再構築せず選択状態を保持する。"""
+        if not self._current_meeting_id:
+            return
+        session = get_session()
+        try:
+            new_data = get_attendance_data(session, self._current_meeting_id)
+            summary = get_reception_summary(session, self._current_meeting_id)
+        finally:
+            session.close()
+
+        self._update_rec_summary(summary)
+
+        # 行数が変わった場合のみ全再構築
+        if len(new_data) != self._rec_table.rowCount():
+            self._rec_data = new_data
+            self._load_reception()
+            return
+
+        self._rec_data = new_data
+        for row, d in enumerate(new_data):
+            effective = d.get("actual_status") or d["status"]
+            bg = _STATUS_COLORS.get(effective)
+            qbg = QColor(bg) if bg else None
+            for col in [0, 1, 2, 3, 4, 6]:
+                item = self._rec_table.item(row, col)
+                if item:
+                    if qbg:
+                        item.setBackground(qbg)
+                    else:
+                        item.setData(Qt.ItemDataRole.BackgroundRole, None)
+            combo = self._rec_table.cellWidget(row, 5)
+            if combo:
+                new_val = d.get("actual_status") or ""
+                if combo.currentText() != new_val:
+                    combo.blockSignals(True)
+                    combo.setCurrentText(new_val)
+                    combo.blockSignals(False)
+        self._filter_reception()
+
+    def _update_rec_summary(self, summary: dict):
+        self._lbl_attend.setText(f"出席: {summary['出席']}")
+        self._lbl_proxy.setText(f"代理: {summary['代理']}")
+        self._lbl_absent.setText(f"欠席: {summary['欠席']}")
+        self._lbl_pending.setText(f"未受付: {summary['未受付']}")
+        self._lbl_total.setText(f"合計: {summary['合計']}")
 
     def _save_actual_status(self, member_id: int, actual_status: str):
         if not self._current_meeting_id:
@@ -592,11 +632,11 @@ class MeetingTab(QWidget):
         self._current_meeting_id = self._meeting_combo.currentData()
         self._load_preentry()
         if self._inner.currentIndex() == 1:
-            self._refresh_reception()
+            self._load_reception()
 
     def _on_inner_tab_change(self, idx: int):
         if idx == 1:
-            self._refresh_reception()
+            self._load_reception()
             self._timer.start()
         else:
             self._timer.stop()
