@@ -107,13 +107,13 @@ def update_member(session: Session, member_id: int,
 
 def delete_member(session: Session, member_id: int,
                   changed_by: str = "") -> None:
-    """退会処理: is_active=Falseに変更し、履歴を保持する"""
+    """退任処理: is_active=Falseに変更し、履歴を保持する"""
     member = session.get(Member, member_id)
     if member:
         history = MemberHistory(
             member_id=member_id,
             changed_by=changed_by or "システム",
-            change_reason="退会処理",
+            change_reason="退任",
             snapshot=member_to_snapshot(member),
         )
         session.add(history)

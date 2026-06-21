@@ -16,7 +16,7 @@ _FIELD_LABELS = {
     "name":              "氏名",
     "name_kana":         "氏名フリガナ",
     "notes":             "備考",
-    "is_active":         "状態",
+    "is_active":         "議員状態",
     "position_id":       "会議所役職ID（旧）",
 }
 
@@ -79,7 +79,7 @@ class MemberHistoryDialog(QDialog):
                     continue
                 label = _FIELD_LABELS.get(k, k)
                 if k == "is_active":
-                    v = "有効" if v else "無効（退会）"
+                    v = "在任中" if v else "退任"
                 elif v is None or v == "":
                     v = "（なし）"
                 lines.append(f"{label}: {v}")

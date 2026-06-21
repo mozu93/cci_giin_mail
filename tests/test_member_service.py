@@ -80,7 +80,7 @@ def test_delete_member(db_session):
     # 退会処理履歴が記録されている
     history = get_member_history(db_session, m.id)
     reasons = [h.change_reason for h in history]
-    assert "退会処理" in reasons
+    assert "退任" in reasons
 
 
 def test_get_members_filter_by_position(db_session):

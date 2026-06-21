@@ -35,7 +35,7 @@ class MemberTab(QWidget):
         btn_add.clicked.connect(self._add)
         btn_edit = QPushButton("編集")
         btn_edit.clicked.connect(self._edit)
-        btn_delete = QPushButton("削除")
+        btn_delete = QPushButton("退任")
         btn_delete.clicked.connect(self._delete)
         btn_history = QPushButton("変更履歴")
         btn_history.clicked.connect(self._show_history)
@@ -53,11 +53,12 @@ class MemberTab(QWidget):
         layout.addLayout(toolbar)
 
         # 一覧テーブル
-        self._table = QTableWidget(0, 12)
+        self._table = QTableWidget(0, 13)
         self._table.setHorizontalHeaderLabels([
             "会員番号", "会議所役職", "事業所名", "事業所名フリガナ",
             "氏名", "氏名フリガナ", "役職名",
             "メール1", "メール2", "メール3", "メール4", "メール5",
+            "最終更新日",
         ])
         self._table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch)
@@ -113,6 +114,8 @@ class MemberTab(QWidget):
                 for ei, ea in enumerate(m.email_addresses[:5]):
                     label = f"（{ea.label}）" if ea.label else ""
                     self._table.setItem(row, 7 + ei, QTableWidgetItem(f"{ea.address}{label}"))
+                self._table.setItem(row, 12, QTableWidgetItem(
+                    m.updated_at.strftime("%Y/%m/%d") if m.updated_at else ""))
                 self._table.item(row, 0).setData(
                     Qt.ItemDataRole.UserRole, m.id)
             self._count_label.setText(f"{len(members)} 件")
@@ -153,8 +156,8 @@ class MemberTab(QWidget):
         if member_id is None:
             return
         ret = QMessageBox.question(
-            self, "退会処理確認",
-            "この会員を退会処理しますか？\n一覧から非表示になりますが、変更履歴は保持されます。",
+            self, "退任処理確認",
+            "この会員を退任処理しますか？\n一覧から非表示になりますが、変更履歴は保持されます。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
