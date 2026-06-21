@@ -3,6 +3,8 @@ app_config.json
 
 # データベース
 cci_mail.db
+cci_mail.db-shm
+cci_mail.db-wal
 
 # Python
 __pycache__/
