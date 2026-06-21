@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
 from app.database.models import Member, EmailAddress, MemberHistory
 
@@ -64,7 +64,10 @@ def get_member(session: Session, member_id: int) -> Member | None:
 def get_members(session: Session, position_id: int | None = None,
                 keyword: str | None = None,
                 active_only: bool = True) -> list[Member]:
-    q = session.query(Member)
+    q = session.query(Member).options(
+        joinedload(Member.position),
+        selectinload(Member.email_addresses),
+    )
     if active_only:
         q = q.filter(Member.is_active == True)
     if position_id is not None:
