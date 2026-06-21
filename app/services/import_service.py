@@ -3,7 +3,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database.models import Position
 from app.services.member_service import (
-    create_member, update_member, set_email_addresses, get_members
+    create_member, update_member, set_email_addresses,
+    record_member_history, get_members
 )
 
 
@@ -112,12 +113,15 @@ def import_members(session: Session, rows: list[list],
                 updated += 1
             else:
                 m = create_member(session, member_number,
-                                  organization_name, name,
-                                  created_by=changed_by, **kwargs)
+                                  organization_name, name, **kwargs)
                 existing[member_number] = m  # 同一ファイル内の重複を更新扱いにする
                 if addresses:
                     set_email_addresses(session, m.id, addresses)
                     session.commit()
+                # メールアドレス設定後にスナップショットを記録
+                record_member_history(session, m.id,
+                                      changed_by=changed_by,
+                                      change_reason="新規登録")
                 created += 1
         except IntegrityError:
             errors.append(f"行{i} ({member_number}): 会員番号が重複しています")

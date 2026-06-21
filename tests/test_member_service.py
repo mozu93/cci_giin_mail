@@ -3,7 +3,8 @@ import pytest
 from app.database.models import Position
 from app.services.member_service import (
     create_member, update_member, delete_member, get_member,
-    get_members, get_member_history, set_email_addresses, member_to_snapshot
+    get_members, get_member_history, set_email_addresses,
+    record_member_history, member_to_snapshot
 )
 
 
@@ -53,13 +54,25 @@ def test_update_member_records_history(db_session):
     update_member(db_session, m.id, changed_by="田中", change_reason="社名変更",
                   organization_name="○○商事（新）")
     history = get_member_history(db_session, m.id)
-    # create_member が「新規登録」履歴を作るため合計2件
-    assert len(history) == 2
-    # 新しい順なので history[0] が社名変更、history[1] が新規登録
+    assert len(history) == 1
     assert history[0].change_reason == "社名変更"
     assert history[0].changed_by == "田中"
     snap = json.loads(history[0].snapshot)
     assert snap["organization_name"] == "○○商事"  # 変更前
+
+
+def test_record_member_history_includes_emails(db_session):
+    m = create_member(db_session, "A-001", "○○商事", "山田 太郎")
+    set_email_addresses(db_session, m.id, [
+        {"address": "yamada@example.com", "label": "メイン", "sort_order": 1}
+    ])
+    db_session.commit()
+    record_member_history(db_session, m.id, changed_by="田中", change_reason="新規登録")
+    history = get_member_history(db_session, m.id)
+    assert len(history) == 1
+    snap = json.loads(history[0].snapshot)
+    assert len(snap["email_addresses"]) == 1
+    assert snap["email_addresses"][0]["address"] == "yamada@example.com"
 
 
 def test_update_member_changes_field(db_session):

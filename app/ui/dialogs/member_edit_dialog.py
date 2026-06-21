@@ -8,7 +8,7 @@ from PyQt6.QtCore import Qt
 from sqlalchemy.orm import Session
 from app.database.models import Member, Position
 from app.services.member_service import (
-    create_member, update_member, set_email_addresses
+    create_member, update_member, set_email_addresses, record_member_history
 )
 
 _MAX_EMAILS = 5
@@ -164,7 +164,6 @@ class MemberEditDialog(QDialog):
             else:
                 m = create_member(
                     self._session, member_number, org_name, name,
-                    created_by=self._staff_name,
                     organization_kana=self._org_kana.text().strip(),
                     title=self._title.text().strip(),
                     name_kana=self._name_kana.text().strip(),
@@ -173,6 +172,10 @@ class MemberEditDialog(QDialog):
                 )
                 set_email_addresses(self._session, m.id, addresses)
                 self._session.commit()
+                # メールアドレス設定後にスナップショットを記録
+                record_member_history(self._session, m.id,
+                                      changed_by=self._staff_name,
+                                      change_reason="新規登録")
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
             return

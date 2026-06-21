@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.database.models import Member, EmailAddress, MemberHistory
@@ -24,8 +25,8 @@ def member_to_snapshot(member: Member) -> str:
 
 
 def create_member(session: Session, member_number: str,
-                  organization_name: str, name: str,
-                  created_by: str = "", **kwargs) -> Member:
+                  organization_name: str, name: str, **kwargs) -> Member:
+    """会員を作成する。履歴は呼び出し元でメール設定後に record_member_history() で記録すること。"""
     member = Member(
         member_number=member_number,
         organization_name=organization_name,
@@ -38,15 +39,22 @@ def create_member(session: Session, member_number: str,
     except IntegrityError:
         session.rollback()
         raise
-    history = MemberHistory(
-        member_id=member.id,
-        changed_by=created_by or "システム",
-        change_reason="新規登録",
-        snapshot=member_to_snapshot(member),
-    )
-    session.add(history)
-    session.commit()
     return member
+
+
+def record_member_history(session: Session, member_id: int,
+                          changed_by: str, change_reason: str) -> None:
+    """現在のメンバー状態（メールアドレス含む）をスナップショットとして履歴に記録する。"""
+    member = session.get(Member, member_id)
+    if member is None:
+        return
+    session.add(MemberHistory(
+        member_id=member_id,
+        changed_by=changed_by or "システム",
+        change_reason=change_reason,
+        snapshot=member_to_snapshot(member),
+    ))
+    session.commit()
 
 
 def get_member(session: Session, member_id: int) -> Member | None:
@@ -83,6 +91,10 @@ def set_email_addresses(session: Session, member_id: int,
             label=addr.get("label", ""),
             sort_order=addr.get("sort_order", 1),
         ))
+    # メールアドレス変更でも最終更新日を更新する
+    member = session.get(Member, member_id)
+    if member:
+        member.updated_at = datetime.now()
     session.flush()
 
 
@@ -91,16 +103,17 @@ def update_member(session: Session, member_id: int,
     member = session.get(Member, member_id)
     if member is None:
         raise ValueError(f"会員ID {member_id} が見つかりません")
+    # 変更前のスナップショット（メールアドレス含む）を記録
     snapshot = member_to_snapshot(member)
-    history = MemberHistory(
+    session.add(MemberHistory(
         member_id=member_id,
         changed_by=changed_by,
         change_reason=change_reason,
         snapshot=snapshot,
-    )
-    session.add(history)
+    ))
     for key, value in kwargs.items():
         setattr(member, key, value)
+    member.updated_at = datetime.now()
     session.commit()
     return member
 
@@ -110,14 +123,14 @@ def delete_member(session: Session, member_id: int,
     """退任処理: is_active=Falseに変更し、履歴を保持する"""
     member = session.get(Member, member_id)
     if member:
-        history = MemberHistory(
+        session.add(MemberHistory(
             member_id=member_id,
             changed_by=changed_by or "システム",
             change_reason="退任",
             snapshot=member_to_snapshot(member),
-        )
-        session.add(history)
+        ))
         member.is_active = False
+        member.updated_at = datetime.now()
         session.commit()
 
 
