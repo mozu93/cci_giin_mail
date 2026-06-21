@@ -2,10 +2,10 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem,
-    QCheckBox, QMessageBox, QHeaderView, QLabel
+    QCheckBox, QMessageBox, QHeaderView, QLabel, QRadioButton, QButtonGroup
 )
 from PyQt6.QtCore import Qt
-from app.utils.app_config import get_config, save_config
+from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config
 from app.database.connection import get_session
 from app.services.signature_service import (
     get_signatures, create_signature, update_signature,
@@ -22,6 +22,7 @@ class SettingsTab(QWidget):
         inner.addTab(_GraphSettingsWidget(), "Microsoft 365")
         inner.addTab(_SignatureWidget(), "署名管理")
         inner.addTab(_StaffWidget(), "職員管理")
+        inner.addTab(_DbSettingsWidget(), "データベース接続")
         layout.addWidget(inner)
 
 
@@ -262,3 +263,113 @@ class _StaffWidget(QWidget):
         set_active(session, s.id, not s.is_active)
         session.close()
         self._load()
+
+
+class _DbSettingsWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+
+        # DB種別選択
+        type_grp = QGroupBox("データベースの種類")
+        type_layout = QHBoxLayout(type_grp)
+        self._rb_sqlite = QRadioButton("SQLite（ローカル・1台用）")
+        self._rb_pg     = QRadioButton("PostgreSQL（ネットワーク・複数台用）")
+        self._type_group = QButtonGroup(self)
+        self._type_group.addButton(self._rb_sqlite, 0)
+        self._type_group.addButton(self._rb_pg, 1)
+        type_layout.addWidget(self._rb_sqlite)
+        type_layout.addWidget(self._rb_pg)
+        type_layout.addStretch()
+        layout.addWidget(type_grp)
+
+        # PostgreSQL接続設定
+        self._pg_grp = QGroupBox("PostgreSQL接続設定")
+        pg_form = QFormLayout(self._pg_grp)
+        self._pg_host = QLineEdit()
+        self._pg_port = QLineEdit()
+        self._pg_port.setFixedWidth(80)
+        self._pg_db   = QLineEdit()
+        self._pg_user = QLineEdit()
+        self._pg_pass = QLineEdit()
+        self._pg_pass.setEchoMode(QLineEdit.EchoMode.Password)
+        pg_form.addRow("ホスト名 / IPアドレス", self._pg_host)
+        pg_form.addRow("ポート番号",             self._pg_port)
+        pg_form.addRow("データベース名",          self._pg_db)
+        pg_form.addRow("ユーザー名",              self._pg_user)
+        pg_form.addRow("パスワード",              self._pg_pass)
+        layout.addWidget(self._pg_grp)
+
+        # ボタン行
+        btn_row = QHBoxLayout()
+        btn_test = QPushButton("接続テスト")
+        btn_test.clicked.connect(self._test_connection)
+        btn_save = QPushButton("設定を保存（要再起動）")
+        btn_save.clicked.connect(self._save)
+        btn_row.addWidget(btn_test)
+        btn_row.addWidget(btn_save)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        layout.addWidget(QLabel(
+            "※ 設定を保存後、アプリを再起動すると新しい接続先が有効になります。"))
+        layout.addStretch()
+
+        self._type_group.idToggled.connect(self._on_type_toggle)
+        self._load()
+
+    def _load(self):
+        db_type = get_db_type()
+        if db_type == "postgresql":
+            self._rb_pg.setChecked(True)
+        else:
+            self._rb_sqlite.setChecked(True)
+        pg = get_pg_config()
+        self._pg_host.setText(pg.get("host", "localhost"))
+        self._pg_port.setText(str(pg.get("port", "5432")))
+        self._pg_db.setText(pg.get("database", "cci_mail"))
+        self._pg_user.setText(pg.get("user", ""))
+        self._pg_pass.setText(pg.get("password", ""))
+        self._pg_grp.setEnabled(self._rb_pg.isChecked())
+
+    def _on_type_toggle(self, btn_id: int, checked: bool):
+        if checked:
+            self._pg_grp.setEnabled(btn_id == 1)
+
+    def _test_connection(self):
+        if self._rb_sqlite.isChecked():
+            QMessageBox.information(self, "接続テスト", "SQLiteはローカルファイルのため接続テスト不要です。")
+            return
+        try:
+            from sqlalchemy import create_engine, text
+            from sqlalchemy.engine import URL as SaURL
+            url = SaURL.create(
+                "postgresql+psycopg2",
+                username=self._pg_user.text().strip(),
+                password=self._pg_pass.text(),
+                host=self._pg_host.text().strip(),
+                port=int(self._pg_port.text().strip() or "5432"),
+                database=self._pg_db.text().strip(),
+            )
+            engine = create_engine(url, connect_args={"connect_timeout": 5})
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            engine.dispose()
+            QMessageBox.information(self, "接続テスト成功",
+                                    "PostgreSQLへの接続に成功しました。")
+        except Exception as e:
+            QMessageBox.critical(self, "接続テスト失敗", str(e))
+
+    def _save(self):
+        config = get_config()
+        config["db_type"] = "postgresql" if self._rb_pg.isChecked() else "sqlite"
+        config["postgresql"] = {
+            "host":     self._pg_host.text().strip(),
+            "port":     self._pg_port.text().strip() or "5432",
+            "database": self._pg_db.text().strip(),
+            "user":     self._pg_user.text().strip(),
+            "password": self._pg_pass.text(),
+        }
+        save_config(config)
+        QMessageBox.information(self, "保存完了",
+                                "設定を保存しました。\nアプリを再起動すると新しい接続先が有効になります。")

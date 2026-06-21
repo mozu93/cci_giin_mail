@@ -34,3 +34,20 @@ def get_db_path() -> str:
 
 def get_graph_config() -> dict:
     return get_config().get("graph", {})
+
+
+def get_db_type() -> str:
+    """'sqlite' または 'postgresql' を返す（デフォルトは 'sqlite'）"""
+    return get_config().get("db_type", "sqlite")
+
+
+def get_pg_config() -> dict:
+    """PostgreSQL接続設定を返す"""
+    defaults = {
+        "host": "localhost",
+        "port": "5432",
+        "database": "cci_mail",
+        "user": "",
+        "password": "",
+    }
+    return {**defaults, **get_config().get("postgresql", {})}
