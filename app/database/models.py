@@ -149,6 +149,19 @@ class Meeting(Base):
                            cascade="all, delete-orphan")
 
 
+class ReceptionLog(Base):
+    __tablename__ = "reception_logs"
+    id = Column(Integer, primary_key=True)
+    meeting_id  = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+    member_id   = Column(Integer, ForeignKey("members.id"),  nullable=False)
+    staff_name  = Column(String,  nullable=False)
+    old_status  = Column(String,  nullable=False, default="")
+    new_status  = Column(String,  nullable=False)
+    changed_at  = Column(DateTime, nullable=False, default=datetime.now)
+    meeting = relationship("Meeting")
+    member  = relationship("Member")
+
+
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
     id = Column(Integer, primary_key=True)

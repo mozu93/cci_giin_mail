@@ -44,6 +44,8 @@ def _migrate_sqlite(engine):
             ))
             conn.commit()
 
+        # reception_logs テーブルは create_all で自動生成されるため追加不要
+
 
 def get_engine(db_path: str | None = None):
     global _engine

@@ -17,6 +17,7 @@ from app.services.meeting_service import (
     upsert_attendance, get_attendance_data, get_summary, export_csv,
     update_actual_status, get_reception_summary
 )
+from app.services.reception_log_service import create_log, get_logs
 from app.services.position_service import get_positions
 
 def _to_katakana(text: str) -> str:
@@ -128,8 +129,9 @@ class _NewMeetingDialog(QDialog):
 
 
 class MeetingTab(QWidget):
-    def __init__(self):
+    def __init__(self, staff_name: str = ""):
         super().__init__()
+        self._staff_name = staff_name
         self._current_meeting_id: int | None = None
         self._preentry_data: list[dict] = []
         self._rec_data: list[dict] = []
@@ -160,6 +162,7 @@ class MeetingTab(QWidget):
         self._inner = QTabWidget()
         self._inner.addTab(self._build_preentry_tab(), "事前入力")
         self._inner.addTab(self._build_reception_tab(), "受付")
+        self._inner.addTab(self._build_log_tab(), "受付ログ")
         self._inner.currentChanged.connect(self._on_inner_tab_change)
         layout.addWidget(self._inner)
 
@@ -589,8 +592,15 @@ class MeetingTab(QWidget):
             return
         session = get_session()
         try:
+            # 変更前の値を取得してからログを記録
+            old = next(
+                (d.get("actual_status") or "" for d in self._rec_data
+                 if d["member_id"] == member_id), "")
             update_actual_status(
                 session, self._current_meeting_id, member_id, actual_status)
+            if self._staff_name:
+                create_log(session, self._current_meeting_id, member_id,
+                           self._staff_name, old, actual_status)
         finally:
             session.close()
 
@@ -640,10 +650,56 @@ class MeetingTab(QWidget):
         if self._inner.currentIndex() == 1:
             self._load_reception()
 
+    # ─── 受付ログタブ ─────────────────────────────────────────────
+
+    def _build_log_tab(self) -> QWidget:
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        self._log_table = QTableWidget(0, 5)
+        self._log_table.setHorizontalHeaderLabels(
+            ["日時", "担当者", "事業所名", "変更前", "変更後"])
+        h = self._log_table.horizontalHeader()
+        h.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        h.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self._log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        layout.addWidget(self._log_table)
+        return w
+
+    def _load_log_tab(self):
+        if not self._current_meeting_id:
+            self._log_table.setRowCount(0)
+            return
+        session = get_session()
+        try:
+            logs = get_logs(session, self._current_meeting_id)
+        finally:
+            session.close()
+        self._log_table.setRowCount(0)
+        for log in logs:
+            row = self._log_table.rowCount()
+            self._log_table.insertRow(row)
+            org = log.member.organization_name if log.member else ""
+            cells = [
+                log.changed_at.strftime("%Y/%m/%d %H:%M:%S"),
+                log.staff_name,
+                org,
+                log.old_status or "（未受付）",
+                log.new_status or "（未受付）",
+            ]
+            for col, val in enumerate(cells):
+                self._log_table.setItem(row, col, QTableWidgetItem(val))
+
     def _on_inner_tab_change(self, idx: int):
         if idx == 1:
             self._load_reception()
             self._timer.start()
+        elif idx == 2:
+            self._timer.stop()
+            self._load_log_tab()
         else:
             self._timer.stop()
 
