@@ -1,9 +1,10 @@
 import json
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QPushButton, QTextEdit, QSplitter
+    QDialog, QVBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
+    QHeaderView, QPushButton, QSplitter, QLabel
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 from sqlalchemy.orm import Session
 from app.services.member_service import get_member_history, get_member
 
@@ -20,16 +21,19 @@ _FIELD_LABELS = {
     "position_id":       "会議所役職ID（旧）",
 }
 
+_HIGHLIGHT = QColor("#FEF3C7")   # 差分行: 黄色
+
 
 class MemberHistoryDialog(QDialog):
     def __init__(self, session: Session, member_id: int, parent=None):
         super().__init__(parent)
         self._session = session
         self._member_id = member_id
-        self._history = []  # _build() でシグナル接続前に初期化
+        self._history = []
         member = get_member(session, member_id)
-        self.setWindowTitle(f"変更履歴: {member.organization_name if member else ''}")
-        self.resize(700, 500)
+        self.setWindowTitle(
+            f"変更履歴: {member.organization_name if member else ''}")
+        self.resize(760, 560)
         self._build()
         self._load()
 
@@ -37,6 +41,7 @@ class MemberHistoryDialog(QDialog):
         layout = QVBoxLayout(self)
         splitter = QSplitter(Qt.Orientation.Vertical)
 
+        # ── 上部: 履歴一覧テーブル ──
         self._table = QTableWidget(0, 3)
         self._table.setHorizontalHeaderLabels(["変更日時", "変更者", "変更理由"])
         self._table.horizontalHeader().setSectionResizeMode(
@@ -44,15 +49,35 @@ class MemberHistoryDialog(QDialog):
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.currentItemChanged.connect(
-            lambda cur, _: self._show_snapshot(self._table.currentRow())
+            lambda cur, _: self._show_comparison(self._table.currentRow())
         )
         splitter.addWidget(self._table)
 
-        self._snapshot_view = QTextEdit()
-        self._snapshot_view.setReadOnly(True)
-        self._snapshot_view.setPlaceholderText("行を選択するとその時点のデータを表示します")
-        splitter.addWidget(self._snapshot_view)
+        # ── 下部: 対比テーブル ──
+        bottom = QWidget()
+        bl = QVBoxLayout(bottom)
+        bl.setContentsMargins(0, 4, 0, 0)
+        bl.setSpacing(4)
 
+        self._compare_label = QLabel("履歴を選択すると、1つ前のデータとの対比を表示します")
+        self._compare_label.setStyleSheet("color:#6B7280; font-size:11px;")
+        bl.addWidget(self._compare_label)
+
+        self._compare_table = QTableWidget(0, 3)
+        self._compare_table.setHorizontalHeaderLabels(
+            ["項目", "変更前（1つ前）", "変更後（選択中）"])
+        self._compare_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents)
+        self._compare_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch)
+        self._compare_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch)
+        self._compare_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._compare_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows)
+        bl.addWidget(self._compare_table)
+
+        splitter.addWidget(bottom)
         layout.addWidget(splitter)
 
         btn_close = QPushButton("閉じる")
@@ -67,32 +92,76 @@ class MemberHistoryDialog(QDialog):
             self._table.insertRow(row)
             ts = h.changed_at.strftime("%Y/%m/%d %H:%M") if h.changed_at else ""
             self._table.setItem(row, 0, QTableWidgetItem(ts))
-            self._table.setItem(row, 1, QTableWidgetItem(h.changed_by))
-            self._table.setItem(row, 2, QTableWidgetItem(h.change_reason))
+            self._table.setItem(row, 1, QTableWidgetItem(h.changed_by or ""))
+            self._table.setItem(row, 2, QTableWidgetItem(h.change_reason or ""))
 
-    def _show_snapshot(self, row: int):
-        if row < 0 or row >= len(self._history):
-            return
-        snap = self._history[row].snapshot or ""
+    # ── ユーティリティ ──
+
+    def _parse(self, snapshot_json: str) -> dict:
         try:
-            data = json.loads(snap) if snap else {}
-            lines = []
-            for k, v in data.items():
-                if k == "email_addresses":
-                    continue
-                label = _FIELD_LABELS.get(k, k)
-                if k == "is_active":
-                    v = "在任中" if v else "退任"
-                elif v is None or v == "":
-                    v = "（なし）"
-                lines.append(f"{label}: {v}")
-            emails = data.get("email_addresses", [])
-            if emails:
-                lines.append("")
-                for i, e in enumerate(emails, 1):
-                    addr = e.get("address", "")
-                    lbl = e.get("label", "")
-                    lines.append(f"メール{i}: {addr}" + (f"（{lbl}）" if lbl else ""))
-            self._snapshot_view.setPlainText("\n".join(lines))
+            return json.loads(snapshot_json) if snapshot_json else {}
         except Exception:
-            self._snapshot_view.setPlainText(snap or "")
+            return {}
+
+    def _fmt(self, k: str, v) -> str:
+        if k == "is_active":
+            return "在任中" if v else "退任"
+        if v is None or v == "":
+            return "（なし）"
+        return str(v)
+
+    # ── 対比表示 ──
+
+    def _show_comparison(self, row: int):
+        self._compare_table.setRowCount(0)
+        if row < 0 or row >= len(self._history):
+            self._compare_label.setText(
+                "履歴を選択すると、1つ前のデータとの対比を表示します")
+            return
+
+        snap_new = self._parse(self._history[row].snapshot)
+        ts_new = (self._history[row].changed_at.strftime("%Y/%m/%d %H:%M")
+                  if self._history[row].changed_at else "")
+
+        # history は新しい順 → row+1 が「1つ前」
+        if row + 1 < len(self._history):
+            snap_old = self._parse(self._history[row + 1].snapshot)
+            ts_old = (self._history[row + 1].changed_at.strftime("%Y/%m/%d %H:%M")
+                      if self._history[row + 1].changed_at else "")
+        else:
+            snap_old = {}
+            ts_old = "（初回登録）"
+
+        self._compare_label.setText(
+            f"変更前: {ts_old}　→　変更後: {ts_new}　　※差分のある行を黄色で表示")
+
+        # 通常フィールド
+        for k, v_new in snap_new.items():
+            if k == "email_addresses":
+                continue
+            label  = _FIELD_LABELS.get(k, k)
+            s_new  = self._fmt(k, v_new)
+            s_old  = self._fmt(k, snap_old.get(k))
+            self._add_row(label, s_old, s_new)
+
+        # メールアドレス
+        emails_new = snap_new.get("email_addresses", [])
+        emails_old = snap_old.get("email_addresses", [])
+        for i in range(max(len(emails_new), len(emails_old))):
+            en = emails_new[i] if i < len(emails_new) else {}
+            eo = emails_old[i] if i < len(emails_old) else {}
+            def _mail(e):
+                a = e.get("address", "")
+                l = e.get("label", "")
+                return f"{a}（{l}）" if a else "（なし）"
+            self._add_row(f"メール{i + 1}", _mail(eo), _mail(en))
+
+    def _add_row(self, label: str, s_old: str, s_new: str):
+        r = self._compare_table.rowCount()
+        self._compare_table.insertRow(r)
+        self._compare_table.setItem(r, 0, QTableWidgetItem(label))
+        self._compare_table.setItem(r, 1, QTableWidgetItem(s_old))
+        self._compare_table.setItem(r, 2, QTableWidgetItem(s_new))
+        if s_old != s_new:
+            for c in range(3):
+                self._compare_table.item(r, c).setBackground(_HIGHLIGHT)
