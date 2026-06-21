@@ -80,12 +80,12 @@ class MemberTab(QWidget):
             self._pos_filter.addItem("すべての役職", None)
             for p in positions:
                 self._pos_filter.addItem(p.name, p.id)
-            self._pos_filter.blockSignals(False)
             if current is not None:
                 for i in range(self._pos_filter.count()):
                     if self._pos_filter.itemData(i) == current:
                         self._pos_filter.setCurrentIndex(i)
                         break
+            self._pos_filter.blockSignals(False)
         finally:
             session.close()
 
