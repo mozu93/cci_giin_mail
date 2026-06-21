@@ -71,13 +71,20 @@ def import_members(session: Session, rows: list[list],
             errors.append(f"行{i} ({member_number}): 事業所名または氏名が空です")
             continue
 
-        position_name = _cell(row, "position_name")
         kwargs = {
             "organization_kana": _cell(row, "organization_kana"),
             "title":             _cell(row, "title"),
             "name_kana":         _cell(row, "name_kana"),
-            "position_id":       position_map.get(position_name) if position_name else None,
         }
+        if "position_name" in column_map:
+            position_name = _cell(row, "position_name")
+            resolved_id = position_map.get(position_name) if position_name else None
+            if position_name and resolved_id is None:
+                errors.append(
+                    f"行{i} ({member_number}): 会議所役職「{position_name}」が見つかりません（スキップ）"
+                )
+            else:
+                kwargs["position_id"] = resolved_id
 
         addresses = []
         for n in range(1, 6):
