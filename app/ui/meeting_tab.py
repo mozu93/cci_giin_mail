@@ -5,7 +5,8 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QLabel, QLineEdit, QComboBox,
     QDialog, QFormLayout, QDateEdit, QMessageBox,
-    QFileDialog, QTabWidget, QRadioButton, QButtonGroup, QCheckBox
+    QFileDialog, QTabWidget, QRadioButton, QButtonGroup, QCheckBox,
+    QApplication
 )
 from PyQt6.QtCore import Qt, QTimer, QDate
 from PyQt6.QtGui import QColor
@@ -15,6 +16,11 @@ from app.services.meeting_service import (
     upsert_attendance, get_attendance_data, get_summary, export_csv
 )
 from app.services.position_service import get_positions
+
+_PRE_COL_KEYS = ["position", "org_name", "org_kana", "title", "name",
+                 "status", "proxy_title", "proxy_name"]
+_PRE_HEADERS  = ["会議所役職名", "事業所名", "事業所名フリガナ", "役職名", "氏名",
+                 "ステータス", "代理役職名", "代理者氏名"]
 
 _STATUS_COLORS = {
     "出席": "#DCFCE7",
@@ -102,6 +108,8 @@ class MeetingTab(QWidget):
         self._current_meeting_id: int | None = None
         self._preentry_data: list[dict] = []
         self._rec_data: list[dict] = []
+        self._sort_keys: list[tuple[int, bool]] = []   # (col_idx, ascending)
+        self._original_ids: list[int] = []             # default order
         self._build()
         self._load_meetings()
 
@@ -139,25 +147,32 @@ class MeetingTab(QWidget):
     def _build_preentry_tab(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
+
         btn_row = QHBoxLayout()
+        btn_reset = QPushButton("並び替え解除")
+        btn_reset.clicked.connect(self._reset_sort)
         btn_csv = QPushButton("CSV出力")
         btn_csv.clicked.connect(self._export_csv)
+        btn_row.addWidget(btn_reset)
         btn_row.addStretch()
         btn_row.addWidget(btn_csv)
         layout.addLayout(btn_row)
 
-        self._pre_table = QTableWidget(0, 6)
-        self._pre_table.setHorizontalHeaderLabels(
-            ["会員番号", "事業所名", "氏名", "ステータス", "代理役職名", "代理氏名"])
+        self._pre_table = QTableWidget(0, len(_PRE_HEADERS))
+        self._pre_table.setHorizontalHeaderLabels(_PRE_HEADERS)
         h = self._pre_table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        h.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        h.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        h.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
-        self._pre_table.setColumnWidth(4, 120)
-        self._pre_table.setColumnWidth(5, 120)
+        h.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        h.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
+        h.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
+        self._pre_table.setColumnWidth(2, 150)
+        self._pre_table.setColumnWidth(6, 110)
+        self._pre_table.setColumnWidth(7, 110)
+        h.sectionClicked.connect(self._on_pre_header_click)
         self._pre_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._pre_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         layout.addWidget(self._pre_table)
@@ -173,41 +188,94 @@ class MeetingTab(QWidget):
                 session, self._current_meeting_id)
         finally:
             session.close()
+        self._sort_keys.clear()
+        self._original_ids = [d["member_id"] for d in self._preentry_data]
+        self._update_pre_headers()
+        self._render_preentry()
 
+    def _render_preentry(self):
         self._pre_table.setUpdatesEnabled(False)
+        self._pre_table.setRowCount(0)
         for i, d in enumerate(self._preentry_data):
             self._pre_table.insertRow(i)
-            self._pre_table.setItem(i, 0, QTableWidgetItem(d["member_number"]))
-            self._pre_table.setItem(i, 1, QTableWidgetItem(d["org_name"]))
-            self._pre_table.setItem(i, 2, QTableWidgetItem(d["name"]))
-
+            for col in range(5):   # 会議所役職名〜氏名（読み取り専用）
+                self._pre_table.setItem(
+                    i, col, QTableWidgetItem(d.get(_PRE_COL_KEYS[col], "")))
             combo = QComboBox()
             combo.addItems(STATUS_OPTIONS)
             combo.setCurrentText(d["status"])
             combo.currentTextChanged.connect(
                 lambda text, row=i: self._on_status_change(row, text))
-            self._pre_table.setCellWidget(i, 3, combo)
-
+            self._pre_table.setCellWidget(i, 5, combo)
             is_proxy = d["status"] == "代理"
             title_edit = QLineEdit(d["proxy_title"])
-            name_edit = QLineEdit(d["proxy_name"])
+            name_edit  = QLineEdit(d["proxy_name"])
             title_edit.setEnabled(is_proxy)
             name_edit.setEnabled(is_proxy)
-            title_edit.editingFinished.connect(
-                lambda row=i: self._save_proxy(row))
-            name_edit.editingFinished.connect(
-                lambda row=i: self._save_proxy(row))
-            self._pre_table.setCellWidget(i, 4, title_edit)
-            self._pre_table.setCellWidget(i, 5, name_edit)
+            title_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
+            name_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
+            self._pre_table.setCellWidget(i, 6, title_edit)
+            self._pre_table.setCellWidget(i, 7, name_edit)
         self._pre_table.setUpdatesEnabled(True)
+
+    def _on_pre_header_click(self, col: int):
+        shift = bool(
+            QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier)
+        existing = next(
+            (i for i, (c, _) in enumerate(self._sort_keys) if c == col), None)
+        if shift:
+            if existing is not None:
+                old_asc = self._sort_keys[existing][1]
+                self._sort_keys[existing] = (col, not old_asc)
+            else:
+                self._sort_keys.append((col, True))
+        else:
+            if existing == 0 and len(self._sort_keys) == 1:
+                self._sort_keys = [(col, not self._sort_keys[0][1])]
+            else:
+                self._sort_keys = [(col, True)]
+        self._apply_sort()
+        self._update_pre_headers()
+        self._render_preentry()
+
+    def _apply_sort(self):
+        for col, ascending in reversed(self._sort_keys):
+            key = _PRE_COL_KEYS[col]
+            self._preentry_data.sort(
+                key=lambda d, k=key: d.get(k, ""),
+                reverse=not ascending,
+            )
+
+    def _update_pre_headers(self):
+        rank_sym = "①②③④⑤⑥⑦⑧"
+        labels = []
+        for col, base in enumerate(_PRE_HEADERS):
+            for rank, (c, asc) in enumerate(self._sort_keys):
+                if c == col:
+                    arrow = "↑" if asc else "↓"
+                    sym = rank_sym[rank] if rank < len(rank_sym) else str(rank + 1)
+                    labels.append(f"{base} {arrow}{sym}")
+                    break
+            else:
+                labels.append(base)
+        self._pre_table.setHorizontalHeaderLabels(labels)
+
+    def _reset_sort(self):
+        self._sort_keys.clear()
+        if self._original_ids:
+            id_to_d = {d["member_id"]: d for d in self._preentry_data}
+            self._preentry_data = [
+                id_to_d[mid] for mid in self._original_ids if mid in id_to_d]
+        self._update_pre_headers()
+        self._render_preentry()
 
     def _on_status_change(self, row: int, text: str):
         if row >= len(self._preentry_data):
             return
         d = self._preentry_data[row]
         d["status"] = text
-        title_edit = self._pre_table.cellWidget(row, 4)
-        name_edit = self._pre_table.cellWidget(row, 5)
+        title_edit = self._pre_table.cellWidget(row, 6)
+        name_edit  = self._pre_table.cellWidget(row, 7)
         is_proxy = (text == "代理")
         if title_edit:
             title_edit.setEnabled(is_proxy)
@@ -226,10 +294,10 @@ class MeetingTab(QWidget):
         if row >= len(self._preentry_data):
             return
         d = self._preentry_data[row]
-        title_edit = self._pre_table.cellWidget(row, 4)
-        name_edit = self._pre_table.cellWidget(row, 5)
+        title_edit = self._pre_table.cellWidget(row, 6)
+        name_edit  = self._pre_table.cellWidget(row, 7)
         d["proxy_title"] = title_edit.text().strip() if title_edit else ""
-        d["proxy_name"] = name_edit.text().strip() if name_edit else ""
+        d["proxy_name"]  = name_edit.text().strip() if name_edit else ""
         self._save_row(row)
 
     def _save_row(self, row: int):

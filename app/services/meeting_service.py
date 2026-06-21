@@ -63,6 +63,8 @@ def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
             "member_id":    m.id,
             "member_number": m.member_number,
             "org_name":     m.organization_name,
+            "org_kana":     m.organization_kana or "",
+            "title":        m.title or "",
             "name":         m.name,
             "position":     m.position.name if m.position else "",
             "status":       r.status if r else "未回答",
