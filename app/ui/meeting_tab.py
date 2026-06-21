@@ -1,4 +1,5 @@
 # app/ui/meeting_tab.py
+import unicodedata
 from datetime import date
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
@@ -16,6 +17,15 @@ from app.services.meeting_service import (
     upsert_attendance, get_attendance_data, get_summary, export_csv
 )
 from app.services.position_service import get_positions
+
+def _to_katakana(text: str) -> str:
+    """ひらがな・半角カタカナを全角カタカナに統一して返す"""
+    text = unicodedata.normalize("NFKC", text)   # 半角カタカナ → 全角カタカナ
+    return "".join(
+        chr(ord(ch) + 0x60) if 0x3041 <= ord(ch) <= 0x3096 else ch
+        for ch in text
+    )
+
 
 _PRE_COL_KEYS = ["position", "org_name", "org_kana", "title", "name",
                  "status", "proxy_title", "proxy_name"]
@@ -261,15 +271,15 @@ class MeetingTab(QWidget):
 
     def _apply_status_filter(self):
         visible = {s for s, cb in self._status_filter_checks.items() if cb.isChecked()}
-        keyword = self._pre_search.text().strip().lower()
+        keyword = _to_katakana(self._pre_search.text().strip())
         for row in range(self._pre_table.rowCount()):
             if row >= len(self._preentry_data):
                 continue
             d = self._preentry_data[row]
             status_ok = d["status"] in visible
             search_ok = (not keyword
-                         or keyword in d.get("org_name", "").lower()
-                         or keyword in d.get("org_kana", "").lower())
+                         or keyword in _to_katakana(d.get("org_name", ""))
+                         or keyword in _to_katakana(d.get("org_kana", "")))
             self._pre_table.setRowHidden(row, not (status_ok and search_ok))
 
     def _select_all_status_filter(self):
