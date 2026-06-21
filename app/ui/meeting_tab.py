@@ -151,9 +151,13 @@ class MeetingTab(QWidget):
         btn_row = QHBoxLayout()
         btn_reset = QPushButton("並び替え解除")
         btn_reset.clicked.connect(self._reset_sort)
+        self._pre_search = QLineEdit()
+        self._pre_search.setPlaceholderText("事業所名・事業所名フリガナで検索")
+        self._pre_search.textChanged.connect(self._apply_status_filter)
         btn_csv = QPushButton("CSV出力")
         btn_csv.clicked.connect(self._export_csv)
         btn_row.addWidget(btn_reset)
+        btn_row.addWidget(self._pre_search, 2)
         btn_row.addStretch()
         btn_row.addWidget(btn_csv)
         layout.addLayout(btn_row)
@@ -254,10 +258,16 @@ class MeetingTab(QWidget):
 
     def _apply_status_filter(self):
         visible = {s for s, cb in self._status_filter_checks.items() if cb.isChecked()}
+        keyword = self._pre_search.text().strip().lower()
         for row in range(self._pre_table.rowCount()):
-            if row < len(self._preentry_data):
-                self._pre_table.setRowHidden(
-                    row, self._preentry_data[row]["status"] not in visible)
+            if row >= len(self._preentry_data):
+                continue
+            d = self._preentry_data[row]
+            status_ok = d["status"] in visible
+            search_ok = (not keyword
+                         or keyword in d.get("org_name", "").lower()
+                         or keyword in d.get("org_kana", "").lower())
+            self._pre_table.setRowHidden(row, not (status_ok and search_ok))
 
     def _clear_status_filter(self):
         for cb in self._status_filter_checks.values():
