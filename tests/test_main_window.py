@@ -20,11 +20,11 @@ def test_main_window_title(main_window):
     assert main_window.windowTitle() == "商工会議所メール配信システム"
 
 
-def test_main_window_has_five_tabs(main_window):
-    """タブが5つ存在する"""
+def test_main_window_has_six_tabs(main_window):
+    """タブが6つ存在する"""
     tab_widget = main_window.centralWidget()
     assert isinstance(tab_widget, QTabWidget)
-    assert tab_widget.count() == 5
+    assert tab_widget.count() == 6
 
 
 def test_main_window_tab_names(main_window):
@@ -32,6 +32,7 @@ def test_main_window_tab_names(main_window):
     tab_widget = main_window.centralWidget()
     tab_labels = [tab_widget.tabText(i) for i in range(tab_widget.count())]
     assert "名簿管理" in tab_labels
+    assert "会議管理" in tab_labels
     assert "メール送信" in tab_labels
     assert "テンプレート" in tab_labels
     assert "設定" in tab_labels

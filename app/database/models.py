@@ -1,6 +1,7 @@
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+    Column, Integer, String, Boolean, DateTime, Text, ForeignKey,
+    Date, UniqueConstraint
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 
@@ -134,3 +135,27 @@ class SendLog(Base):
 
     job = relationship("SendJob", back_populates="logs")
     member = relationship("Member")
+
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    records = relationship("AttendanceRecord", back_populates="meeting",
+                           cascade="all, delete-orphan")
+
+
+class AttendanceRecord(Base):
+    __tablename__ = "attendance_records"
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    status = Column(String, nullable=False, default="未入力")
+    proxy_title = Column(String, default="")
+    proxy_name = Column(String, default="")
+    meeting = relationship("Meeting", back_populates="records")
+    member = relationship("Member")
+    __table_args__ = (UniqueConstraint("meeting_id", "member_id",
+                                       name="uq_meeting_member"),)

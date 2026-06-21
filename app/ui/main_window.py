@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QMainWindow, QTabWidget
 from app.ui.member_tab import MemberTab
+from app.ui.meeting_tab import MeetingTab
 from app.ui.send_tab import SendTab
 from app.ui.template_tab import TemplateTab
 from app.ui.settings_tab import SettingsTab
@@ -18,6 +19,7 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
         self.setCentralWidget(tabs)
         tabs.addTab(MemberTab(), "名簿管理")
+        tabs.addTab(MeetingTab(), "会議管理")
         tabs.addTab(SendTab(), "メール送信")
         tabs.addTab(TemplateTab(), "テンプレート")
         tabs.addTab(SettingsTab(), "設定")
