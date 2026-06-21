@@ -6,6 +6,25 @@ from app.services.member_service import (
 )
 
 
+_CSV_ENCODINGS = ["utf-8-sig", "cp932", "utf-8", "euc-jp"]
+
+
+def _read_csv_auto(filepath: str) -> list[list]:
+    import csv
+    raw = Path(filepath).read_bytes()
+    for enc in _CSV_ENCODINGS:
+        try:
+            text = raw.decode(enc)
+            reader = csv.reader(text.splitlines())
+            return [list(r) for r in reader]
+        except (UnicodeDecodeError, LookupError):
+            continue
+    # 最終フォールバック: 読めない文字を置換
+    text = raw.decode("cp932", errors="replace")
+    reader = csv.reader(text.splitlines())
+    return [list(r) for r in reader]
+
+
 def load_member_file(filepath: str) -> tuple[list[str], list[list]]:
     ext = Path(filepath).suffix.lower()
     if ext in (".xlsx", ".xls"):
@@ -16,9 +35,7 @@ def load_member_file(filepath: str) -> tuple[list[str], list[list]]:
         wb.close()
     elif ext == ".csv":
         import csv
-        with open(filepath, encoding="utf-8-sig", newline="") as f:
-            reader = csv.reader(f)
-            rows = [list(r) for r in reader]
+        rows = _read_csv_auto(filepath)
     else:
         raise ValueError(f"非対応のファイル形式: {ext}")
     if not rows:
