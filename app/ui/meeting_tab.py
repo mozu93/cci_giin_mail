@@ -172,8 +172,11 @@ class MeetingTab(QWidget):
             cb.stateChanged.connect(self._apply_status_filter)
             filter_row.addWidget(cb)
             self._status_filter_checks[s] = cb
+        btn_all_on = QPushButton("全選択")
+        btn_all_on.clicked.connect(self._select_all_status_filter)
         btn_all_off = QPushButton("全解除")
         btn_all_off.clicked.connect(self._clear_status_filter)
+        filter_row.addWidget(btn_all_on)
         filter_row.addWidget(btn_all_off)
         filter_row.addStretch()
         layout.addLayout(filter_row)
@@ -268,6 +271,13 @@ class MeetingTab(QWidget):
                          or keyword in d.get("org_name", "").lower()
                          or keyword in d.get("org_kana", "").lower())
             self._pre_table.setRowHidden(row, not (status_ok and search_ok))
+
+    def _select_all_status_filter(self):
+        for cb in self._status_filter_checks.values():
+            cb.blockSignals(True)
+            cb.setChecked(True)
+            cb.blockSignals(False)
+        self._apply_status_filter()
 
     def _clear_status_filter(self):
         for cb in self._status_filter_checks.values():
