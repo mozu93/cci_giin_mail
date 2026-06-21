@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from sqlalchemy.orm import Session
-from app.services.member_service import get_member_history, get_member
+from app.services.member_service import get_member_history, get_member, member_to_snapshot
 
 _FIELD_LABELS = {
     "member_number":     "会員番号",
@@ -65,7 +65,7 @@ class MemberHistoryDialog(QDialog):
 
         self._compare_table = QTableWidget(0, 3)
         self._compare_table.setHorizontalHeaderLabels(
-            ["項目", "変更前（1つ前）", "変更後（選択中）"])
+            ["項目", "変更前", "変更後"])
         self._compare_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents)
         self._compare_table.horizontalHeader().setSectionResizeMode(
@@ -116,45 +116,48 @@ class MemberHistoryDialog(QDialog):
         self._compare_table.setRowCount(0)
         if row < 0 or row >= len(self._history):
             self._compare_label.setText(
-                "履歴を選択すると、1つ前のデータとの対比を表示します")
+                "履歴を選択すると、変更前後のデータの対比を表示します")
             return
 
-        snap_new = self._parse(self._history[row].snapshot)
-        ts_new = (self._history[row].changed_at.strftime("%Y/%m/%d %H:%M")
-                  if self._history[row].changed_at else "")
+        # スナップショットは「変更直前」の状態を記録している
+        snap_before = self._parse(self._history[row].snapshot)
+        ts_before = (self._history[row].changed_at.strftime("%Y/%m/%d %H:%M")
+                     if self._history[row].changed_at else "")
 
-        # history は新しい順 → row+1 が「1つ前」
-        if row + 1 < len(self._history):
-            snap_old = self._parse(self._history[row + 1].snapshot)
-            ts_old = (self._history[row + 1].changed_at.strftime("%Y/%m/%d %H:%M")
-                      if self._history[row + 1].changed_at else "")
+        if row > 0:
+            # 1つ新しい履歴の「変更直前」= この変更の結果
+            snap_after = self._parse(self._history[row - 1].snapshot)
+            ts_after = (self._history[row - 1].changed_at.strftime("%Y/%m/%d %H:%M")
+                        if self._history[row - 1].changed_at else "")
         else:
-            snap_old = {}
-            ts_old = "（初回登録）"
+            # 最新の変更: 現在のDB状態が「変更後」
+            m = get_member(self._session, self._member_id)
+            snap_after = self._parse(member_to_snapshot(m)) if m else {}
+            ts_after = "現在"
 
         self._compare_label.setText(
-            f"変更前: {ts_old}　→　変更後: {ts_new}　　※差分のある行を黄色で表示")
+            f"変更前: {ts_before}　→　変更後: {ts_after}　　※差分のある行を黄色で表示")
 
         # 通常フィールド
-        for k, v_new in snap_new.items():
+        for k, v_before in snap_before.items():
             if k == "email_addresses":
                 continue
-            label  = _FIELD_LABELS.get(k, k)
-            s_new  = self._fmt(k, v_new)
-            s_old  = self._fmt(k, snap_old.get(k))
-            self._add_row(label, s_old, s_new)
+            label    = _FIELD_LABELS.get(k, k)
+            s_before = self._fmt(k, v_before)
+            s_after  = self._fmt(k, snap_after.get(k))
+            self._add_row(label, s_before, s_after)
 
         # メールアドレス
-        emails_new = snap_new.get("email_addresses", [])
-        emails_old = snap_old.get("email_addresses", [])
-        for i in range(max(len(emails_new), len(emails_old))):
-            en = emails_new[i] if i < len(emails_new) else {}
-            eo = emails_old[i] if i < len(emails_old) else {}
+        emails_before = snap_before.get("email_addresses", [])
+        emails_after  = snap_after.get("email_addresses",  [])
+        for i in range(max(len(emails_before), len(emails_after))):
+            eb = emails_before[i] if i < len(emails_before) else {}
+            ea = emails_after[i]  if i < len(emails_after)  else {}
             def _mail(e):
                 a = e.get("address", "")
-                l = e.get("label", "")
-                return f"{a}（{l}）" if a else "（なし）"
-            self._add_row(f"メール{i + 1}", _mail(eo), _mail(en))
+                lb = e.get("label", "")
+                return f"{a}（{lb}）" if a else "（なし）"
+            self._add_row(f"メール{i + 1}", _mail(eb), _mail(ea))
 
     def _add_row(self, label: str, s_old: str, s_new: str):
         r = self._compare_table.rowCount()
