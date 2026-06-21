@@ -24,3 +24,9 @@ class MainWindow(QMainWindow):
         tabs.addTab(TemplateTab(), "テンプレート")
         tabs.addTab(SettingsTab(), "設定")
         tabs.addTab(HistoryTab(), "送信履歴")
+        tabs.currentChanged.connect(lambda idx: self._on_tab_change(tabs, idx))
+
+    def _on_tab_change(self, tabs: QTabWidget, idx: int):
+        widget = tabs.widget(idx)
+        if hasattr(widget, "refresh"):
+            widget.refresh()

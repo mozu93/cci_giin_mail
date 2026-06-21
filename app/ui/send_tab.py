@@ -248,6 +248,9 @@ class SendTab(QWidget):
         main_layout.addWidget(scroll)
         self._load_combos()
 
+    def refresh(self):
+        self._load_combos()
+
     def _load_combos(self):
         session = get_session()
         try:
