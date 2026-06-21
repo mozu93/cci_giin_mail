@@ -595,15 +595,21 @@ class MeetingTab(QWidget):
             session.close()
 
     def _filter_reception(self):
-        keyword = self._search.text().strip().lower()
+        keyword = _to_katakana(self._search.text().strip())
         for row in range(self._rec_table.rowCount()):
             if not keyword:
                 self._rec_table.setRowHidden(row, False)
                 continue
-            visible = any(
-                keyword in (self._rec_table.item(row, col).text()
-                            if self._rec_table.item(row, col) else "").lower()
-                for col in range(self._rec_table.columnCount())
+            if row >= len(self._rec_data):
+                self._rec_table.setRowHidden(row, False)
+                continue
+            d = self._rec_data[row]
+            visible = (
+                keyword in _to_katakana(d.get("org_name", ""))
+                or keyword in _to_katakana(d.get("org_kana", ""))
+                or keyword in _to_katakana(d.get("name", ""))
+                or keyword in d.get("member_number", "")
+                or keyword in _to_katakana(d.get("position", ""))
             )
             self._rec_table.setRowHidden(row, not visible)
 
