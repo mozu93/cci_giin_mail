@@ -9,6 +9,7 @@ _SessionLocal = None
 def _configure_sqlite(dbapi_conn, connection_record):
     dbapi_conn.execute("PRAGMA journal_mode=WAL")
     dbapi_conn.execute("PRAGMA foreign_keys=ON")
+    dbapi_conn.execute("PRAGMA busy_timeout=5000")  # 書き込み競合時に5秒リトライ
 
 
 def _migrate(engine):
