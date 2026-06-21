@@ -11,6 +11,22 @@ def _configure_sqlite(dbapi_conn, connection_record):
     dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
 
+def _migrate(engine):
+    """既存DBにカラム追加が必要な場合だけALTER TABLEを実行する"""
+    with engine.connect() as conn:
+        existing = {
+            row[1]
+            for row in conn.execute(
+                __import__("sqlalchemy").text("PRAGMA table_info(meetings)")
+            )
+        }
+        if "target_position_ids" not in existing:
+            conn.execute(__import__("sqlalchemy").text(
+                "ALTER TABLE meetings ADD COLUMN target_position_ids TEXT"
+            ))
+            conn.commit()
+
+
 def get_engine(db_path: str | None = None):
     global _engine
     if _engine is None:
@@ -20,6 +36,7 @@ def get_engine(db_path: str | None = None):
         _engine = create_engine(f"sqlite:///{db_path}", echo=False)
         event.listen(_engine, "connect", _configure_sqlite)
         Base.metadata.create_all(_engine)
+        _migrate(_engine)
     return _engine
 
 

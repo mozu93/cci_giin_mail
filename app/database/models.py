@@ -142,6 +142,7 @@ class Meeting(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     date = Column(Date, nullable=False)
+    target_position_ids = Column(Text, nullable=True)  # JSON list of position IDs; NULL=全員
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     records = relationship("AttendanceRecord", back_populates="meeting",
                            cascade="all, delete-orphan")

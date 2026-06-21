@@ -1,4 +1,5 @@
 import csv
+import json
 from datetime import date
 from sqlalchemy.orm import Session
 from app.database.models import Meeting, AttendanceRecord
@@ -7,8 +8,10 @@ from app.services.member_service import get_members
 STATUS_OPTIONS = ["未入力", "出席", "代理", "委任", "欠席"]
 
 
-def create_meeting(session: Session, name: str, meeting_date: date) -> Meeting:
-    m = Meeting(name=name, date=meeting_date)
+def create_meeting(session: Session, name: str, meeting_date: date,
+                   target_position_ids: list[int] | None = None) -> Meeting:
+    ids_json = json.dumps(target_position_ids) if target_position_ids else None
+    m = Meeting(name=name, date=meeting_date, target_position_ids=ids_json)
     session.add(m)
     session.commit()
     return m
@@ -42,8 +45,12 @@ def upsert_attendance(session: Session, meeting_id: int, member_id: int,
 
 
 def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
-    """全アクティブ会員の出欠データをdictリストで返す（レコード未作成は未入力）"""
+    """対象会員の出欠データをdictリストで返す（レコード未作成は未入力）"""
+    meeting = session.get(Meeting, meeting_id)
     members = get_members(session, active_only=True)
+    if meeting and meeting.target_position_ids:
+        target_ids = set(json.loads(meeting.target_position_ids))
+        members = [m for m in members if m.position_id in target_ids]
     records = {
         r.member_id: r
         for r in session.query(AttendanceRecord)
