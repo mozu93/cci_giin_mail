@@ -168,8 +168,26 @@ class MeetingTab(QWidget):
             cb.stateChanged.connect(self._apply_status_filter)
             filter_row.addWidget(cb)
             self._status_filter_checks[s] = cb
+        btn_all_off = QPushButton("全解除")
+        btn_all_off.clicked.connect(self._clear_status_filter)
+        filter_row.addWidget(btn_all_off)
         filter_row.addStretch()
         layout.addLayout(filter_row)
+
+        # 事前入力集計バー
+        pre_grp = QGroupBox("出欠集計")
+        pre_cnt = QHBoxLayout(pre_grp)
+        self._pre_lbl_attend   = self._count_label("出席: 0",  "#16A34A")
+        self._pre_lbl_proxy    = self._count_label("代理: 0",  "#2563EB")
+        self._pre_lbl_delegate = self._count_label("委任: 0",  "#CA8A04")
+        self._pre_lbl_absent   = self._count_label("欠席: 0",  "#DC2626")
+        self._pre_lbl_unanswered = self._count_label("未回答: 0", "#6B7280")
+        self._pre_lbl_total    = self._count_label("合計: 0",  "#1E40AF", bold=True)
+        for lbl in [self._pre_lbl_attend, self._pre_lbl_proxy, self._pre_lbl_delegate,
+                    self._pre_lbl_absent, self._pre_lbl_unanswered, self._pre_lbl_total]:
+            pre_cnt.addWidget(lbl)
+        pre_cnt.addStretch()
+        layout.addWidget(pre_grp)
 
         self._pre_table = QTableWidget(0, len(_PRE_HEADERS))
         self._pre_table.setHorizontalHeaderLabels(_PRE_HEADERS)
@@ -232,6 +250,7 @@ class MeetingTab(QWidget):
             self._pre_table.setCellWidget(i, 7, name_edit)
         self._pre_table.setUpdatesEnabled(True)
         self._apply_status_filter()
+        self._update_preentry_summary()
 
     def _apply_status_filter(self):
         visible = {s for s, cb in self._status_filter_checks.items() if cb.isChecked()}
@@ -239,6 +258,27 @@ class MeetingTab(QWidget):
             if row < len(self._preentry_data):
                 self._pre_table.setRowHidden(
                     row, self._preentry_data[row]["status"] not in visible)
+
+    def _clear_status_filter(self):
+        for cb in self._status_filter_checks.values():
+            cb.blockSignals(True)
+            cb.setChecked(False)
+            cb.blockSignals(False)
+        self._apply_status_filter()
+
+    def _update_preentry_summary(self):
+        counts: dict[str, int] = {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未回答": 0}
+        for d in self._preentry_data:
+            s = d["status"]
+            if s in counts:
+                counts[s] += 1
+        total = counts["出席"] + counts["代理"] + counts["委任"]
+        self._pre_lbl_attend.setText(f"出席: {counts['出席']}")
+        self._pre_lbl_proxy.setText(f"代理: {counts['代理']}")
+        self._pre_lbl_delegate.setText(f"委任: {counts['委任']}")
+        self._pre_lbl_absent.setText(f"欠席: {counts['欠席']}")
+        self._pre_lbl_unanswered.setText(f"未回答: {counts['未回答']}")
+        self._pre_lbl_total.setText(f"合計: {total}")
 
     def _on_pre_header_click(self, col: int):
         shift = bool(
@@ -312,6 +352,7 @@ class MeetingTab(QWidget):
                 name_edit.setText("")
         self._save_row(row)
         self._apply_status_filter()
+        self._update_preentry_summary()
 
     def _save_proxy(self, row: int):
         if row >= len(self._preentry_data):
