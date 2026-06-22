@@ -18,6 +18,15 @@ class MainWindow(QMainWindow):
         self.resize(780, 728)
         self.setMinimumSize(700, 500)
         self._build_tabs()
+        self._center_on_screen()
+
+    def _center_on_screen(self):
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.move(
+            screen.center().x() - self.width() // 2,
+            screen.center().y() - self.height() // 2,
+        )
 
     def _build_tabs(self):
         tabs = QTabWidget()
