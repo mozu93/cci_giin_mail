@@ -7,7 +7,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from app.database.connection import get_session
-from app.database.models import Position
+from app.database.models import (
+    Position, Member, EmailAddress, MemberHistory,
+    AttendanceRecord, ReceptionLog, SendLog,
+)
 from app.services.member_service import get_members, delete_member
 
 
@@ -24,8 +27,8 @@ class MemberTab(QWidget):
     def _build(self):
         layout = QVBoxLayout(self)
 
-        # ツールバー
-        toolbar = QHBoxLayout()
+        # ツールバー 1行目：検索・フィルター
+        row1 = QHBoxLayout()
         self._search = QLineEdit()
         self._search.setPlaceholderText("キーワード検索（事業所名・氏名・会員番号）")
         self._search.textChanged.connect(self._load)
@@ -34,6 +37,15 @@ class MemberTab(QWidget):
         self._pos_filter.currentIndexChanged.connect(self._load)
         self._show_inactive = QCheckBox("議員退任者を含む")
         self._show_inactive.stateChanged.connect(self._load)
+        row1.addWidget(self._search, 2)
+        row1.addWidget(QLabel("役職:"))
+        row1.addWidget(self._pos_filter)
+        row1.addWidget(self._show_inactive)
+        row1.addStretch()
+        layout.addLayout(row1)
+
+        # ツールバー 2行目：操作ボタン
+        row2 = QHBoxLayout()
         btn_add     = QPushButton("追加")
         btn_edit    = QPushButton("編集")
         btn_delete  = QPushButton("議員退任")
@@ -42,6 +54,8 @@ class MemberTab(QWidget):
         btn_revert  = QPushButton("取り消し")
         btn_export  = QPushButton("エクスポート")
         btn_order   = QPushButton("順番設定")
+        btn_bulk_delete = QPushButton("一括削除（開発用）")
+        btn_bulk_delete.setStyleSheet("color: #DC2626; border: 1px solid #DC2626;")
         btn_add.clicked.connect(self._add)
         btn_edit.clicked.connect(self._edit)
         btn_delete.clicked.connect(self._delete)
@@ -50,20 +64,18 @@ class MemberTab(QWidget):
         btn_revert.clicked.connect(self._import_revert)
         btn_export.clicked.connect(self._export)
         btn_order.clicked.connect(self._order_settings)
-        toolbar.addWidget(self._search, 2)
-        toolbar.addWidget(QLabel("役職:"))
-        toolbar.addWidget(self._pos_filter)
-        toolbar.addWidget(self._show_inactive)
-        toolbar.addStretch()
-        toolbar.addWidget(btn_add)
-        toolbar.addWidget(btn_edit)
-        toolbar.addWidget(btn_delete)
-        toolbar.addWidget(btn_history)
-        toolbar.addWidget(btn_import)
-        toolbar.addWidget(btn_revert)
-        toolbar.addWidget(btn_export)
-        toolbar.addWidget(btn_order)
-        layout.addLayout(toolbar)
+        btn_bulk_delete.clicked.connect(self._bulk_delete)
+        row2.addWidget(btn_add)
+        row2.addWidget(btn_edit)
+        row2.addWidget(btn_delete)
+        row2.addWidget(btn_history)
+        row2.addWidget(btn_import)
+        row2.addWidget(btn_revert)
+        row2.addWidget(btn_export)
+        row2.addWidget(btn_order)
+        row2.addWidget(btn_bulk_delete)
+        row2.addStretch()
+        layout.addLayout(row2)
 
         # 一覧テーブル
         self._table = QTableWidget(0, 13)
@@ -261,6 +273,33 @@ class MemberTab(QWidget):
         if dlg.exec():
             self._load()
         session.close()
+
+    def _bulk_delete(self):
+        ret = QMessageBox.warning(
+            self, "一括削除（開発用）",
+            "全会員データを完全に削除します。\nこの操作は取り消せません。\n\n本当に実行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        session = get_session()
+        try:
+            session.query(ReceptionLog).delete()
+            session.query(AttendanceRecord).delete()
+            session.query(SendLog).filter(SendLog.member_id.isnot(None)).update(
+                {"member_id": None}, synchronize_session=False)
+            session.query(MemberHistory).delete()
+            session.query(EmailAddress).delete()
+            session.query(Member).delete()
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            QMessageBox.critical(self, "エラー", str(e))
+            return
+        finally:
+            session.close()
+        self._load()
+        QMessageBox.information(self, "完了", "全会員データを削除しました。")
 
     def _export(self):
         from PyQt6.QtWidgets import QFileDialog

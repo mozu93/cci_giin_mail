@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
 from app.database.connection import get_session
-from app.services.member_service import get_members, get_member
+from app.services.member_service import get_members
 from app.services.template_service import get_templates, get_template
 from app.services.signature_service import get_signatures, get_default_signature
 from app.services.position_service import get_positions
@@ -272,16 +272,19 @@ class SendTab(QWidget):
         hdr.addWidget(self._recipient_count_label)
         layout.addLayout(hdr)
 
-        self._recipient_table = QTableWidget(0, 4)
+        self._recipient_table = QTableWidget(0, 6)
         self._recipient_table.setHorizontalHeaderLabels(
-            ["送信", "事業所名", "氏名", "メールアドレス"])
+            ["送信", "会議所役職名", "事業所名", "役職名", "氏名", "メールアドレス"])
         h = self._recipient_table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        h.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        h.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        h.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        for col in range(1, 6):
+            h.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         self._recipient_table.setColumnWidth(0, 44)
-        self._recipient_table.setColumnWidth(2, 80)
+        self._recipient_table.setColumnWidth(1, 110)
+        self._recipient_table.setColumnWidth(2, 200)
+        self._recipient_table.setColumnWidth(3, 90)
+        self._recipient_table.setColumnWidth(4, 90)
+        self._recipient_table.setColumnWidth(5, 200)
         self._recipient_table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers)
         self._recipient_table.setSelectionMode(
@@ -347,27 +350,41 @@ class SendTab(QWidget):
             session.close()
 
     def _append_recipient_row(self, member, checked: bool):
-        row = self._recipient_table.rowCount()
-        self._recipient_table.insertRow(row)
-
-        cb = QCheckBox()
-        cb.setChecked(checked)
-        cb.stateChanged.connect(self._update_recipient_count)
-        self._recipient_table.setCellWidget(row, 0, cb)
-
-        org_item = QTableWidgetItem(member.organization_name)
-        org_item.setData(Qt.ItemDataRole.UserRole, member.id)
-        self._recipient_table.setItem(row, 1, org_item)
-        self._recipient_table.setItem(row, 2, QTableWidgetItem(member.name))
-
+        pos_name = member.position.name if member.position else ""
         if member.email_addresses:
-            addr_item = QTableWidgetItem(member.email_addresses[0].address)
+            for email in member.email_addresses:
+                row = self._recipient_table.rowCount()
+                self._recipient_table.insertRow(row)
+                cb = QCheckBox()
+                cb.setChecked(checked)
+                cb.stateChanged.connect(self._update_recipient_count)
+                self._recipient_table.setCellWidget(row, 0, cb)
+                self._recipient_table.setItem(row, 1, QTableWidgetItem(pos_name))
+                org_item = QTableWidgetItem(member.organization_name)
+                org_item.setData(Qt.ItemDataRole.UserRole, member.id)
+                self._recipient_table.setItem(row, 2, org_item)
+                self._recipient_table.setItem(row, 3, QTableWidgetItem(member.title or ""))
+                self._recipient_table.setItem(row, 4, QTableWidgetItem(member.name))
+                self._recipient_table.setItem(row, 5, QTableWidgetItem(email.address))
         else:
+            row = self._recipient_table.rowCount()
+            self._recipient_table.insertRow(row)
+            cb = QCheckBox()
+            cb.setChecked(checked)
+            cb.stateChanged.connect(self._update_recipient_count)
+            self._recipient_table.setCellWidget(row, 0, cb)
+            self._recipient_table.setItem(row, 1, QTableWidgetItem(pos_name))
+            org_item = QTableWidgetItem(member.organization_name)
+            org_item.setData(Qt.ItemDataRole.UserRole, member.id)
+            self._recipient_table.setItem(row, 2, org_item)
+            self._recipient_table.setItem(row, 3, QTableWidgetItem(member.title or ""))
+            name_item = QTableWidgetItem(member.name)
+            self._recipient_table.setItem(row, 4, name_item)
             addr_item = QTableWidgetItem(_NO_EMAIL_TEXT)
             addr_item.setForeground(_ORANGE)
             org_item.setForeground(_ORANGE)
-            self._recipient_table.item(row, 2).setForeground(_ORANGE)
-        self._recipient_table.setItem(row, 3, addr_item)
+            name_item.setForeground(_ORANGE)
+            self._recipient_table.setItem(row, 5, addr_item)
 
     # ──────────────────────────────────────────────────────
     # 宛先フィルタリング
@@ -424,7 +441,7 @@ class SendTab(QWidget):
     def _set_recipient_checks(self, member_ids: set):
         self._recipient_table.setUpdatesEnabled(False)
         for row in range(self._recipient_table.rowCount()):
-            item = self._recipient_table.item(row, 1)
+            item = self._recipient_table.item(row, 2)
             mid = item.data(Qt.ItemDataRole.UserRole) if item else None
             cb = self._recipient_table.cellWidget(row, 0)
             if cb and mid is not None:
@@ -452,7 +469,7 @@ class SendTab(QWidget):
             cb = self._recipient_table.cellWidget(row, 0)
             if cb and cb.isChecked():
                 checked += 1
-                item = self._recipient_table.item(row, 3)
+                item = self._recipient_table.item(row, 5)
                 if item and item.text() == _NO_EMAIL_TEXT:
                     no_email += 1
         self._recipient_count_label.setText(f"{checked}件選択")
@@ -467,22 +484,21 @@ class SendTab(QWidget):
     # ──────────────────────────────────────────────────────
 
     def _get_selected_members(self) -> list:
-        session = get_session()
-        try:
-            result = []
-            for row in range(self._recipient_table.rowCount()):
-                cb = self._recipient_table.cellWidget(row, 0)
-                if not (cb and cb.isChecked()):
-                    continue
-                item = self._recipient_table.item(row, 1)
-                mid = item.data(Qt.ItemDataRole.UserRole) if item else None
-                if mid:
-                    m = get_member(session, mid)
-                    if m:
-                        result.append(m)
-            return result
-        finally:
-            session.close()
+        member_cache = {m.id: m for m in self._members}
+        seen_ids: set = set()
+        result = []
+        for row in range(self._recipient_table.rowCount()):
+            cb = self._recipient_table.cellWidget(row, 0)
+            if not (cb and cb.isChecked()):
+                continue
+            item = self._recipient_table.item(row, 2)
+            mid = item.data(Qt.ItemDataRole.UserRole) if item else None
+            if mid and mid not in seen_ids:
+                m = member_cache.get(mid)
+                if m:
+                    result.append(m)
+                    seen_ids.add(mid)
+        return result
 
     # ──────────────────────────────────────────────────────
     # テンプレート・署名
@@ -568,7 +584,6 @@ class SendTab(QWidget):
     # ──────────────────────────────────────────────────────
 
     def _build_targets(self) -> list[dict]:
-        members = self._get_selected_members()
         subject_tpl = self._subject_edit.text()
         body_tpl = self._body_edit.toPlainText()
 
@@ -584,9 +599,22 @@ class SendTab(QWidget):
             if r["found"]:
                 attach_map[r["member_number"]] = [r["filepath"]]
 
+        member_cache = {m.id: m for m in self._members}
+
         targets = []
-        for m in members:
-            to_addr = m.email_addresses[0].address if m.email_addresses else ""
+        for row in range(self._recipient_table.rowCount()):
+            cb = self._recipient_table.cellWidget(row, 0)
+            if not (cb and cb.isChecked()):
+                continue
+            item = self._recipient_table.item(row, 2)
+            mid = item.data(Qt.ItemDataRole.UserRole) if item else None
+            addr_item = self._recipient_table.item(row, 5)
+            to_addr = addr_item.text() if addr_item else ""
+            if to_addr == _NO_EMAIL_TEXT:
+                to_addr = ""
+            m = member_cache.get(mid) if mid else None
+            if not m:
+                continue
             merge = self._merge_data.get(m.member_number, {})
             context = {
                 "事業所名":     m.organization_name,

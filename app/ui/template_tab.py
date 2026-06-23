@@ -62,9 +62,19 @@ class TemplateTab(QWidget):
         form.addRow("デフォルト署名", self._sig_combo)
         right_layout.addWidget(form_grp)
 
-        ph_grp = QGroupBox("使用可能なプレースホルダー")
+        ph_grp = QGroupBox("使用可能なプレースホルダー（クリックで本文に挿入）")
         ph_layout = QVBoxLayout(ph_grp)
-        ph_layout.addWidget(QLabel("  ".join(_PLACEHOLDERS)))
+        btn_row = QHBoxLayout()
+        for ph in _PLACEHOLDERS:
+            btn = QPushButton(ph)
+            btn.setFlat(True)
+            btn.setStyleSheet(
+                "font-size: 12px; color: #1E40AF; padding: 2px 6px;"
+                "border: 1px solid #BFDBFE; border-radius: 3px;")
+            btn.clicked.connect(lambda checked, p=ph: self._insert_placeholder(p))
+            btn_row.addWidget(btn)
+        btn_row.addStretch()
+        ph_layout.addLayout(btn_row)
         ph_layout.addWidget(QLabel(
             "差し込みデータ: {col1}〜{col5}は送信時にCSV/Excelからインポートした値に置換されます"))
         right_layout.addWidget(ph_grp)
@@ -112,6 +122,10 @@ class TemplateTab(QWidget):
             if self._sig_combo.itemData(i) == t.signature_id:
                 self._sig_combo.setCurrentIndex(i)
                 break
+
+    def _insert_placeholder(self, placeholder: str):
+        self._body.setFocus()
+        self._body.insertPlainText(placeholder)
 
     def _new(self):
         self._current_id = None

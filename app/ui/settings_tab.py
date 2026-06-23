@@ -34,14 +34,9 @@ class _GraphSettingsWidget(QWidget):
         form = QFormLayout(grp)
         self._tenant_id = QLineEdit()
         self._client_id = QLineEdit()
-        self._client_secret = QLineEdit()
-        self._client_secret.setEchoMode(QLineEdit.EchoMode.Password)
-        self._from_address = QLineEdit()
         self._test_address = QLineEdit()
         form.addRow("テナントID", self._tenant_id)
         form.addRow("クライアントID", self._client_id)
-        form.addRow("クライアントシークレット", self._client_secret)
-        form.addRow("送信元アドレス", self._from_address)
         form.addRow("テスト送信先", self._test_address)
         layout.addWidget(grp)
         btn_row = QHBoxLayout()
@@ -60,18 +55,14 @@ class _GraphSettingsWidget(QWidget):
         cfg = get_config().get("graph", {})
         self._tenant_id.setText(cfg.get("tenant_id", ""))
         self._client_id.setText(cfg.get("client_id", ""))
-        self._client_secret.setText(cfg.get("client_secret", ""))
-        self._from_address.setText(cfg.get("from_address", ""))
         self._test_address.setText(cfg.get("test_address", ""))
 
     def _save(self):
         config = get_config()
         config["graph"] = {
-            "tenant_id":     self._tenant_id.text().strip(),
-            "client_id":     self._client_id.text().strip(),
-            "client_secret": self._client_secret.text(),
-            "from_address":  self._from_address.text().strip(),
-            "test_address":  self._test_address.text().strip(),
+            "tenant_id":  self._tenant_id.text().strip(),
+            "client_id":  self._client_id.text().strip(),
+            "test_address": self._test_address.text().strip(),
         }
         save_config(config)
         QMessageBox.information(self, "保存", "設定を保存しました。")
@@ -79,21 +70,9 @@ class _GraphSettingsWidget(QWidget):
     def _test_connection(self):
         self._save()
         try:
-            import msal
-            cfg = get_config().get("graph", {})
-            app = msal.ConfidentialClientApplication(
-                cfg["client_id"],
-                authority=f"https://login.microsoftonline.com/{cfg['tenant_id']}",
-                client_credential=cfg["client_secret"],
-            )
-            result = app.acquire_token_for_client(
-                scopes=["https://graph.microsoft.com/.default"]
-            )
-            if "access_token" in result:
-                QMessageBox.information(self, "成功", "Microsoft 365への接続に成功しました。")
-            else:
-                QMessageBox.critical(self, "失敗",
-                                     f"トークン取得失敗: {result.get('error_description', '')}")
+            from app.services.email_service import get_access_token
+            get_access_token(get_config().get("graph", {}))
+            QMessageBox.information(self, "成功", "Microsoft 365への接続に成功しました。")
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
 

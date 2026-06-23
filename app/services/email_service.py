@@ -1,11 +1,14 @@
 import base64
 import os
-import re
 import requests
 import msal
+from pathlib import Path
 
 _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
              "col1", "col2", "col3", "col4", "col5"]
+
+_SCOPES = ["https://graph.microsoft.com/Mail.Send"]
+_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
 
 
 def render_body(template: str, context: dict) -> str:
@@ -46,29 +49,41 @@ def build_message(to_address: str, subject: str, body: str,
 
 
 def get_access_token(graph_config: dict) -> str:
-    app = msal.ConfidentialClientApplication(
-        graph_config["client_id"],
+    cache = msal.SerializableTokenCache()
+    if _CACHE_FILE.exists():
+        cache.deserialize(_CACHE_FILE.read_text(encoding="utf-8"))
+
+    app = msal.PublicClientApplication(
+        client_id=graph_config["client_id"],
         authority=f"https://login.microsoftonline.com/{graph_config['tenant_id']}",
-        client_credential=graph_config["client_secret"],
+        token_cache=cache,
     )
-    result = app.acquire_token_for_client(
-        scopes=["https://graph.microsoft.com/.default"]
-    )
-    if "access_token" not in result:
-        raise RuntimeError(
-            f"トークン取得失敗: {result.get('error_description', str(result))}"
-        )
+
+    result = None
+    accounts = app.get_accounts()
+    if accounts:
+        result = app.acquire_token_silent(_SCOPES, account=accounts[0])
+
+    if not result:
+        result = app.acquire_token_interactive(scopes=_SCOPES)
+
+    if cache.has_state_changed:
+        _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CACHE_FILE.write_text(cache.serialize(), encoding="utf-8")
+
+    if not result or "access_token" not in result:
+        desc = result.get("error_description", str(result)) if result else "不明なエラー"
+        raise RuntimeError(f"Microsoft 365 認証に失敗しました: {desc}")
+
     return result["access_token"]
 
 
 def send_mail(graph_config: dict, to_address: str, subject: str,
               body: str, attachments: list[str] | None = None) -> None:
     token = get_access_token(graph_config)
-    from_address = graph_config["from_address"]
     payload = build_message(to_address, subject, body, attachments or [])
-    url = f"https://graph.microsoft.com/v1.0/users/{from_address}/sendMail"
     resp = requests.post(
-        url,
+        "https://graph.microsoft.com/v1.0/me/sendMail",
         headers={"Authorization": f"Bearer {token}",
                  "Content-Type": "application/json"},
         json=payload,

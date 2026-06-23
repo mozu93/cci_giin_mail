@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database.models import ReceptionLog
 
 
@@ -19,6 +19,7 @@ def get_logs(session: Session, meeting_id: int) -> list[ReceptionLog]:
     return (
         session.query(ReceptionLog)
         .filter_by(meeting_id=meeting_id)
+        .options(joinedload(ReceptionLog.member))
         .order_by(ReceptionLog.changed_at.desc())
         .all()
     )
