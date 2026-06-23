@@ -13,7 +13,7 @@ from app.services.template_service import get_templates, get_template
 from app.services.signature_service import get_signatures, get_default_signature
 from app.services.position_service import get_positions
 from app.services.staff_service import get_staff_by_name
-from app.services.email_service import render_body, send_mail, send_test_mail
+from app.services.email_service import compile_send_targets, send_mail, send_test_mail
 from app.services.send_job_service import create_job, start_job, finish_job, add_log
 from app.utils.app_config import get_graph_config
 from app.ui.recipient_panel import RecipientPanel
@@ -527,7 +527,7 @@ class SendTab(QWidget):
         table = self._recipient.table
         no_email_text = self._recipient.no_email_text
 
-        targets = []
+        checked_rows = []
         for row in range(table.rowCount()):
             cb = table.cellWidget(row, 0)
             if not (cb and cb.isChecked()):
@@ -541,25 +541,18 @@ class SendTab(QWidget):
             m = member_cache.get(mid) if mid else None
             if not m:
                 continue
-            merge = self._merge_data.get(m.member_number, {})
-            context = {
-                "事業所名":     m.organization_name,
-                "役職名":       m.title or "",
-                "氏名":         m.name,
-                "会議所役職名": m.position.name if m.position else "",
-                **{k: merge.get(k, "") for k in ["col1", "col2", "col3", "col4", "col5"]},
-            }
-            for col_key, label in self._col_labels.items():
-                context[label] = context.get(col_key, "")
-            targets.append({
-                "member_id":   m.id,
-                "org_name":    m.organization_name,
-                "to_address":  to_addr,
-                "subject":     render_body(subject_tpl, context),
-                "body":        render_body(body_tpl + sig_body, context),
-                "attachments": list(self._common_attachments) + attach_map.get(m.member_number, []),
-            })
-        return targets
+            checked_rows.append({"member": m, "to_address": to_addr})
+
+        return compile_send_targets(
+            checked_rows=checked_rows,
+            subject_tpl=subject_tpl,
+            body_tpl=body_tpl,
+            sig_body=sig_body,
+            merge_data=self._merge_data,
+            col_labels=self._col_labels,
+            common_attachments=self._common_attachments,
+            attach_map=attach_map,
+        )
 
     def _show_send_preview(self):
         targets = self._build_targets()

@@ -146,6 +146,7 @@ class _SignatureWidget(QWidget):
         name = self._name.text().strip()
         body = self._body.text().replace("\\n", "\n")
         if not name:
+            QMessageBox.warning(self, "入力エラー", "署名名を入力してください。")
             return
         session = get_session()
         create_signature(session, name, body)
@@ -158,6 +159,9 @@ class _SignatureWidget(QWidget):
             return
         name = self._name.text().strip()
         body = self._body.text().replace("\\n", "\n")
+        if not name:
+            QMessageBox.warning(self, "入力エラー", "署名名を入力してください。")
+            return
         session = get_session()
         update_signature(session, sig_id, name=name, body=body)
         session.close()
@@ -166,6 +170,11 @@ class _SignatureWidget(QWidget):
     def _delete(self):
         sig_id = self._selected_id()
         if sig_id is None:
+            return
+        ret = QMessageBox.question(
+            self, "削除確認", "この署名を削除しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if ret != QMessageBox.StandardButton.Yes:
             return
         session = get_session()
         delete_signature(session, sig_id)
@@ -226,6 +235,7 @@ class _StaffWidget(QWidget):
     def _add(self):
         name = self._name.text().strip()
         if not name:
+            QMessageBox.warning(self, "入力エラー", "職員名を入力してください。")
             return
         session = get_session()
         create_staff(session, name)

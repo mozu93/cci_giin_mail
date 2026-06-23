@@ -157,6 +157,7 @@ class TemplateTab(QWidget):
             return
         finally:
             session.close()
+        QMessageBox.information(self, "保存", "テンプレートを保存しました。")
         self._load()
 
     def _delete(self):

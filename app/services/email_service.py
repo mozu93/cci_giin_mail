@@ -48,6 +48,46 @@ def build_message(to_address: str, subject: str, body: str,
     }
 
 
+def compile_send_targets(
+    checked_rows: list[dict],
+    subject_tpl: str,
+    body_tpl: str,
+    sig_body: str,
+    merge_data: dict,
+    col_labels: dict,
+    common_attachments: list,
+    attach_map: dict,
+) -> list[dict]:
+    """チェック済み行リスト → 送信ターゲット dict リスト（純変換）。
+
+    checked_rows の各要素: {"member": Member, "to_address": str}
+    to_address が空文字の場合はメール無しとして扱う（送信時スキップ対象）。
+    """
+    targets = []
+    for row in checked_rows:
+        m = row["member"]
+        to_addr = row["to_address"]
+        merge = merge_data.get(m.member_number, {})
+        context = {
+            "事業所名":     m.organization_name,
+            "役職名":       m.title or "",
+            "氏名":         m.name,
+            "会議所役職名": m.position.name if m.position else "",
+            **{k: merge.get(k, "") for k in ["col1", "col2", "col3", "col4", "col5"]},
+        }
+        for col_key, label in col_labels.items():
+            context[label] = context.get(col_key, "")
+        targets.append({
+            "member_id":   m.id,
+            "org_name":    m.organization_name,
+            "to_address":  to_addr,
+            "subject":     render_body(subject_tpl, context),
+            "body":        render_body(body_tpl + sig_body, context),
+            "attachments": list(common_attachments) + attach_map.get(m.member_number, []),
+        })
+    return targets
+
+
 def get_access_token(graph_config: dict) -> str:
     cache = msal.SerializableTokenCache()
     if _CACHE_FILE.exists():
