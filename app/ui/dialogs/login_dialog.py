@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QMessageBox, QInputDialog
+    QPushButton, QMessageBox, QInputDialog, QFrame
 )
 from PyQt6.QtCore import Qt
 
@@ -9,7 +9,7 @@ class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("ログイン")
-        self.setFixedSize(360, 200)
+        self.setFixedSize(360, 260)
         self.setWindowFlags(
             Qt.WindowType.Dialog | Qt.WindowType.WindowTitleHint)
 
@@ -40,7 +40,27 @@ class LoginDialog(QDialog):
         btn_row.addWidget(btn_login)
         layout.addLayout(btn_row)
 
+        # 区切り線
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("color: #CBD5E1;")
+        layout.addWidget(line)
+
+        # 閲覧専用ボタン
+        readonly_lbl = QLabel("出欠確認のみ行う場合（編集不可）")
+        readonly_lbl.setStyleSheet("color: #64748B; font-size: 11px;")
+        layout.addWidget(readonly_lbl)
+        btn_readonly = QPushButton("閲覧専用でログイン")
+        btn_readonly.setStyleSheet(
+            "QPushButton { background-color: #F1F5F9; color: #475569; "
+            "border: 1px solid #94A3B8; }"
+            "QPushButton:hover { background-color: #E2E8F0; }"
+        )
+        btn_readonly.clicked.connect(self._login_readonly)
+        layout.addWidget(btn_readonly)
+
         self._staff_name = ""
+        self._readonly = False
         self._load_staff()
         self._center_on_screen()
 
@@ -89,7 +109,16 @@ class LoginDialog(QDialog):
             QMessageBox.warning(self, "未選択", "担当者を選択してください。")
             return
         self._staff_name = name
+        self._readonly = False
+        self.accept()
+
+    def _login_readonly(self):
+        self._staff_name = ""
+        self._readonly = True
         self.accept()
 
     def staff_name(self) -> str:
         return self._staff_name
+
+    def readonly(self) -> bool:
+        return self._readonly

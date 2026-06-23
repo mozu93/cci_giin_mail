@@ -10,13 +10,17 @@ from app.ui.history_tab import HistoryTab
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, staff_name: str = ""):
+    def __init__(self, staff_name: str = "", readonly: bool = False):
         super().__init__()
         self._staff_name = staff_name
-        self.setWindowTitle(
-            f"商工会議所メール配信システム　［{staff_name}］" if staff_name
-            else "商工会議所メール配信システム"
-        )
+        self._readonly = readonly
+        if readonly:
+            title = "商工会議所メール配信システム　【閲覧専用】"
+        elif staff_name:
+            title = f"商工会議所メール配信システム　［{staff_name}］"
+        else:
+            title = "商工会議所メール配信システム"
+        self.setWindowTitle(title)
         self.resize(780, 728)
         self.setMinimumSize(700, 500)
         self._build_tabs()
@@ -42,14 +46,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._banner)
 
         tabs = QTabWidget()
-        member_tab = MemberTab()
-        member_tab.set_staff_name(self._staff_name)
-        tabs.addTab(member_tab, "名簿管理")
-        tabs.addTab(MeetingTab(staff_name=self._staff_name), "会議管理")
-        tabs.addTab(SendTab(staff_name=self._staff_name), "メール送信")
-        tabs.addTab(TemplateTab(), "テンプレート")
-        tabs.addTab(SettingsTab(), "設定")
-        tabs.addTab(HistoryTab(), "送信履歴")
+        if self._readonly:
+            tabs.addTab(
+                MeetingTab(staff_name="", readonly=True), "出欠確認")
+        else:
+            member_tab = MemberTab()
+            member_tab.set_staff_name(self._staff_name)
+            tabs.addTab(member_tab, "名簿管理")
+            tabs.addTab(MeetingTab(staff_name=self._staff_name), "会議管理")
+            tabs.addTab(SendTab(staff_name=self._staff_name), "メール送信")
+            tabs.addTab(TemplateTab(), "テンプレート")
+            tabs.addTab(SettingsTab(), "設定")
+            tabs.addTab(HistoryTab(), "送信履歴")
         tabs.currentChanged.connect(lambda idx: self._on_tab_change(tabs, idx))
         layout.addWidget(tabs)
 

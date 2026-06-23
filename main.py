@@ -61,7 +61,7 @@ def main():
     if dlg.exec() != LoginDialog.DialogCode.Accepted:
         sys.exit(0)
 
-    window = MainWindow(staff_name=dlg.staff_name())
+    window = MainWindow(staff_name=dlg.staff_name(), readonly=dlg.readonly())
     window.show()
     sys.exit(app.exec())
 

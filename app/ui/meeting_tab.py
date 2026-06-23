@@ -129,9 +129,10 @@ class _NewMeetingDialog(QDialog):
 
 
 class MeetingTab(QWidget):
-    def __init__(self, staff_name: str = ""):
+    def __init__(self, staff_name: str = "", readonly: bool = False):
         super().__init__()
         self._staff_name = staff_name
+        self._readonly = readonly
         self._current_meeting_id: int | None = None
         self._preentry_data: list[dict] = []
         self._rec_data: list[dict] = []
@@ -155,8 +156,9 @@ class MeetingTab(QWidget):
         btn_new.clicked.connect(self._create_meeting)
         btn_del = QPushButton("削除")
         btn_del.clicked.connect(self._delete_meeting)
-        hdr.addWidget(btn_new)
-        hdr.addWidget(btn_del)
+        if not self._readonly:
+            hdr.addWidget(btn_new)
+            hdr.addWidget(btn_del)
         layout.addLayout(hdr)
 
         self._inner = QTabWidget()
@@ -192,14 +194,15 @@ class MeetingTab(QWidget):
         layout.addWidget(pre_grp)
 
         btn_row = QHBoxLayout()
-        btn_reset = QPushButton("並び替え解除")
-        btn_reset.clicked.connect(self._reset_sort)
+        if not self._readonly:
+            btn_reset = QPushButton("並び替え解除")
+            btn_reset.clicked.connect(self._reset_sort)
+            btn_row.addWidget(btn_reset)
         self._pre_search = QLineEdit()
         self._pre_search.setPlaceholderText("事業所名・事業所名フリガナで検索")
         self._pre_search.textChanged.connect(self._apply_status_filter)
         btn_csv = QPushButton("CSV出力")
         btn_csv.clicked.connect(self._export_csv)
-        btn_row.addWidget(btn_reset)
         btn_row.addWidget(self._pre_search, 2)
         btn_row.addStretch()
         btn_row.addWidget(btn_csv)
@@ -268,21 +271,28 @@ class MeetingTab(QWidget):
             for col in range(5):   # 会議所役職名〜氏名（読み取り専用）
                 self._pre_table.setItem(
                     i, col, QTableWidgetItem(d.get(_PRE_COL_KEYS[col], "")))
-            combo = QComboBox()
-            combo.addItems(STATUS_OPTIONS)
-            combo.setCurrentText(d["status"])
-            combo.currentTextChanged.connect(
-                lambda text, row=i: self._on_status_change(row, text))
-            self._pre_table.setCellWidget(i, 5, combo)
-            is_proxy = d["status"] == "代理"
-            title_edit = QLineEdit(d["proxy_title"])
-            name_edit  = QLineEdit(d["proxy_name"])
-            title_edit.setEnabled(is_proxy)
-            name_edit.setEnabled(is_proxy)
-            title_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
-            name_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
-            self._pre_table.setCellWidget(i, 6, title_edit)
-            self._pre_table.setCellWidget(i, 7, name_edit)
+            if self._readonly:
+                self._pre_table.setItem(i, 5, QTableWidgetItem(d["status"]))
+                proxy_text = " ".join(
+                    p for p in [d["proxy_title"], d["proxy_name"]] if p)
+                self._pre_table.setItem(i, 6, QTableWidgetItem(proxy_text))
+                self._pre_table.setItem(i, 7, QTableWidgetItem(""))
+            else:
+                combo = QComboBox()
+                combo.addItems(STATUS_OPTIONS)
+                combo.setCurrentText(d["status"])
+                combo.currentTextChanged.connect(
+                    lambda text, row=i: self._on_status_change(row, text))
+                self._pre_table.setCellWidget(i, 5, combo)
+                is_proxy = d["status"] == "代理"
+                title_edit = QLineEdit(d["proxy_title"])
+                name_edit  = QLineEdit(d["proxy_name"])
+                title_edit.setEnabled(is_proxy)
+                name_edit.setEnabled(is_proxy)
+                title_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
+                name_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
+                self._pre_table.setCellWidget(i, 6, title_edit)
+                self._pre_table.setCellWidget(i, 7, name_edit)
         self._pre_table.setUpdatesEnabled(True)
         self._apply_status_filter()
         self._update_preentry_summary()
@@ -636,15 +646,22 @@ class MeetingTab(QWidget):
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, d["member_id"])
                 self._rec_table.setItem(row, col, item)
-            combo = _NoWheelComboBox()
-            combo.addItems(self._ACTUAL_OPTIONS)
-            combo.blockSignals(True)
-            combo.setCurrentText(d.get("actual_status") or "")
-            combo.blockSignals(False)
-            mid = d["member_id"]
-            combo.currentTextChanged.connect(
-                lambda text, m=mid: self._save_actual_status(m, text))
-            self._rec_table.setCellWidget(row, 5, combo)
+            actual = d.get("actual_status") or ""
+            if self._readonly:
+                item5 = QTableWidgetItem(actual)
+                if bg:
+                    item5.setBackground(QColor(bg))
+                self._rec_table.setItem(row, 5, item5)
+            else:
+                combo = _NoWheelComboBox()
+                combo.addItems(self._ACTUAL_OPTIONS)
+                combo.blockSignals(True)
+                combo.setCurrentText(actual)
+                combo.blockSignals(False)
+                mid = d["member_id"]
+                combo.currentTextChanged.connect(
+                    lambda text, m=mid: self._save_actual_status(m, text))
+                self._rec_table.setCellWidget(row, 5, combo)
             item6 = QTableWidgetItem(proxy_info)
             if bg:
                 item6.setBackground(QColor(bg))
@@ -684,10 +701,16 @@ class MeetingTab(QWidget):
                         item.setBackground(qbg)
                     else:
                         item.setData(Qt.ItemDataRole.BackgroundRole, None)
-            combo = self._rec_table.cellWidget(row, 5)
-            if combo:
-                new_val = d.get("actual_status") or ""
-                if combo.currentText() != new_val:
+            new_val = d.get("actual_status") or ""
+            if self._readonly:
+                item5 = self._rec_table.item(row, 5)
+                if item5 and item5.text() != new_val:
+                    item5.setText(new_val)
+                    if qbg:
+                        item5.setBackground(qbg)
+            else:
+                combo = self._rec_table.cellWidget(row, 5)
+                if combo and combo.currentText() != new_val:
                     combo.blockSignals(True)
                     combo.setCurrentText(new_val)
                     combo.blockSignals(False)
