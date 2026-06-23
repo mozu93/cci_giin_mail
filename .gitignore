@@ -18,6 +18,11 @@ venv/
 # ユーザー固有UI設定
 ui_settings.json
 
+# ビルド成果物
+dist/
+build/
+installer_output/
+
 # データファイル
 *.xlsx
 *.csv
