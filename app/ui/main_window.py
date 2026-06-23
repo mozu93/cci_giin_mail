@@ -1,4 +1,6 @@
-from PyQt6.QtWidgets import QMainWindow, QTabWidget
+from PyQt6.QtWidgets import (
+    QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QApplication,
+)
 from app.ui.member_tab import MemberTab
 from app.ui.meeting_tab import MeetingTab
 from app.ui.send_tab import SendTab
@@ -18,10 +20,10 @@ class MainWindow(QMainWindow):
         self.resize(780, 728)
         self.setMinimumSize(700, 500)
         self._build_tabs()
+        self._setup_statusbar()
         self._center_on_screen()
 
     def _center_on_screen(self):
-        from PyQt6.QtWidgets import QApplication
         screen = QApplication.primaryScreen().availableGeometry()
         self.move(
             screen.center().x() - self.width() // 2,
@@ -29,8 +31,17 @@ class MainWindow(QMainWindow):
         )
 
     def _build_tabs(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        from app.ui.update_banner import UpdateBanner
+        self._banner = UpdateBanner(self)
+        layout.addWidget(self._banner)
+
         tabs = QTabWidget()
-        self.setCentralWidget(tabs)
         member_tab = MemberTab()
         member_tab.set_staff_name(self._staff_name)
         tabs.addTab(member_tab, "名簿管理")
@@ -40,6 +51,19 @@ class MainWindow(QMainWindow):
         tabs.addTab(SettingsTab(), "設定")
         tabs.addTab(HistoryTab(), "送信履歴")
         tabs.currentChanged.connect(lambda idx: self._on_tab_change(tabs, idx))
+        layout.addWidget(tabs)
+
+    def _setup_statusbar(self):
+        from app.version import __version__
+        sb = self.statusBar()
+        sb.setStyleSheet(
+            "QStatusBar { background: #F8FAFC; border-top: 1px solid #E2E8F0; "
+            "font-size: 12px; color: #64748B; }"
+            "QStatusBar::item { border: none; }"
+        )
+        ver_lbl = QLabel(f"v{__version__}")
+        ver_lbl.setStyleSheet("color: #94A3B8; font-size: 11px; padding: 0 8px;")
+        sb.addPermanentWidget(ver_lbl)
 
     def _on_tab_change(self, tabs: QTabWidget, idx: int):
         widget = tabs.widget(idx)
