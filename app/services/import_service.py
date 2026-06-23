@@ -1,7 +1,9 @@
+from datetime import datetime
 from pathlib import Path
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.database.models import Position
+from app.database.models import Position, MemberHistory
 from app.services.member_service import (
     create_member, update_member, set_email_addresses,
     record_member_history, get_members
@@ -49,6 +51,10 @@ def load_member_file(filepath: str) -> tuple[list[str], list[list]]:
 
 def import_members(session: Session, rows: list[list],
                    column_map: dict, changed_by: str) -> dict:
+    # このインポートで作成・更新される MemberHistory を一括識別するためのバッチID
+    batch_id = f"IMP_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{changed_by}"
+    max_hist_id = session.query(func.max(MemberHistory.id)).scalar() or 0
+
     existing = {m.member_number: m for m in get_members(session, active_only=False)}
     position_map = {p.name: p.id for p in session.query(Position).all()}
     created = updated = 0
@@ -128,4 +134,11 @@ def import_members(session: Session, rows: list[list],
         except Exception as e:
             errors.append(f"行{i} ({member_number}): {e}")
 
-    return {"created": created, "updated": updated, "errors": errors}
+    # このインポートで追加された MemberHistory 全件にバッチIDを付与
+    (session.query(MemberHistory)
+     .filter(MemberHistory.id > max_hist_id)
+     .update({"import_batch_id": batch_id}))
+    session.commit()
+
+    return {"created": created, "updated": updated, "errors": errors,
+            "batch_id": batch_id}

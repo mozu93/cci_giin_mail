@@ -39,12 +39,16 @@ class MemberTab(QWidget):
         btn_delete  = QPushButton("議員退任")
         btn_history = QPushButton("変更履歴")
         btn_import  = QPushButton("インポート")
+        btn_revert  = QPushButton("取り消し")
+        btn_export  = QPushButton("エクスポート")
         btn_order   = QPushButton("順番設定")
         btn_add.clicked.connect(self._add)
         btn_edit.clicked.connect(self._edit)
         btn_delete.clicked.connect(self._delete)
         btn_history.clicked.connect(self._show_history)
         btn_import.clicked.connect(self._import)
+        btn_revert.clicked.connect(self._import_revert)
+        btn_export.clicked.connect(self._export)
         btn_order.clicked.connect(self._order_settings)
         toolbar.addWidget(self._search, 2)
         toolbar.addWidget(QLabel("役職:"))
@@ -56,6 +60,8 @@ class MemberTab(QWidget):
         toolbar.addWidget(btn_delete)
         toolbar.addWidget(btn_history)
         toolbar.addWidget(btn_import)
+        toolbar.addWidget(btn_revert)
+        toolbar.addWidget(btn_export)
         toolbar.addWidget(btn_order)
         layout.addLayout(toolbar)
 
@@ -247,3 +253,35 @@ class MemberTab(QWidget):
         if dlg.exec():
             self._load()
         session.close()
+
+    def _import_revert(self):
+        from app.ui.dialogs.import_revert_dialog import ImportRevertDialog
+        session = get_session()
+        dlg = ImportRevertDialog(session, parent=self)
+        if dlg.exec():
+            self._load()
+        session.close()
+
+    def _export(self):
+        from PyQt6.QtWidgets import QFileDialog
+        from app.services.export_service import export_members_xlsx, export_members_csv
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self, "名簿をエクスポート", "名簿.xlsx",
+            "Excel (*.xlsx);;CSV (*.csv)"
+        )
+        if not path:
+            return
+        session = get_session()
+        try:
+            if path.lower().endswith(".csv"):
+                count = export_members_csv(session, path)
+            else:
+                count = export_members_xlsx(session, path)
+            QMessageBox.information(
+                self, "エクスポート完了",
+                f"{count}件をエクスポートしました。\n{path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", str(e))
+        finally:
+            session.close()

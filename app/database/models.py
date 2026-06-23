@@ -68,6 +68,7 @@ class MemberHistory(Base):
     changed_by = Column(String, nullable=False)
     change_reason = Column(String, nullable=False)
     snapshot = Column(Text, nullable=False)  # JSON: members全フィールド＋email_addresses配列
+    import_batch_id = Column(String, nullable=True)  # インポート一括操作の識別子
 
     member = relationship("Member", back_populates="history")
 

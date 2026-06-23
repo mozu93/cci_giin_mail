@@ -46,6 +46,15 @@ def _migrate_sqlite(engine):
 
         # reception_logs テーブルは create_all で自動生成されるため追加不要
 
+        history_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(member_history)"))
+        }
+        if "import_batch_id" not in history_cols:
+            conn.execute(text(
+                "ALTER TABLE member_history ADD COLUMN import_batch_id TEXT"
+            ))
+            conn.commit()
+
 
 def get_engine(db_path: str | None = None):
     global _engine
