@@ -22,14 +22,14 @@ def test_main_window_title(main_window):
 
 def test_main_window_has_six_tabs(main_window):
     """タブが6つ存在する"""
-    tab_widget = main_window.centralWidget()
-    assert isinstance(tab_widget, QTabWidget)
+    tab_widget = main_window.findChild(QTabWidget)
+    assert tab_widget is not None
     assert tab_widget.count() == 6
 
 
 def test_main_window_tab_names(main_window):
     """各タブのラベルが正しい"""
-    tab_widget = main_window.centralWidget()
+    tab_widget = main_window.findChild(QTabWidget)
     tab_labels = [tab_widget.tabText(i) for i in range(tab_widget.count())]
     assert "名簿管理" in tab_labels
     assert "会議管理" in tab_labels
