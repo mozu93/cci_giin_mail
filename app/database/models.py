@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Text, ForeignKey,
-    Date, UniqueConstraint
+    Date, UniqueConstraint, LargeBinary
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 
@@ -31,7 +31,9 @@ class Member(Base):
     name_kana = Column(String, default="")
     notes = Column(Text, default="")
     is_active = Column(Boolean, default=True)
-    display_order = Column(Integer, nullable=True)  # 役職内の手動表示順（副会頭等）
+    display_order = Column(Integer, nullable=True)
+    photo_thumb = Column(LargeBinary, nullable=True)  # 64×80px JPEG
+    photo_full = Column(LargeBinary, nullable=True)   # max 400×500px JPEG
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False,
                         default=datetime.now, onupdate=datetime.now)

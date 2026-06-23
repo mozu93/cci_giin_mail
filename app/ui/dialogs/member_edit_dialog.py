@@ -2,7 +2,7 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout,
     QLineEdit, QComboBox, QPushButton, QGroupBox,
-    QScrollArea, QWidget, QLabel, QMessageBox
+    QScrollArea, QWidget, QLabel, QMessageBox, QFileDialog
 )
 from PyQt6.QtCore import Qt
 from sqlalchemy.orm import Session
@@ -21,6 +21,8 @@ class MemberEditDialog(QDialog):
         self._session = session
         self._member = member
         self._staff_name = staff_name
+        self._photo_path: str | None = None
+        self._photo_deleted: bool = False
         self.setWindowTitle("会員編集" if member else "会員追加")
         self.setMinimumWidth(520)
         self._build()
@@ -34,6 +36,27 @@ class MemberEditDialog(QDialog):
         scroll.setWidgetResizable(True)
         inner = QWidget()
         form_layout = QVBoxLayout(inner)
+
+        # 顔写真
+        grp_photo = QGroupBox("顔写真")
+        photo_layout = QHBoxLayout(grp_photo)
+        self._photo_label = QLabel("写真なし")
+        self._photo_label.setFixedSize(90, 113)
+        self._photo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._photo_label.setStyleSheet(
+            "border: 1px solid #D1D5DB; background: #F3F4F6; color: #9CA3AF;")
+        btn_photo_select = QPushButton("写真を選択")
+        btn_photo_select.clicked.connect(self._select_photo)
+        btn_photo_delete = QPushButton("削除")
+        btn_photo_delete.clicked.connect(self._delete_photo)
+        photo_btn_col = QVBoxLayout()
+        photo_btn_col.addWidget(btn_photo_select)
+        photo_btn_col.addWidget(btn_photo_delete)
+        photo_btn_col.addStretch()
+        photo_layout.addWidget(self._photo_label)
+        photo_layout.addLayout(photo_btn_col)
+        photo_layout.addStretch()
+        form_layout.addWidget(grp_photo)
 
         # 基本情報
         grp_basic = QGroupBox("基本情報")
@@ -105,9 +128,30 @@ class MemberEditDialog(QDialog):
         btn_row.addWidget(btn_save)
         layout.addLayout(btn_row)
 
+    def _select_photo(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "写真を選択", "",
+            "画像ファイル (*.jpg *.jpeg *.png *.bmp)")
+        if not path:
+            return
+        self._photo_path = path
+        self._photo_deleted = False
+        from PyQt6.QtGui import QPixmap
+        from PyQt6.QtCore import Qt as _Qt
+        pix = QPixmap(path).scaled(90, 113,
+                                   _Qt.AspectRatioMode.KeepAspectRatio,
+                                   _Qt.TransformationMode.SmoothTransformation)
+        self._photo_label.setPixmap(pix)
+        self._photo_label.setText("")
+
+    def _delete_photo(self):
+        self._photo_path = None
+        self._photo_deleted = True
+        self._photo_label.clear()
+        self._photo_label.setText("写真なし")
+
     def _load(self, member: Member):
         self._member_number.setText(member.member_number)
-        self._member_number.setReadOnly(True)
         self._org_name.setText(member.organization_name)
         self._org_kana.setText(member.organization_kana or "")
         self._title.setText(member.title or "")
@@ -121,6 +165,16 @@ class MemberEditDialog(QDialog):
         for i, ea in enumerate(member.email_addresses[:_MAX_EMAILS]):
             self._email_rows[i][0].setText(ea.address)
             self._email_rows[i][1].setText(ea.label or "")
+        if member.photo_full:
+            from app.services.photo_service import bytes_to_pixmap
+            from PyQt6.QtCore import Qt as _Qt
+            pix = bytes_to_pixmap(member.photo_full)
+            if pix:
+                pix = pix.scaled(90, 113,
+                                 _Qt.AspectRatioMode.KeepAspectRatio,
+                                 _Qt.TransformationMode.SmoothTransformation)
+                self._photo_label.setPixmap(pix)
+                self._photo_label.setText("")
 
     def _save(self):
         member_number = self._member_number.text().strip()
@@ -151,6 +205,7 @@ class MemberEditDialog(QDialog):
                     self._session, self._member.id,
                     changed_by=self._staff_name,
                     change_reason=self._change_reason.text().strip(),
+                    member_number=member_number,
                     organization_name=org_name,
                     organization_kana=self._org_kana.text().strip(),
                     title=self._title.text().strip(),
@@ -161,6 +216,7 @@ class MemberEditDialog(QDialog):
                 )
                 set_email_addresses(self._session, self._member.id, addresses)
                 self._session.commit()
+                saved_id = self._member.id
             else:
                 m = create_member(
                     self._session, member_number, org_name, name,
@@ -172,10 +228,16 @@ class MemberEditDialog(QDialog):
                 )
                 set_email_addresses(self._session, m.id, addresses)
                 self._session.commit()
-                # メールアドレス設定後にスナップショットを記録
                 record_member_history(self._session, m.id,
                                       changed_by=self._staff_name,
                                       change_reason="新規登録")
+                saved_id = m.id
+
+            from app.services.photo_service import save_photo, delete_photo
+            if self._photo_deleted and self._member:
+                delete_photo(self._session, saved_id)
+            elif self._photo_path:
+                save_photo(self._session, saved_id, self._photo_path)
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
             return

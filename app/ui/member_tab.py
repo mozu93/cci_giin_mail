@@ -77,24 +77,62 @@ class MemberTab(QWidget):
         row2.addStretch()
         layout.addLayout(row2)
 
+        # フォントサイズ調整ボタン
+        font_row = QHBoxLayout()
+        font_row.addStretch()
+        btn_fd = QPushButton("A-")
+        btn_fd.setFixedWidth(36)
+        btn_fd.setToolTip("文字を小さくする")
+        btn_fd.clicked.connect(lambda: self._adjust_font(-1))
+        btn_fu = QPushButton("A+")
+        btn_fu.setFixedWidth(36)
+        btn_fu.setToolTip("文字を大きくする")
+        btn_fu.clicked.connect(lambda: self._adjust_font(1))
+        font_row.addWidget(btn_fd)
+        font_row.addWidget(btn_fu)
+        layout.addLayout(font_row)
+
         # 一覧テーブル
-        self._table = QTableWidget(0, 13)
+        self._table = QTableWidget(0, 14)
         self._table.setHorizontalHeaderLabels([
+            "写真",
             "会員番号", "会議所役職", "事業所名", "事業所名フリガナ",
             "氏名", "氏名フリガナ", "役職名",
             "メール1", "メール2", "メール3", "メール4", "メール5",
             "最終更新日",
         ])
         self._table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Interactive)
-        self._table.setColumnWidth(2, 200)
+            3, QHeaderView.ResizeMode.Interactive)
+        self._table.setColumnWidth(0, 44)
+        self._table.setColumnWidth(3, 200)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.doubleClicked.connect(self._edit)
+
+        from app.services.settings_service import get_font_size
+        from PyQt6.QtGui import QFont as _QFont
+        _sys_pt = self._table.font().pointSize()
+        _saved_pt = get_font_size("member_tab", _sys_pt)
+        _f = self._table.font()
+        _f.setPointSize(_saved_pt)
+        self._table.setFont(_f)
+        self._table.verticalHeader().setDefaultSectionSize(
+            52 + (_saved_pt - _sys_pt) * 2)
+
         layout.addWidget(self._table)
 
         self._count_label = QLabel("")
         layout.addWidget(self._count_label)
+
+    def _adjust_font(self, delta: int):
+        from app.services.settings_service import set_font_size
+        f = self._table.font()
+        new_size = max(6, f.pointSize() + delta)
+        f.setPointSize(new_size)
+        self._table.setFont(f)
+        vh = self._table.verticalHeader()
+        vh.setDefaultSectionSize(max(20, vh.defaultSectionSize() + delta * 2))
+        set_font_size("member_tab", new_size)
 
     def _load_positions(self):
         session = get_session()
@@ -129,11 +167,28 @@ class MemberTab(QWidget):
             self._members = members
             self._table.setRowCount(0)
             gray = QColor("#9CA3AF")
+            from app.services.photo_service import bytes_to_pixmap
+            from PyQt6.QtCore import Qt as _Qt
             for m in members:
                 row = self._table.rowCount()
                 self._table.insertRow(row)
                 is_retired = not m.is_active
                 pos_name = m.position.name if m.position else ""
+
+                # Col 0: 写真
+                photo_item = QTableWidgetItem()
+                photo_item.setData(Qt.ItemDataRole.UserRole, m.id)
+                photo_item.setData(Qt.ItemDataRole.UserRole + 1, m.is_active)
+                if m.photo_thumb:
+                    pix = bytes_to_pixmap(m.photo_thumb)
+                    if pix:
+                        pix = pix.scaled(38, 48,
+                                         _Qt.AspectRatioMode.KeepAspectRatio,
+                                         _Qt.TransformationMode.SmoothTransformation)
+                        photo_item.setData(Qt.ItemDataRole.DecorationRole, pix)
+                self._table.setItem(row, 0, photo_item)
+
+                # Cols 1-7: テキスト（旧 0-6）
                 values = [
                     m.member_number,
                     pos_name,
@@ -143,25 +198,26 @@ class MemberTab(QWidget):
                     m.name_kana or "",
                     m.title or "",
                 ]
-                for col, val in enumerate(values):
+                for i, val in enumerate(values):
                     item = QTableWidgetItem(val)
                     if is_retired:
                         item.setForeground(gray)
-                    self._table.setItem(row, col, item)
+                    self._table.setItem(row, i + 1, item)
+
+                # Cols 8-12: メール（旧 7-11）
                 for ei, ea in enumerate(m.email_addresses[:5]):
                     label = f"（{ea.label}）" if ea.label else ""
                     item = QTableWidgetItem(f"{ea.address}{label}")
                     if is_retired:
                         item.setForeground(gray)
-                    self._table.setItem(row, 7 + ei, item)
+                    self._table.setItem(row, 8 + ei, item)
+
+                # Col 13: 最終更新日（旧 12）
                 upd = m.updated_at.strftime("%Y/%m/%d") if m.updated_at else ""
                 item = QTableWidgetItem(upd)
                 if is_retired:
                     item.setForeground(gray)
-                self._table.setItem(row, 12, item)
-                self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, m.id)
-                self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole + 1,
-                                                  m.is_active)
+                self._table.setItem(row, 13, item)
             active_count = sum(1 for m in members if m.is_active)
             if active_only:
                 self._count_label.setText(f"{len(members)} 件")

@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QApplication
 )
 from PyQt6.QtCore import Qt, QTimer, QDate
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPixmap
 from app.database.connection import get_session
 from app.services.meeting_service import (
     STATUS_OPTIONS, create_meeting, get_meetings, delete_meeting,
@@ -447,27 +447,69 @@ class MeetingTab(QWidget):
         # 集計バー（当日受付ベース）
         count_grp = QGroupBox("当日受付集計（3秒ごと自動更新）")
         count_layout = QHBoxLayout(count_grp)
-        self._lbl_attend  = self._count_label("出席: 0",   "#16A34A")
-        self._lbl_proxy   = self._count_label("代理: 0",   "#2563EB")
-        self._lbl_absent  = self._count_label("欠席: 0",   "#DC2626")
-        self._lbl_pending = self._count_label("未受付: 0", "#6B7280")
-        self._lbl_total   = self._count_label("合計: 0",   "#1E40AF", bold=True)
-        for lbl in [self._lbl_attend, self._lbl_proxy,
+        self._lbl_attend   = self._count_label("出席: 0",   "#16A34A")
+        self._lbl_proxy    = self._count_label("代理: 0",   "#2563EB")
+        self._lbl_delegate = self._count_label("委任: 0",   "#CA8A04")
+        self._lbl_absent   = self._count_label("欠席: 0",   "#DC2626")
+        self._lbl_pending  = self._count_label("未受付: 0", "#6B7280")
+        self._lbl_total    = self._count_label("合計: 0",   "#1E40AF", bold=True)
+        for lbl in [self._lbl_attend, self._lbl_proxy, self._lbl_delegate,
                     self._lbl_absent, self._lbl_pending, self._lbl_total]:
             count_layout.addWidget(lbl)
         count_layout.addStretch()
         layout.addWidget(count_grp)
 
-        # 検索
+        # 検索 + フォントサイズ調整
         search_row = QHBoxLayout()
         search_row.addWidget(QLabel("検索:"))
         self._search = QLineEdit()
         self._search.setPlaceholderText("事業所名・氏名・会員番号")
         self._search.textChanged.connect(self._filter_reception)
+        from PyQt6.QtGui import QFont as _QFont
+        _sf = self._search.font()
+        _sf.setPointSize(_sf.pointSize() + 3)
+        self._search.setFont(_sf)
+        self._search.setMinimumHeight(self._search.sizeHint().height() * 2)
         search_row.addWidget(self._search, 1)
+        btn_font_down = QPushButton("A-")
+        btn_font_down.setFixedWidth(36)
+        btn_font_down.setToolTip("文字を小さくする")
+        btn_font_down.clicked.connect(lambda: self._adjust_rec_font(-1))
+        btn_font_up = QPushButton("A+")
+        btn_font_up.setFixedWidth(36)
+        btn_font_up.setToolTip("文字を大きくする")
+        btn_font_up.clicked.connect(lambda: self._adjust_rec_font(1))
+        search_row.addWidget(btn_font_down)
+        search_row.addWidget(btn_font_up)
         layout.addLayout(search_row)
 
-        # 一覧（7列）: 会員番号, 事業所名, 会議所役職, 氏名, 事前, 当日受付, 代理情報
+        # 写真パネル（左）＋テーブル（右・全幅）を横並び
+        body_row = QHBoxLayout()
+        body_row.setSpacing(6)
+
+        # 写真パネル（固定幅・左側）
+        photo_w = QWidget()
+        photo_w.setFixedWidth(112)
+        photo_vl = QVBoxLayout(photo_w)
+        photo_vl.setContentsMargins(0, 0, 4, 0)
+        photo_vl.setSpacing(2)
+        self._rec_photo_label = QLabel()
+        self._rec_photo_label.setFixedSize(96, 120)
+        self._rec_photo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._rec_photo_label.setStyleSheet(
+            "border: 1px solid #D1D5DB; background: #F9FAFB; color: #9CA3AF;")
+        self._rec_photo_label.setText("写真なし")
+        self._rec_name_label = QLabel("")
+        self._rec_name_label.setWordWrap(True)
+        self._rec_name_label.setFixedWidth(106)
+        self._rec_name_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._rec_name_label.setStyleSheet("font-size: 10px; color: #374151;")
+        photo_vl.addWidget(self._rec_photo_label)
+        photo_vl.addWidget(self._rec_name_label)
+        photo_vl.addStretch()
+        body_row.addWidget(photo_w)
+
+        # テーブル（全幅）
         self._rec_table = _ReceptionTable(0, 7)
         self._rec_table.setHorizontalHeaderLabels(
             ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"])
@@ -475,11 +517,74 @@ class MeetingTab(QWidget):
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         h.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
         self._rec_table.setColumnWidth(1, 200)
-        self._rec_table.setColumnWidth(6, 150)
+        self._rec_table.setColumnWidth(6, 160)
         self._rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        layout.addWidget(self._rec_table)
+        self._rec_table.currentCellChanged.connect(
+            lambda row, _col, _pr, _pc: self._update_reception_photo(row))
+        from PyQt6.QtGui import QFont
+        from app.services.settings_service import get_font_size
+        _sys_pt = self._rec_table.font().pointSize()
+        _saved_pt = get_font_size("reception_tab", _sys_pt + 3)
+        _f = self._rec_table.font()
+        _f.setPointSize(_saved_pt)
+        self._rec_table.setFont(_f)
+        _base_row = self._rec_table.verticalHeader().defaultSectionSize()
+        self._rec_table.verticalHeader().setDefaultSectionSize(
+            _base_row + (_saved_pt - _sys_pt) * 2)
+        body_row.addWidget(self._rec_table, 1)
+
+        layout.addLayout(body_row, 1)
         return w
+
+    def _adjust_rec_font(self, delta: int):
+        from app.services.settings_service import set_font_size
+        f = self._rec_table.font()
+        new_size = max(6, f.pointSize() + delta)
+        f.setPointSize(new_size)
+        self._rec_table.setFont(f)
+        vh = self._rec_table.verticalHeader()
+        vh.setDefaultSectionSize(max(20, vh.defaultSectionSize() + delta * 2))
+        set_font_size("reception_tab", new_size)
+
+    def _update_reception_photo(self, row: int):
+        if row < 0:
+            self._rec_photo_label.setText("写真なし")
+            self._rec_photo_label.setPixmap(QPixmap())
+            self._rec_name_label.clear()
+            return
+        item = self._rec_table.item(row, 0)
+        if not item:
+            return
+        member_id = item.data(Qt.ItemDataRole.UserRole)
+        if not member_id:
+            return
+        session = get_session()
+        try:
+            from app.database.models import Member
+            from app.services.photo_service import bytes_to_pixmap
+            m = session.get(Member, member_id)
+            if m and m.photo_full:
+                pix = bytes_to_pixmap(m.photo_full)
+                if pix:
+                    pix = pix.scaled(96, 120,
+                                     Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+                    self._rec_photo_label.setPixmap(pix)
+                    self._rec_photo_label.setText("")
+                else:
+                    self._rec_photo_label.clear()
+                    self._rec_photo_label.setText("写真なし")
+            else:
+                self._rec_photo_label.clear()
+                self._rec_photo_label.setText("写真なし")
+            if m:
+                self._rec_name_label.setText(
+                    f"{m.organization_name}\n{m.name}")
+            else:
+                self._rec_name_label.clear()
+        finally:
+            session.close()
 
     def _count_label(self, text: str, color: str, bold: bool = False) -> QLabel:
         lbl = QLabel(text)
@@ -488,7 +593,7 @@ class MeetingTab(QWidget):
             f"font-size: 15px; font-weight: {weight}; color: {color}; padding: 4px 14px;")
         return lbl
 
-    _ACTUAL_OPTIONS = ["", "出席", "代理", "欠席"]
+    _ACTUAL_OPTIONS = ["", "出席", "代理", "委任", "欠席"]
 
     def _load_reception(self):
         """会議切り替え・タブ切り替え時に全行を再構築する"""
@@ -498,6 +603,12 @@ class MeetingTab(QWidget):
         try:
             self._rec_data = get_attendance_data(
                 session, self._current_meeting_id)
+            # 事前「委任」で当日未入力の行を自動で「委任」に設定
+            for d in self._rec_data:
+                if d["status"] == "委任" and not d.get("actual_status"):
+                    update_actual_status(
+                        session, self._current_meeting_id, d["member_id"], "委任")
+                    d["actual_status"] = "委任"
             summary = get_reception_summary(session, self._current_meeting_id)
         finally:
             session.close()
@@ -522,6 +633,8 @@ class MeetingTab(QWidget):
                 item = QTableWidgetItem(val)
                 if bg:
                     item.setBackground(QColor(bg))
+                if col == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, d["member_id"])
                 self._rec_table.setItem(row, col, item)
             combo = _NoWheelComboBox()
             combo.addItems(self._ACTUAL_OPTIONS)
@@ -583,6 +696,7 @@ class MeetingTab(QWidget):
     def _update_rec_summary(self, summary: dict):
         self._lbl_attend.setText(f"出席: {summary['出席']}")
         self._lbl_proxy.setText(f"代理: {summary['代理']}")
+        self._lbl_delegate.setText(f"委任: {summary['委任']}")
         self._lbl_absent.setText(f"欠席: {summary['欠席']}")
         self._lbl_pending.setText(f"未受付: {summary['未受付']}")
         self._lbl_total.setText(f"合計: {summary['合計']}")

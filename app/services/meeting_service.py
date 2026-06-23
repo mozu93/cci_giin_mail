@@ -91,14 +91,14 @@ def update_actual_status(session: Session, meeting_id: int,
 def get_reception_summary(session: Session, meeting_id: int) -> dict:
     """当日受付ステータス（actual_status）による集計"""
     data = get_attendance_data(session, meeting_id)
-    counts: dict[str, int] = {"出席": 0, "代理": 0, "欠席": 0, "未受付": 0}
+    counts: dict[str, int] = {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未受付": 0}
     for d in data:
         s = d.get("actual_status") or ""
-        if s in ("出席", "代理", "欠席"):
+        if s in ("出席", "代理", "委任", "欠席"):
             counts[s] += 1
         else:
             counts["未受付"] += 1
-    counts["合計"] = counts["出席"] + counts["代理"]
+    counts["合計"] = counts["出席"] + counts["代理"] + counts["委任"]
     return counts
 
 

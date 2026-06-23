@@ -2,7 +2,7 @@
 import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QPushButton, QHBoxLayout, QLabel, QMessageBox
+    QHeaderView, QPushButton, QHBoxLayout, QLabel
 )
 from PyQt6.QtGui import QColor
 
@@ -10,19 +10,29 @@ from PyQt6.QtGui import QColor
 class AttachConfirmDialog(QDialog):
     def __init__(self, member_attach_list: list[dict], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("個別添付ファイル確認")
+        self.setWindowTitle("会社別添付ファイル 確認・設定")
         self.resize(750, 500)
         self._list = member_attach_list
         self._build()
 
     def _build(self):
         layout = QVBoxLayout(self)
-        missing = sum(1 for r in self._list if not r["found"])
+
+        found = sum(1 for r in self._list if r["found"])
+        missing = len(self._list) - found
+
+        summary = f"対象: {len(self._list)} 件　○ファイルあり: {found} 件　×ファイルなし: {missing} 件"
+        layout.addWidget(QLabel(summary))
+
         if missing:
-            layout.addWidget(QLabel(
-                f"ファイルが見つからない企業が {missing} 件あります（×印）。\n"
-                "「スキップして続行」を選ぶと、×印の企業は添付なしで送信されます。"
-            ))
+            warn = QLabel("× の企業はファイルが見つかりません。確定すると添付なしで送信されます。")
+            warn.setStyleSheet("color: #DC2626;")
+            layout.addWidget(warn)
+
+        layout.addWidget(QLabel(
+            "内容を確認して「確定」を押すと添付設定が保存されます。\n"
+            "「キャンセル」を押すと添付設定はクリアされます。"
+        ))
 
         self._table = QTableWidget(0, 5)
         self._table.setHorizontalHeaderLabels(
@@ -42,18 +52,16 @@ class AttachConfirmDialog(QDialog):
             self._table.setItem(row, 3, QTableWidgetItem(fname))
             found_item = QTableWidgetItem("○" if r["found"] else "×")
             if not r["found"]:
-                found_item.setForeground(QColor("red"))
+                found_item.setForeground(QColor("#DC2626"))
             self._table.setItem(row, 4, found_item)
 
         btn_row = QHBoxLayout()
-        btn_cancel = QPushButton("中止")
+        btn_cancel = QPushButton("キャンセル（添付をクリア）")
         btn_cancel.clicked.connect(self.reject)
-        btn_skip = QPushButton("スキップして続行（×印は添付なし）")
-        btn_skip.clicked.connect(self.accept)
+        btn_ok = QPushButton("確定（設定を保存）")
+        btn_ok.setStyleSheet("font-weight: bold;")
+        btn_ok.clicked.connect(self.accept)
         btn_row.addWidget(btn_cancel)
         btn_row.addStretch()
-        btn_row.addWidget(btn_skip)
+        btn_row.addWidget(btn_ok)
         layout.addLayout(btn_row)
-
-    def get_approved_list(self) -> list[dict]:
-        return self._list

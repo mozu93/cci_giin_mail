@@ -95,8 +95,10 @@ def send_mail(graph_config: dict, to_address: str, subject: str,
         )
 
 
-def send_test_mail(graph_config: dict, subject: str, body: str) -> None:
+def send_test_mail(graph_config: dict, subject: str, body: str,
+                   attachments: list[str] | None = None) -> None:
     test_address = graph_config.get("test_address", "")
     if not test_address:
         raise ValueError("テスト送信先アドレスが設定されていません。")
-    send_mail(graph_config, test_address, f"【テスト】{subject}", body)
+    send_mail(graph_config, test_address, f"【テスト】{subject}", body,
+              attachments or [])

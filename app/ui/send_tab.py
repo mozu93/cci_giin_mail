@@ -1,5 +1,6 @@
 # app/ui/send_tab.py
 import os
+import unicodedata
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QGroupBox, QFormLayout, QComboBox, QLabel,
@@ -24,6 +25,14 @@ from app.utils.app_config import get_graph_config
 
 _NO_EMAIL_TEXT = "（メール無し）"
 _ORANGE = QColor("#F97316")
+
+
+def _to_katakana(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text)
+    return "".join(
+        chr(ord(ch) + 0x60) if 0x3041 <= ord(ch) <= 0x3096 else ch
+        for ch in text
+    )
 
 
 class _SendWorker(QThread):
@@ -74,6 +83,7 @@ class SendTab(QWidget):
         super().__init__()
         self._staff_name = staff_name
         self._merge_data: dict[str, dict] = {}
+        self._col_labels: dict[str, str] = {}
         self._common_attachments: list[str] = []
         self._individual_folder: str = ""
         self._attach_list: list[dict] = []
@@ -105,6 +115,10 @@ class SendTab(QWidget):
         layout = QVBoxLayout(inner)
         layout.setSpacing(8)
         layout.setContentsMargins(4, 4, 4, 4)
+
+        btn_clear = QPushButton("すべてクリア")
+        btn_clear.clicked.connect(self._clear_all)
+        layout.addWidget(btn_clear)
 
         layout.addWidget(self._build_step1())
         layout.addWidget(self._build_step2())
@@ -199,35 +213,56 @@ class SendTab(QWidget):
         grp = QGroupBox("Step 4：添付ファイル（任意）")
         layout = QVBoxLayout(grp)
 
+        # 全社共通ファイル
         common_row = QHBoxLayout()
         btn_common = QPushButton("全社共通ファイルを選択")
         btn_common.clicked.connect(self._select_common_attach)
+        btn_common_clear = QPushButton("クリア")
+        btn_common_clear.setFixedWidth(52)
+        btn_common_clear.clicked.connect(self._clear_common_attach)
         self._common_label = QLabel("（未選択）")
         self._common_label.setWordWrap(True)
         common_row.addWidget(btn_common)
+        common_row.addWidget(btn_common_clear)
         common_row.addWidget(self._common_label, 1)
         layout.addLayout(common_row)
 
-        indiv_row = QHBoxLayout()
-        btn_folder = QPushButton("会社別フォルダを選択")
+        # 会社別フォルダ
+        layout.addWidget(QLabel(
+            "会社別：会員番号に対応するファイルをフォルダから自動で添付します"))
+        folder_row = QHBoxLayout()
+        btn_folder = QPushButton("フォルダを選択")
         btn_folder.clicked.connect(self._select_indiv_folder)
+        btn_folder_clear = QPushButton("クリア")
+        btn_folder_clear.setFixedWidth(52)
+        btn_folder_clear.clicked.connect(self._clear_indiv_folder)
         self._folder_label = QLabel("（未選択）")
         self._folder_label.setWordWrap(True)
-        indiv_row.addWidget(btn_folder)
-        indiv_row.addWidget(self._folder_label, 1)
-        layout.addLayout(indiv_row)
+        folder_row.addWidget(btn_folder)
+        folder_row.addWidget(btn_folder_clear)
+        folder_row.addWidget(self._folder_label, 1)
+        layout.addLayout(folder_row)
 
         rule_row = QHBoxLayout()
-        rule_row.addWidget(QLabel("ファイル名ルール:"))
+        rule_row.addWidget(QLabel("ファイル名:"))
         self._rule_edit = QLineEdit("{会員番号}.pdf")
+        self._rule_edit.setToolTip(
+            "{会員番号} の部分に各会員番号が入ります。\n例: 会員番号が A001 なら → A001.pdf")
         rule_row.addWidget(self._rule_edit)
-        btn_match = QPushButton("確認")
+        btn_match = QPushButton("添付ファイルを確認・設定")
         btn_match.clicked.connect(self._check_matching)
         rule_row.addWidget(btn_match)
         layout.addLayout(rule_row)
 
+        match_row = QHBoxLayout()
         self._match_label = QLabel("")
-        layout.addWidget(self._match_label)
+        match_row.addWidget(self._match_label)
+        self._btn_show_attach = QPushButton("一覧を確認")
+        self._btn_show_attach.setVisible(False)
+        self._btn_show_attach.clicked.connect(self._show_attach_list)
+        match_row.addWidget(self._btn_show_attach)
+        layout.addLayout(match_row)
+
         return grp
 
     def _build_step5(self) -> QGroupBox:
@@ -243,11 +278,14 @@ class SendTab(QWidget):
         btn_row = QHBoxLayout()
         btn_test = QPushButton("テスト送信（1通）")
         btn_test.clicked.connect(self._test_send)
+        btn_preview = QPushButton("差し込みプレビュー")
+        btn_preview.clicked.connect(self._show_send_preview)
         btn_send = QPushButton("送信実行")
         btn_send.setStyleSheet(
             "font-weight: bold; background-color: #1E40AF; color: white;")
         btn_send.clicked.connect(self._execute_send)
         btn_row.addWidget(btn_test)
+        btn_row.addWidget(btn_preview)
         btn_row.addStretch()
         btn_row.addWidget(btn_send)
         layout.addLayout(btn_row)
@@ -272,23 +310,56 @@ class SendTab(QWidget):
         hdr.addWidget(self._recipient_count_label)
         layout.addLayout(hdr)
 
-        self._recipient_table = QTableWidget(0, 6)
+        search_row = QHBoxLayout()
+        self._recipient_search = QLineEdit()
+        self._recipient_search.setPlaceholderText("絞り込み（会員番号・事業所名・氏名）")
+        self._recipient_search.textChanged.connect(self._filter_recipient_table)
+        search_row.addWidget(self._recipient_search)
+        btn_fd = QPushButton("A-")
+        btn_fd.setFixedWidth(36)
+        btn_fd.setToolTip("文字を小さくする")
+        btn_fd.clicked.connect(lambda: self._adjust_font(-1))
+        btn_fu = QPushButton("A+")
+        btn_fu.setFixedWidth(36)
+        btn_fu.setToolTip("文字を大きくする")
+        btn_fu.clicked.connect(lambda: self._adjust_font(1))
+        search_row.addWidget(btn_fd)
+        search_row.addWidget(btn_fu)
+        layout.addLayout(search_row)
+
+        self._recipient_table = QTableWidget(0, 9)
         self._recipient_table.setHorizontalHeaderLabels(
-            ["送信", "会議所役職名", "事業所名", "役職名", "氏名", "メールアドレス"])
+            ["送信", "会員番号", "会議所役職名", "事業所名", "役職名", "氏名", "メールアドレス",
+             "事業所名フリガナ", "氏名フリガナ"])
         h = self._recipient_table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        for col in range(1, 6):
+        for col in range(1, 7):
             h.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         self._recipient_table.setColumnWidth(0, 44)
-        self._recipient_table.setColumnWidth(1, 110)
-        self._recipient_table.setColumnWidth(2, 200)
-        self._recipient_table.setColumnWidth(3, 90)
+        self._recipient_table.setColumnWidth(1, 70)
+        self._recipient_table.setColumnWidth(2, 110)
+        self._recipient_table.setColumnWidth(3, 200)
         self._recipient_table.setColumnWidth(4, 90)
-        self._recipient_table.setColumnWidth(5, 200)
+        self._recipient_table.setColumnWidth(5, 90)
+        self._recipient_table.setColumnWidth(6, 200)
+        self._recipient_table.setColumnHidden(7, True)
+        self._recipient_table.setColumnHidden(8, True)
         self._recipient_table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers)
         self._recipient_table.setSelectionMode(
             QTableWidget.SelectionMode.NoSelection)
+
+        from app.services.settings_service import get_font_size
+        from PyQt6.QtGui import QFont as _QFont
+        _sys_pt = self._recipient_table.font().pointSize()
+        _saved_pt = get_font_size("send_tab", _sys_pt)
+        _f = self._recipient_table.font()
+        _f.setPointSize(_saved_pt)
+        self._recipient_table.setFont(_f)
+        self._recipient_table.verticalHeader().setDefaultSectionSize(
+            self._recipient_table.verticalHeader().defaultSectionSize()
+            + (_saved_pt - _sys_pt) * 2)
+
         layout.addWidget(self._recipient_table)
 
         self._no_email_label = QLabel("")
@@ -300,6 +371,16 @@ class SendTab(QWidget):
     # ──────────────────────────────────────────────────────
     # データ読み込み
     # ──────────────────────────────────────────────────────
+
+    def _adjust_font(self, delta: int):
+        from app.services.settings_service import set_font_size
+        f = self._recipient_table.font()
+        new_size = max(6, f.pointSize() + delta)
+        f.setPointSize(new_size)
+        self._recipient_table.setFont(f)
+        vh = self._recipient_table.verticalHeader()
+        vh.setDefaultSectionSize(max(20, vh.defaultSectionSize() + delta * 2))
+        set_font_size("send_tab", new_size)
 
     def refresh(self):
         self._load_combos()
@@ -351,6 +432,8 @@ class SendTab(QWidget):
 
     def _append_recipient_row(self, member, checked: bool):
         pos_name = member.position.name if member.position else ""
+        org_kana = _to_katakana(member.organization_kana or "")
+        name_kana = _to_katakana(member.name_kana or "")
         if member.email_addresses:
             for email in member.email_addresses:
                 row = self._recipient_table.rowCount()
@@ -359,13 +442,16 @@ class SendTab(QWidget):
                 cb.setChecked(checked)
                 cb.stateChanged.connect(self._update_recipient_count)
                 self._recipient_table.setCellWidget(row, 0, cb)
-                self._recipient_table.setItem(row, 1, QTableWidgetItem(pos_name))
+                self._recipient_table.setItem(row, 1, QTableWidgetItem(member.member_number))
+                self._recipient_table.setItem(row, 2, QTableWidgetItem(pos_name))
                 org_item = QTableWidgetItem(member.organization_name)
                 org_item.setData(Qt.ItemDataRole.UserRole, member.id)
-                self._recipient_table.setItem(row, 2, org_item)
-                self._recipient_table.setItem(row, 3, QTableWidgetItem(member.title or ""))
-                self._recipient_table.setItem(row, 4, QTableWidgetItem(member.name))
-                self._recipient_table.setItem(row, 5, QTableWidgetItem(email.address))
+                self._recipient_table.setItem(row, 3, org_item)
+                self._recipient_table.setItem(row, 4, QTableWidgetItem(member.title or ""))
+                self._recipient_table.setItem(row, 5, QTableWidgetItem(member.name))
+                self._recipient_table.setItem(row, 6, QTableWidgetItem(email.address))
+                self._recipient_table.setItem(row, 7, QTableWidgetItem(org_kana))
+                self._recipient_table.setItem(row, 8, QTableWidgetItem(name_kana))
         else:
             row = self._recipient_table.rowCount()
             self._recipient_table.insertRow(row)
@@ -373,22 +459,51 @@ class SendTab(QWidget):
             cb.setChecked(checked)
             cb.stateChanged.connect(self._update_recipient_count)
             self._recipient_table.setCellWidget(row, 0, cb)
-            self._recipient_table.setItem(row, 1, QTableWidgetItem(pos_name))
+            self._recipient_table.setItem(row, 1, QTableWidgetItem(member.member_number))
+            self._recipient_table.setItem(row, 2, QTableWidgetItem(pos_name))
             org_item = QTableWidgetItem(member.organization_name)
             org_item.setData(Qt.ItemDataRole.UserRole, member.id)
-            self._recipient_table.setItem(row, 2, org_item)
-            self._recipient_table.setItem(row, 3, QTableWidgetItem(member.title or ""))
+            self._recipient_table.setItem(row, 3, org_item)
+            self._recipient_table.setItem(row, 4, QTableWidgetItem(member.title or ""))
             name_item = QTableWidgetItem(member.name)
-            self._recipient_table.setItem(row, 4, name_item)
+            self._recipient_table.setItem(row, 5, name_item)
             addr_item = QTableWidgetItem(_NO_EMAIL_TEXT)
             addr_item.setForeground(_ORANGE)
             org_item.setForeground(_ORANGE)
             name_item.setForeground(_ORANGE)
-            self._recipient_table.setItem(row, 5, addr_item)
+            self._recipient_table.setItem(row, 6, addr_item)
+            self._recipient_table.setItem(row, 7, QTableWidgetItem(org_kana))
+            self._recipient_table.setItem(row, 8, QTableWidgetItem(name_kana))
 
     # ──────────────────────────────────────────────────────
     # 宛先フィルタリング
     # ──────────────────────────────────────────────────────
+
+    def _clear_all(self):
+        # 宛先
+        self._rb_by_pos.setChecked(True)
+        self._pos_list.clearSelection()
+        for cb in self._status_checks.values():
+            cb.setChecked(False)
+        self._clear_recipient_checks()
+        # テンプレート・本文
+        self._template_combo.setCurrentIndex(0)
+        self._sig_combo.setCurrentIndex(0)
+        self._subject_edit.clear()
+        self._body_edit.clear()
+        # 差し込み
+        self._merge_data = {}
+        self._col_labels = {}
+        self._merge_status.setText("（未読み込み — col1〜col5は空で送信）")
+        # 添付
+        self._clear_common_attach()
+        self._clear_indiv_folder()
+        # 受信者検索
+        self._recipient_search.clear()
+        # ジョブ名・進捗
+        self._job_name.clear()
+        self._progress.setVisible(False)
+        self._progress_label.setText("")
 
     def _on_mode_change(self):
         is_pos = self._rb_by_pos.isChecked()
@@ -438,10 +553,34 @@ class SendTab(QWidget):
             session.close()
         self._set_recipient_checks(member_ids)
 
+    def _filter_recipient_table(self):
+        raw = self._recipient_search.text().strip()
+        if not raw:
+            for row in range(self._recipient_table.rowCount()):
+                self._recipient_table.setRowHidden(row, False)
+            return
+        keyword = _to_katakana(raw).lower()
+        for row in range(self._recipient_table.rowCount()):
+            match = False
+            # 通常列：会員番号(1), 事業所名(3), 氏名(5)
+            for col in (1, 3, 5):
+                item = self._recipient_table.item(row, col)
+                if item and keyword in item.text().lower():
+                    match = True
+                    break
+            # フリガナ隠し列：事業所名(7), 氏名(8)
+            if not match:
+                for col in (7, 8):
+                    item = self._recipient_table.item(row, col)
+                    if item and keyword in item.text().lower():
+                        match = True
+                        break
+            self._recipient_table.setRowHidden(row, not match)
+
     def _set_recipient_checks(self, member_ids: set):
         self._recipient_table.setUpdatesEnabled(False)
         for row in range(self._recipient_table.rowCount()):
-            item = self._recipient_table.item(row, 2)
+            item = self._recipient_table.item(row, 3)
             mid = item.data(Qt.ItemDataRole.UserRole) if item else None
             cb = self._recipient_table.cellWidget(row, 0)
             if cb and mid is not None:
@@ -469,7 +608,7 @@ class SendTab(QWidget):
             cb = self._recipient_table.cellWidget(row, 0)
             if cb and cb.isChecked():
                 checked += 1
-                item = self._recipient_table.item(row, 5)
+                item = self._recipient_table.item(row, 6)
                 if item and item.text() == _NO_EMAIL_TEXT:
                     no_email += 1
         self._recipient_count_label.setText(f"{checked}件選択")
@@ -491,7 +630,7 @@ class SendTab(QWidget):
             cb = self._recipient_table.cellWidget(row, 0)
             if not (cb and cb.isChecked()):
                 continue
-            item = self._recipient_table.item(row, 2)
+            item = self._recipient_table.item(row, 3)
             mid = item.data(Qt.ItemDataRole.UserRole) if item else None
             if mid and mid not in seen_ids:
                 m = member_cache.get(mid)
@@ -507,6 +646,8 @@ class SendTab(QWidget):
     def _on_template_select(self):
         tmpl_id = self._template_combo.currentData()
         if not tmpl_id:
+            self._subject_edit.clear()
+            self._body_edit.clear()
             return
         session = get_session()
         try:
@@ -528,13 +669,24 @@ class SendTab(QWidget):
 
     def _import_merge(self):
         from app.ui.dialogs.merge_preview_dialog import MergePreviewDialog
-        dlg = MergePreviewDialog(parent=self)
+        dlg = MergePreviewDialog(
+            parent=self,
+            subject=self._subject_edit.text(),
+            body=self._body_edit.toPlainText(),
+        )
         if dlg.exec():
             self._merge_data = dlg.get_merge_data()
-            self._merge_status.setText(
-                f"{len(self._merge_data)} 件の差し込みデータを読み込み済み")
+            self._col_labels = dlg.get_col_labels()
+            label_hint = "、".join(
+                f"{k}={v}" for k, v in self._col_labels.items()
+            )
+            status = f"{len(self._merge_data)} 件読み込み済み"
+            if label_hint:
+                status += f"（{label_hint}）"
+            self._merge_status.setText(status)
         else:
             self._merge_data = {}
+            self._col_labels = {}
             self._merge_status.setText("（差し込みなし — col1〜col5は空で送信）")
 
     def _select_common_attach(self):
@@ -544,11 +696,25 @@ class SendTab(QWidget):
             self._common_label.setText(
                 ", ".join(os.path.basename(p) for p in paths))
 
+    def _clear_common_attach(self):
+        self._common_attachments = []
+        self._common_label.setText("（未選択）")
+
     def _select_indiv_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "フォルダを選択")
         if folder:
             self._individual_folder = folder
             self._folder_label.setText(folder)
+            self._attach_list = []
+            self._match_label.setText("フォルダを選択しました。「添付ファイルを確認・設定」を押してください。")
+            self._btn_show_attach.setVisible(False)
+
+    def _clear_indiv_folder(self):
+        self._individual_folder = ""
+        self._folder_label.setText("（未選択）")
+        self._attach_list = []
+        self._match_label.setText("")
+        self._btn_show_attach.setVisible(False)
 
     def _check_matching(self):
         if not self._individual_folder:
@@ -559,25 +725,39 @@ class SendTab(QWidget):
             QMessageBox.warning(self, "エラー", "宛先を先に選択してください。")
             return
         rule = self._rule_edit.text().strip()
-        self._attach_list = []
+        attach_list = []
         for m in members:
             to_addr = m.email_addresses[0].address if m.email_addresses else ""
             fname = rule.replace("{会員番号}", m.member_number)
             fpath = os.path.join(self._individual_folder, fname)
-            self._attach_list.append({
+            attach_list.append({
                 "member_number": m.member_number,
                 "org_name":      m.organization_name,
                 "to_address":    to_addr,
                 "filepath":      fpath,
                 "found":         os.path.exists(fpath),
             })
-        found = sum(1 for r in self._attach_list if r["found"])
-        missing = len(self._attach_list) - found
-        self._match_label.setText(
-            f"マッチング: {found}/{len(self._attach_list)} 件。未発見: {missing} 件")
-        if missing > 0:
-            from app.ui.dialogs.attach_confirm_dialog import AttachConfirmDialog
-            AttachConfirmDialog(self._attach_list, parent=self).exec()
+        from app.ui.dialogs.attach_confirm_dialog import AttachConfirmDialog
+        dlg = AttachConfirmDialog(attach_list, parent=self)
+        if dlg.exec():
+            self._attach_list = attach_list
+            found = sum(1 for r in self._attach_list if r["found"])
+            missing = len(self._attach_list) - found
+            status = f"設定済み: {found}/{len(self._attach_list)} 件"
+            if missing:
+                status += f"（{missing}件はファイルなし→添付スキップ）"
+            self._match_label.setText(status)
+            self._btn_show_attach.setVisible(True)
+        else:
+            self._attach_list = []
+            self._match_label.setText("（添付設定をクリアしました）")
+            self._btn_show_attach.setVisible(False)
+
+    def _show_attach_list(self):
+        if not self._attach_list:
+            return
+        from app.ui.dialogs.attach_confirm_dialog import AttachConfirmDialog
+        AttachConfirmDialog(self._attach_list, parent=self).exec()
 
     # ──────────────────────────────────────────────────────
     # 送信
@@ -606,9 +786,9 @@ class SendTab(QWidget):
             cb = self._recipient_table.cellWidget(row, 0)
             if not (cb and cb.isChecked()):
                 continue
-            item = self._recipient_table.item(row, 2)
+            item = self._recipient_table.item(row, 3)
             mid = item.data(Qt.ItemDataRole.UserRole) if item else None
-            addr_item = self._recipient_table.item(row, 5)
+            addr_item = self._recipient_table.item(row, 6)
             to_addr = addr_item.text() if addr_item else ""
             if to_addr == _NO_EMAIL_TEXT:
                 to_addr = ""
@@ -623,6 +803,9 @@ class SendTab(QWidget):
                 "会議所役職名": m.position.name if m.position else "",
                 **{k: merge.get(k, "") for k in ["col1", "col2", "col3", "col4", "col5"]},
             }
+            # ラベルエイリアス（例: {参加費} → col1 の値）
+            for col_key, label in self._col_labels.items():
+                context[label] = context.get(col_key, "")
             targets.append({
                 "member_id":   m.id,
                 "org_name":    m.organization_name,
@@ -633,10 +816,21 @@ class SendTab(QWidget):
             })
         return targets
 
+    def _show_send_preview(self):
+        targets = self._build_targets()
+        if not targets:
+            QMessageBox.warning(self, "宛先未選択", "宛先を1件以上選択してください。")
+            return
+        from app.ui.dialogs.send_preview_dialog import SendPreviewDialog
+        dlg = SendPreviewDialog(targets, parent=self)
+        dlg.exec()
+
     def _test_send(self):
         targets = self._build_targets()
         if not targets:
-            QMessageBox.warning(self, "エラー", "宛先を選択してください。")
+            QMessageBox.warning(self, "宛先未選択",
+                                "テスト送信には差し込み内容を確認するための宛先を1件以上選択してください。\n"
+                                "※ 実際には選択した宛先には送信されません。")
             return
         graph_config = get_graph_config()
         if not graph_config.get("test_address"):
@@ -645,10 +839,13 @@ class SendTab(QWidget):
             return
         t = targets[0]
         try:
-            send_test_mail(graph_config, t["subject"], t["body"])
+            send_test_mail(graph_config, t["subject"], t["body"],
+                           t.get("attachments", []))
             QMessageBox.information(
-                self, "完了",
-                f"テストメールを送信しました。\n宛先: {graph_config['test_address']}")
+                self, "テスト送信完了",
+                f"テストメールを送信しました。\n"
+                f"送信先: {graph_config['test_address']}（設定タブのテスト送信先）\n\n"
+                f"※ 選択した宛先（{t['org_name']}）の差し込み内容で送信しています。")
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
 
@@ -667,9 +864,21 @@ class SendTab(QWidget):
                                 "設定タブでMicrosoft 365設定を行ってください。")
             return
 
+        tmpl_name = self._template_combo.currentText()
+        has_attach = any(t["attachments"] for t in targets)
+        no_email_count = sum(1 for t in targets if not t["to_address"])
+        msg = (
+            f"以下の内容で送信します。よろしいですか？\n\n"
+            f"　ジョブ名　　: {job_name}\n"
+            f"　操作者　　　: {self._staff_name}\n"
+            f"　テンプレート: {tmpl_name}\n"
+            f"　送信件数　　: {len(targets)} 件"
+            + (f"（メール無し {no_email_count} 件はスキップ）" if no_email_count else "") + "\n"
+            f"　添付ファイル: {'あり' if has_attach else 'なし'}\n\n"
+            "送信後は取り消せません。"
+        )
         ret = QMessageBox.question(
-            self, "送信確認",
-            f"{len(targets)} 件に送信します。よろしいですか？",
+            self, "送信確認", msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
             return
