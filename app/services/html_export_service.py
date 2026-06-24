@@ -11,14 +11,23 @@ _CSS = """
 body { font-family: "Meiryo","Yu Gothic",sans-serif; background:#f8fafc; color:#1e293b; padding:16px; }
 .container { max-width: 960px; margin: 0 auto; }
 .page-title { font-size:1.4em; font-weight:bold; color:#1e40af;
-  border-bottom:3px solid #2563eb; padding-bottom:8px; margin-bottom:20px; }
+  border-bottom:3px solid #2563eb; padding-bottom:8px; margin-bottom:16px; }
+/* ナビゲーション */
+.nav { background:white; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.08);
+  padding:12px 16px; margin-bottom:20px; }
+.nav-title { font-size:.8em; color:#64748b; font-weight:600; margin-bottom:8px; }
+.nav-links { display:flex; flex-wrap:wrap; gap:8px; }
+.nav-link { display:inline-block; padding:5px 12px; background:#eff6ff; color:#1e40af;
+  border-radius:6px; font-size:.85em; text-decoration:none; border:1px solid #bfdbfe; }
+.nav-link:hover { background:#dbeafe; }
+/* 会議ブロック */
 .meeting { background:white; border-radius:8px;
-  box-shadow:0 1px 4px rgba(0,0,0,.09); margin-bottom:24px; overflow:hidden; }
+  box-shadow:0 1px 4px rgba(0,0,0,.09); margin-bottom:24px; overflow:hidden;
+  scroll-margin-top:16px; }
 .meeting-header { background:#1e40af; color:white; padding:12px 16px; }
 .meeting-name { font-size:1.1em; font-weight:bold; }
 .meeting-meta { font-size:.85em; opacity:.85; margin-top:3px; }
-.summary-block { padding:10px 16px; background:#f1f5f9;
-  border-bottom:1px solid #e2e8f0; }
+.summary-block { padding:10px 16px; background:#f1f5f9; border-bottom:1px solid #e2e8f0; }
 .summary-label { font-size:.75em; color:#64748b; margin-bottom:4px; font-weight:600; }
 .badges { display:flex; flex-wrap:wrap; gap:6px; }
 .badge { padding:3px 10px; border-radius:20px; font-size:.82em; font-weight:bold; }
@@ -82,21 +91,22 @@ def _esc(text: str) -> str:
 
 
 def _badge_row(summary: dict) -> str:
+    pending = summary.get("未受付", summary.get("未回答", 0))
     return (
         f'<span class="badge ba">出席 {summary["出席"]}</span>'
         f'<span class="badge bp">代理 {summary["代理"]}</span>'
         f'<span class="badge bd">委任 {summary["委任"]}</span>'
         f'<span class="badge bx">欠席 {summary["欠席"]}</span>'
-        f'<span class="badge bn">{summary.get("未受付", summary.get("未回答", 0))} 名未定</span>'
+        f'<span class="badge bn">未定 {pending}</span>'
         f'<span class="badge bt">合計 {summary["合計"]}</span>'
     )
 
 
 def _meeting_html(meeting, attendance: list[dict],
                   pre_summary: dict, rec_summary: dict) -> str:
-    import json
     scope = "全員" if not meeting.target_position_ids else "役職指定"
     date_str = meeting.date.strftime("%Y/%m/%d")
+    anchor = f"meeting-{meeting.id}"
 
     rows_html = []
     for d in attendance:
@@ -133,7 +143,7 @@ def _meeting_html(meeting, attendance: list[dict],
     )
 
     return (
-        f'<div class="meeting">'
+        f'<div class="meeting" id="{anchor}">'
         f'<div class="meeting-header">'
         f'<div class="meeting-name">{_esc(meeting.name)}</div>'
         f'<div class="meeting-meta">{date_str}　{scope}</div>'
@@ -147,6 +157,23 @@ def _meeting_html(meeting, attendance: list[dict],
         f'<div class="badges">{_badge_row(rec_summary)}</div>'
         f'</div>'
         f'{table_html}'
+        f'</div>'
+    )
+
+
+def _nav_html(meetings) -> str:
+    if len(meetings) <= 1:
+        return ""
+    links = "".join(
+        f'<a class="nav-link" href="#meeting-{m.id}">'
+        f'{m.date.strftime("%m/%d")}　{_esc(m.name)}'
+        f'</a>'
+        for m in meetings
+    )
+    return (
+        f'<div class="nav">'
+        f'<div class="nav-title">会議一覧（クリックでジャンプ）</div>'
+        f'<div class="nav-links">{links}</div>'
         f'</div>'
     )
 
@@ -165,7 +192,12 @@ def export_attendance_html(output_path: str) -> None:
     finally:
         session.close()
 
-    body = "\n".join(blocks) if blocks else '<p class="no-meeting">会議データはありません。</p>'
+    if blocks:
+        nav = _nav_html(meetings)
+        body = nav + "\n".join(blocks)
+    else:
+        body = '<p class="no-meeting">会議データはありません。</p>'
+
     timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
     html = _HTML_TEMPLATE.format(css=_CSS, body=body, timestamp=timestamp)
 
