@@ -2,10 +2,11 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem,
-    QCheckBox, QMessageBox, QHeaderView, QLabel, QRadioButton, QButtonGroup
+    QCheckBox, QMessageBox, QHeaderView, QLabel, QRadioButton, QButtonGroup,
+    QFileDialog,
 )
 from PyQt6.QtCore import Qt
-from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config
+from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config, get_html_export_path
 from app.database.connection import get_session
 from app.services.signature_service import (
     get_signatures, create_signature, update_signature,
@@ -23,6 +24,7 @@ class SettingsTab(QWidget):
         inner.addTab(_SignatureWidget(), "署名管理")
         inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
+        inner.addTab(_ExportSettingsWidget(), "出力設定")
         layout.addWidget(inner)
 
 
@@ -362,3 +364,68 @@ class _DbSettingsWidget(QWidget):
         save_config(config)
         QMessageBox.information(self, "保存完了",
                                 "設定を保存しました。\nアプリを再起動すると新しい接続先が有効になります。")
+
+
+class _ExportSettingsWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+
+        grp = QGroupBox("出欠状況 HTML 出力")
+        form = QFormLayout(grp)
+
+        path_row = QHBoxLayout()
+        self._path_edit = QLineEdit()
+        self._path_edit.setPlaceholderText("例: \\\\server\\share\\出欠状況.html")
+        btn_browse = QPushButton("参照...")
+        btn_browse.setFixedWidth(72)
+        btn_browse.clicked.connect(self._browse)
+        path_row.addWidget(self._path_edit)
+        path_row.addWidget(btn_browse)
+        form.addRow("出力先ファイル", path_row)
+        layout.addWidget(grp)
+
+        layout.addWidget(QLabel(
+            "受付操作のたびに自動更新されます。\n"
+            "共有フォルダに保存すれば、他のPCのブラウザで出欠状況を確認できます。\n"
+            "空白のままにすると HTML 出力は行われません。"))
+
+        btn_row = QHBoxLayout()
+        btn_save = QPushButton("設定を保存")
+        btn_save.clicked.connect(self._save)
+        btn_export = QPushButton("今すぐ出力")
+        btn_export.clicked.connect(self._export_now)
+        btn_row.addWidget(btn_save)
+        btn_row.addWidget(btn_export)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        layout.addStretch()
+        self._load()
+
+    def _load(self):
+        self._path_edit.setText(get_html_export_path())
+
+    def _browse(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "HTML出力先を選択", self._path_edit.text() or "出欠状況.html",
+            "HTML ファイル (*.html *.htm)")
+        if path:
+            self._path_edit.setText(path)
+
+    def _save(self):
+        config = get_config()
+        config["html_export_path"] = self._path_edit.text().strip()
+        save_config(config)
+        QMessageBox.information(self, "保存", "設定を保存しました。")
+
+    def _export_now(self):
+        path = self._path_edit.text().strip()
+        if not path:
+            QMessageBox.warning(self, "エラー", "出力先ファイルを設定してください。")
+            return
+        try:
+            from app.services.html_export_service import export_attendance_html
+            export_attendance_html(path)
+            QMessageBox.information(self, "出力完了", f"HTML を出力しました。\n{path}")
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", str(e))

@@ -41,6 +41,11 @@ def get_db_type() -> str:
     return get_config().get("db_type", "sqlite")
 
 
+def get_html_export_path() -> str:
+    """HTML出力先ファイルパス（未設定時は空文字）"""
+    return get_config().get("html_export_path", "")
+
+
 def get_pg_config() -> dict:
     """PostgreSQL接続設定を返す"""
     defaults = {

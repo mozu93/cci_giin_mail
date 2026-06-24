@@ -273,6 +273,18 @@ class ReceptionWidget(QWidget):
                            self._staff_name, old, actual_status)
         finally:
             session.close()
+        self._export_html_silent()
+
+    def _export_html_silent(self):
+        from app.utils.app_config import get_html_export_path
+        path = get_html_export_path()
+        if not path:
+            return
+        try:
+            from app.services.html_export_service import export_attendance_html
+            export_attendance_html(path)
+        except Exception:
+            pass
 
     def _filter_reception(self):
         keyword = to_katakana(self._search.text().strip())

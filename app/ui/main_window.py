@@ -73,6 +73,21 @@ class MainWindow(QMainWindow):
         ver_lbl.setStyleSheet("color: #94A3B8; font-size: 11px; padding: 0 8px;")
         sb.addPermanentWidget(ver_lbl)
 
+    def closeEvent(self, event):
+        self._export_html_silent()
+        super().closeEvent(event)
+
+    def _export_html_silent(self):
+        from app.utils.app_config import get_html_export_path
+        path = get_html_export_path()
+        if not path:
+            return
+        try:
+            from app.services.html_export_service import export_attendance_html
+            export_attendance_html(path)
+        except Exception:
+            pass
+
     def _on_tab_change(self, tabs: QTabWidget, idx: int):
         widget = tabs.widget(idx)
         if hasattr(widget, "refresh"):
