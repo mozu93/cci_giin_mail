@@ -20,6 +20,8 @@ body { font-family: "Meiryo","Yu Gothic",sans-serif; background:#f8fafc; color:#
 .nav-link { display:inline-block; padding:5px 12px; background:#eff6ff; color:#1e40af;
   border-radius:6px; font-size:.85em; text-decoration:none; border:1px solid #bfdbfe; }
 .nav-link:hover { background:#dbeafe; }
+.nav-link-past { background:#f8fafc; color:#64748b; border-color:#e2e8f0; }
+.nav-link-past:hover { background:#f1f5f9; }
 /* 会議ブロック */
 .meeting { background:white; border-radius:8px;
   box-shadow:0 1px 4px rgba(0,0,0,.09); margin-bottom:24px; overflow:hidden;
@@ -161,15 +163,19 @@ def _meeting_html(meeting, attendance: list[dict],
     )
 
 
-def _nav_html(meetings) -> str:
-    if len(meetings) <= 1:
+def _nav_html(upcoming, has_past: bool) -> str:
+    if not upcoming and not has_past:
+        return ""
+    if len(upcoming) <= 1 and not has_past:
         return ""
     links = "".join(
         f'<a class="nav-link" href="#meeting-{m.id}">'
         f'{m.date.strftime("%m/%d")}　{_esc(m.name)}'
         f'</a>'
-        for m in meetings
+        for m in upcoming
     )
+    if has_past:
+        links += '<a class="nav-link nav-link-past" href="#past-meetings">過去の会議</a>'
     return (
         f'<div class="nav">'
         f'<div class="nav-title">会議一覧（クリックでジャンプ）</div>'
@@ -180,21 +186,48 @@ def _nav_html(meetings) -> str:
 
 def export_attendance_html(output_path: str) -> None:
     """全会議の出欠状況を HTML ファイルに書き出す。"""
+    today = datetime.now().date()
+
     session = get_session()
     try:
-        meetings = get_meetings(session)
-        blocks = []
+        meetings = get_meetings(session)  # date降順
+        upcoming, past = [], []
         for m in meetings:
-            attendance = get_attendance_data(session, m.id)
-            pre_sum = get_summary(session, m.id)
-            rec_sum = get_reception_summary(session, m.id)
-            blocks.append(_meeting_html(m, attendance, pre_sum, rec_sum))
+            (past if m.date < today else upcoming).append(m)
+
+        def _build(m):
+            return _meeting_html(
+                m,
+                get_attendance_data(session, m.id),
+                get_summary(session, m.id),
+                get_reception_summary(session, m.id),
+            )
+
+        upcoming_blocks = [_build(m) for m in upcoming]
+        past_blocks = [_build(m) for m in past]
     finally:
         session.close()
 
-    if blocks:
-        nav = _nav_html(meetings)
-        body = nav + "\n".join(blocks)
+    parts = []
+    if upcoming_blocks or past_blocks:
+        parts.append(_nav_html(upcoming, bool(past_blocks)))
+        parts.extend(upcoming_blocks)
+        if past_blocks:
+            inner = "\n".join(past_blocks)
+            parts.append(
+                f'<details id="past-meetings" style="margin-bottom:24px;">'
+                f'<summary style="cursor:pointer; padding:10px 16px; '
+                f'background:white; border-radius:8px; '
+                f'box-shadow:0 1px 4px rgba(0,0,0,.08); '
+                f'font-weight:bold; color:#64748b; list-style:none; '
+                f'display:flex; align-items:center; gap:8px;">'
+                f'<span style="font-size:1.1em;">▶</span>'
+                f'過去の会議（{len(past_blocks)}件）'
+                f'</summary>'
+                f'<div style="margin-top:12px;">{inner}</div>'
+                f'</details>'
+            )
+        body = "\n".join(parts)
     else:
         body = '<p class="no-meeting">会議データはありません。</p>'
 
