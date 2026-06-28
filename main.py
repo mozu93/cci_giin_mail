@@ -1,5 +1,7 @@
 import sys
+import os
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QIcon
 from app.ui.main_window import MainWindow
 from app.ui.dialogs.login_dialog import LoginDialog
 
@@ -56,6 +58,11 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("cci-mail")
     app.setStyleSheet(_GLOBAL_STYLE)
+
+    _base = os.path.dirname(os.path.abspath(__file__))
+    _icon_path = os.path.join(_base, "assets", "icon.png")
+    if os.path.exists(_icon_path):
+        app.setWindowIcon(QIcon(_icon_path))
 
     dlg = LoginDialog()
     if dlg.exec() != LoginDialog.DialogCode.Accepted:
