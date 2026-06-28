@@ -25,6 +25,7 @@ class SettingsTab(QWidget):
         inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
         inner.addTab(_ExportSettingsWidget(), "出力設定")
+        inner.addTab(_DataWidget(), "データ管理")
         layout.addWidget(inner)
 
 
@@ -429,3 +430,52 @@ class _ExportSettingsWidget(QWidget):
             QMessageBox.information(self, "出力完了", f"HTML を出力しました。\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
+
+
+class _DataWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+
+        grp = QGroupBox("会員データ一括削除（開発用）")
+        grp_layout = QVBoxLayout(grp)
+        grp_layout.addWidget(QLabel(
+            "全会員データを完全に削除します。\n"
+            "この操作は取り消せません。開発・テスト時のみ使用してください。"
+        ))
+        btn = QPushButton("一括削除を実行")
+        btn.setStyleSheet("color: #DC2626; border: 1px solid #DC2626;")
+        btn.clicked.connect(self._bulk_delete)
+        grp_layout.addWidget(btn)
+        layout.addWidget(grp)
+        layout.addStretch()
+
+    def _bulk_delete(self):
+        from app.database.connection import get_session
+        from app.database.models import (
+            Member, EmailAddress, MemberHistory,
+            AttendanceRecord, ReceptionLog, SendLog,
+        )
+        ret = QMessageBox.warning(
+            self, "一括削除（開発用）",
+            "全会員データを完全に削除します。\nこの操作は取り消せません。\n\n本当に実行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        session = get_session()
+        try:
+            session.query(ReceptionLog).delete()
+            session.query(AttendanceRecord).delete()
+            session.query(SendLog).filter(SendLog.member_id.isnot(None)).update(
+                {"member_id": None}, synchronize_session=False)
+            session.query(MemberHistory).delete()
+            session.query(EmailAddress).delete()
+            session.query(Member).delete()
+            session.commit()
+            QMessageBox.information(self, "完了", "全会員データを削除しました。")
+        except Exception as e:
+            session.rollback()
+            QMessageBox.critical(self, "エラー", str(e))
+        finally:
+            session.close()

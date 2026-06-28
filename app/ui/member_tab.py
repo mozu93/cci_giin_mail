@@ -2,15 +2,12 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLineEdit, QComboBox, QLabel, QHeaderView,
-    QMessageBox, QCheckBox
+    QMessageBox, QCheckBox, QMenu
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QColor
 from app.database.connection import get_session
-from app.database.models import (
-    Position, Member, EmailAddress, MemberHistory,
-    AttendanceRecord, ReceptionLog, SendLog,
-)
+from app.database.models import Position
 from app.services.member_service import get_members, delete_member
 
 
@@ -46,34 +43,23 @@ class MemberTab(QWidget):
 
         # ツールバー 2行目：操作ボタン
         row2 = QHBoxLayout()
-        btn_add     = QPushButton("追加")
-        btn_edit    = QPushButton("編集")
-        btn_delete  = QPushButton("議員退任")
-        btn_history = QPushButton("変更履歴")
-        btn_import  = QPushButton("インポート")
-        btn_revert  = QPushButton("取り消し")
-        btn_export  = QPushButton("エクスポート")
-        btn_order   = QPushButton("順番設定")
-        btn_bulk_delete = QPushButton("一括削除（開発用）")
-        btn_bulk_delete.setStyleSheet("color: #DC2626; border: 1px solid #DC2626;")
+        btn_add = QPushButton("追加")
         btn_add.clicked.connect(self._add)
-        btn_edit.clicked.connect(self._edit)
-        btn_delete.clicked.connect(self._delete)
-        btn_history.clicked.connect(self._show_history)
-        btn_import.clicked.connect(self._import)
-        btn_revert.clicked.connect(self._import_revert)
-        btn_export.clicked.connect(self._export)
+
+        btn_file = QPushButton("ファイル ▼")
+        file_menu = QMenu(btn_file)
+        file_menu.addAction("インポート", self._import)
+        file_menu.addAction("インポート取り消し", self._import_revert)
+        file_menu.addSeparator()
+        file_menu.addAction("エクスポート", self._export)
+        btn_file.setMenu(file_menu)
+
+        btn_order = QPushButton("順番設定")
         btn_order.clicked.connect(self._order_settings)
-        btn_bulk_delete.clicked.connect(self._bulk_delete)
+
         row2.addWidget(btn_add)
-        row2.addWidget(btn_edit)
-        row2.addWidget(btn_delete)
-        row2.addWidget(btn_history)
-        row2.addWidget(btn_import)
-        row2.addWidget(btn_revert)
-        row2.addWidget(btn_export)
+        row2.addWidget(btn_file)
         row2.addWidget(btn_order)
-        row2.addWidget(btn_bulk_delete)
         row2.addStretch()
         layout.addLayout(row2)
 
@@ -108,6 +94,8 @@ class MemberTab(QWidget):
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.doubleClicked.connect(self._edit)
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._show_context_menu)
 
         from app.services.settings_service import get_font_size
         from PyQt6.QtGui import QFont as _QFont
@@ -245,6 +233,16 @@ class MemberTab(QWidget):
         val = item.data(Qt.ItemDataRole.UserRole + 1)
         return bool(val)
 
+    def _show_context_menu(self, pos: QPoint):
+        if self._table.currentRow() < 0:
+            return
+        menu = QMenu(self)
+        menu.addAction("編集", self._edit)
+        menu.addAction("変更履歴", self._show_history)
+        menu.addSeparator()
+        menu.addAction("議員退任", self._delete)
+        menu.exec(self._table.viewport().mapToGlobal(pos))
+
     def _add(self):
         from app.ui.dialogs.member_edit_dialog import MemberEditDialog
         session = get_session()
@@ -329,33 +327,6 @@ class MemberTab(QWidget):
         if dlg.exec():
             self._load()
         session.close()
-
-    def _bulk_delete(self):
-        ret = QMessageBox.warning(
-            self, "一括削除（開発用）",
-            "全会員データを完全に削除します。\nこの操作は取り消せません。\n\n本当に実行しますか？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if ret != QMessageBox.StandardButton.Yes:
-            return
-        session = get_session()
-        try:
-            session.query(ReceptionLog).delete()
-            session.query(AttendanceRecord).delete()
-            session.query(SendLog).filter(SendLog.member_id.isnot(None)).update(
-                {"member_id": None}, synchronize_session=False)
-            session.query(MemberHistory).delete()
-            session.query(EmailAddress).delete()
-            session.query(Member).delete()
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            QMessageBox.critical(self, "エラー", str(e))
-            return
-        finally:
-            session.close()
-        self._load()
-        QMessageBox.information(self, "完了", "全会員データを削除しました。")
 
     def _export(self):
         from PyQt6.QtWidgets import QFileDialog
