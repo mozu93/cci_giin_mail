@@ -59,7 +59,7 @@ def main():
     app.setApplicationName("cci-mail")
     app.setStyleSheet(_GLOBAL_STYLE)
 
-    _base = os.path.dirname(os.path.abspath(__file__))
+    _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     _icon_path = os.path.join(_base, "assets", "icon.png")
     if os.path.exists(_icon_path):
         app.setWindowIcon(QIcon(_icon_path))
