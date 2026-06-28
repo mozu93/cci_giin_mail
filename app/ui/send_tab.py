@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QCheckBox, QLineEdit, QTextEdit,
     QProgressBar, QFileDialog, QMessageBox,
     QListWidget, QListWidgetItem, QRadioButton, QButtonGroup,
+    QSplitter,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from app.database.connection import get_session
@@ -77,19 +78,26 @@ class SendTab(QWidget):
     def _build(self):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(4, 4, 4, 4)
-        main_layout.setSpacing(8)
+        main_layout.setSpacing(0)
 
-        main_layout.addWidget(self._build_left_column())
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
 
         self._recipient = RecipientPanel()
-        main_layout.addWidget(self._recipient, 1)
+        splitter.addWidget(self._recipient)
+        splitter.addWidget(self._build_left_column())
+
+        splitter.setSizes([1, 1])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+
+        main_layout.addWidget(splitter)
 
         self._load_combos()
 
     def _build_left_column(self) -> QScrollArea:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFixedWidth(370)
 
         inner = QWidget()
         layout = QVBoxLayout(inner)
