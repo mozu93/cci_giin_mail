@@ -1,13 +1,33 @@
 import json
+import os
+import sys
 from pathlib import Path
 
 
+def _app_data_dir() -> Path:
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or Path.home()
+    else:
+        base = Path.home()
+    d = Path(base) / "cci-mail"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _config_path() -> Path:
-    return Path(__file__).parent.parent.parent / "app_config.json"
+    new_path = _app_data_dir() / "app_config.json"
+    old_path = Path(__file__).parent.parent.parent / "app_config.json"
+    if not new_path.exists() and old_path.exists():
+        import shutil
+        shutil.copy2(old_path, new_path)
+    return new_path
 
 
 def _db_default_path() -> Path:
-    return Path(__file__).parent.parent.parent / "cci_mail.db"
+    old_path = Path(__file__).parent.parent.parent / "cci_mail.db"
+    if old_path.exists():
+        return old_path
+    return _app_data_dir() / "cci_mail.db"
 
 
 def get_config() -> dict:

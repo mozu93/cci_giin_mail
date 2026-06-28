@@ -186,6 +186,9 @@ def _nav_html(upcoming, has_past: bool) -> str:
 
 def export_attendance_html(output_path: str) -> None:
     """全会議の出欠状況を HTML ファイルに書き出す。"""
+    from pathlib import Path
+    if Path(output_path).suffix.lower() not in (".html", ".htm"):
+        raise ValueError(f"出力パスは .html または .htm 拡張子である必要があります: {output_path}")
     today = datetime.now().date()
 
     session = get_session()

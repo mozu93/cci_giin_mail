@@ -44,6 +44,10 @@ class ReceptionWidget(QWidget):
         self._timer = QTimer()
         self._timer.setInterval(3000)
         self._timer.timeout.connect(self._refresh_reception)
+        self._export_timer = QTimer()
+        self._export_timer.setSingleShot(True)
+        self._export_timer.setInterval(500)
+        self._export_timer.timeout.connect(self._do_export_html)
 
     def load(self, meeting_id: int | None):
         self._meeting_id = meeting_id
@@ -276,6 +280,9 @@ class ReceptionWidget(QWidget):
         self._export_html_silent()
 
     def _export_html_silent(self):
+        self._export_timer.start()
+
+    def _do_export_html(self):
         from app.utils.app_config import get_html_export_path
         path = get_html_export_path()
         if not path:

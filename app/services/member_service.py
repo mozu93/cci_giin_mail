@@ -74,11 +74,12 @@ def get_members(session: Session, position_id: int | None = None,
     if position_id is not None:
         q = q.filter(Member.position_id == position_id)
     if keyword:
-        like = f"%{keyword}%"
+        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{escaped}%"
         q = q.filter(
-            Member.organization_name.like(like) |
-            Member.name.like(like) |
-            Member.member_number.like(like)
+            Member.organization_name.like(like, escape="\\") |
+            Member.name.like(like, escape="\\") |
+            Member.member_number.like(like, escape="\\")
         )
     return q.order_by(
         Position.sort_order.asc().nullslast(),
