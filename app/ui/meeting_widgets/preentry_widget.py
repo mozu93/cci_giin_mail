@@ -161,19 +161,22 @@ class PreentryWidget(QWidget):
                 self._pre_table.setItem(
                     i, 7, QTableWidgetItem(d.get("proxy_name", "")))
             else:
+                mid = d["member_id"]
                 combo = QComboBox()
                 combo.addItems(STATUS_OPTIONS)
                 combo.setCurrentText(d["status"])
                 combo.currentTextChanged.connect(
-                    lambda text, row=i: self._on_status_change(row, text))
+                    lambda text, m=mid: self._on_status_change_by_id(m, text))
                 self._pre_table.setCellWidget(i, 5, combo)
                 is_proxy = d["status"] == "代理"
                 title_edit = QLineEdit(d["proxy_title"])
                 name_edit  = QLineEdit(d["proxy_name"])
                 title_edit.setEnabled(is_proxy)
                 name_edit.setEnabled(is_proxy)
-                title_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
-                name_edit.editingFinished.connect(lambda row=i: self._save_proxy(row))
+                title_edit.editingFinished.connect(
+                    lambda m=mid: self._save_proxy_by_id(m))
+                name_edit.editingFinished.connect(
+                    lambda m=mid: self._save_proxy_by_id(m))
                 self._pre_table.setCellWidget(i, 6, title_edit)
                 self._pre_table.setCellWidget(i, 7, name_edit)
         self._pre_table.setUpdatesEnabled(True)
@@ -271,6 +274,22 @@ class PreentryWidget(QWidget):
                 id_to_d[mid] for mid in self._original_ids if mid in id_to_d]
         self._update_pre_headers()
         self._render_preentry()
+
+    def _find_row(self, member_id: int) -> int:
+        return next(
+            (i for i, d in enumerate(self._preentry_data) if d["member_id"] == member_id),
+            -1,
+        )
+
+    def _on_status_change_by_id(self, member_id: int, text: str):
+        row = self._find_row(member_id)
+        if row >= 0:
+            self._on_status_change(row, text)
+
+    def _save_proxy_by_id(self, member_id: int):
+        row = self._find_row(member_id)
+        if row >= 0:
+            self._save_proxy(row)
 
     def _on_status_change(self, row: int, text: str):
         if row >= len(self._preentry_data):

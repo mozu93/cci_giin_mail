@@ -24,38 +24,40 @@ class _SendWorker(QThread):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal(int, int, int)
 
-    def __init__(self, targets: list[dict], graph_config: dict,
-                 job_id: int, session):
+    def __init__(self, targets: list[dict], graph_config: dict, job_id: int):
         super().__init__()
         self._targets = targets
         self._graph_config = graph_config
         self._job_id = job_id
-        self._session = session
 
     def run(self):
-        success = error = skip = 0
-        total = len(self._targets)
-        for i, t in enumerate(self._targets, 1):
-            to_addr = t["to_address"]
-            if not to_addr:
-                add_log(self._session, self._job_id, t.get("member_id"),
-                        "", t["subject"], "skip")
-                skip += 1
-                self.progress.emit(i, total, f"スキップ: {t['org_name']}")
-                continue
-            try:
-                send_mail(self._graph_config, to_addr, t["subject"],
-                          t["body"], t.get("attachments", []))
-                add_log(self._session, self._job_id, t.get("member_id"),
-                        to_addr, t["subject"], "success")
-                success += 1
-                self.progress.emit(i, total, f"送信済: {t['org_name']}")
-            except Exception as e:
-                add_log(self._session, self._job_id, t.get("member_id"),
-                        to_addr, t["subject"], "error", str(e))
-                error += 1
-                self.progress.emit(i, total, f"エラー: {t['org_name']} — {e}")
-        self.finished.emit(success, error, skip)
+        session = get_session()
+        try:
+            success = error = skip = 0
+            total = len(self._targets)
+            for i, t in enumerate(self._targets, 1):
+                to_addr = t["to_address"]
+                if not to_addr:
+                    add_log(session, self._job_id, t.get("member_id"),
+                            "", t["subject"], "skip")
+                    skip += 1
+                    self.progress.emit(i, total, f"スキップ: {t['org_name']}")
+                    continue
+                try:
+                    send_mail(self._graph_config, to_addr, t["subject"],
+                              t["body"], t.get("attachments", []))
+                    add_log(session, self._job_id, t.get("member_id"),
+                            to_addr, t["subject"], "success")
+                    success += 1
+                    self.progress.emit(i, total, f"送信済: {t['org_name']}")
+                except Exception as e:
+                    add_log(session, self._job_id, t.get("member_id"),
+                            to_addr, t["subject"], "error", str(e))
+                    error += 1
+                    self.progress.emit(i, total, f"エラー: {t['org_name']} — {e}")
+            self.finished.emit(success, error, skip)
+        finally:
+            session.close()
 
 
 class SendTab(QWidget):
@@ -264,14 +266,14 @@ class SendTab(QWidget):
         btn_test.clicked.connect(self._test_send)
         btn_preview = QPushButton("差し込みプレビュー")
         btn_preview.clicked.connect(self._show_send_preview)
-        btn_send = QPushButton("送信実行")
-        btn_send.setStyleSheet(
+        self._btn_send = QPushButton("送信実行")
+        self._btn_send.setStyleSheet(
             "font-weight: bold; background-color: #1E40AF; color: white;")
-        btn_send.clicked.connect(self._execute_send)
+        self._btn_send.clicked.connect(self._execute_send)
         btn_row.addWidget(btn_test)
         btn_row.addWidget(btn_preview)
         btn_row.addStretch()
-        btn_row.addWidget(btn_send)
+        btn_row.addWidget(self._btn_send)
         layout.addLayout(btn_row)
 
         self._progress = QProgressBar()
@@ -629,28 +631,37 @@ class SendTab(QWidget):
             return
 
         session = get_session()
-        staff = get_staff_by_name(session, self._staff_name)
-        staff_id = staff.id if staff else None
-        job = create_job(session, job_name, self._template_combo.currentData(), staff_id)
-        start_job(session, job.id)
+        try:
+            staff = get_staff_by_name(session, self._staff_name)
+            staff_id = staff.id if staff else None
+            job = create_job(session, job_name, self._template_combo.currentData(), staff_id)
+            start_job(session, job.id)
+            job_id = job.id
+        finally:
+            session.close()
 
         self._progress.setVisible(True)
         self._progress.setMaximum(len(targets))
         self._progress.setValue(0)
+        self._btn_send.setEnabled(False)
 
-        self._worker = _SendWorker(targets, graph_config, job.id, session)
+        self._worker = _SendWorker(targets, graph_config, job_id)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(
-            lambda s, e, sk: self._on_finished(job.id, s, e, sk, session))
+            lambda s, e, sk: self._on_finished(job_id, s, e, sk))
         self._worker.start()
 
     def _on_progress(self, current: int, total: int, message: str):
         self._progress.setValue(current)
         self._progress_label.setText(f"[{current}/{total}] {message}")
 
-    def _on_finished(self, job_id: int, success: int, error: int, skip: int, session):
-        finish_job(session, job_id)
-        session.close()
+    def _on_finished(self, job_id: int, success: int, error: int, skip: int):
+        session = get_session()
+        try:
+            finish_job(session, job_id)
+        finally:
+            session.close()
+        self._btn_send.setEnabled(True)
         self._progress.setVisible(False)
         QMessageBox.information(
             self, "送信完了",

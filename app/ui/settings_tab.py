@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem,
     QCheckBox, QMessageBox, QHeaderView, QLabel, QRadioButton, QButtonGroup,
-    QFileDialog,
+    QFileDialog, QInputDialog,
 )
 from PyQt6.QtCore import Qt
 from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config, get_html_export_path
@@ -462,6 +462,13 @@ class _DataWidget(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
+            return
+        text, ok = QInputDialog.getText(
+            self, "最終確認",
+            "削除を実行するには「DELETE」と入力してください：",
+        )
+        if not ok or text.strip() != "DELETE":
+            QMessageBox.information(self, "キャンセル", "削除をキャンセルしました。")
             return
         session = get_session()
         try:

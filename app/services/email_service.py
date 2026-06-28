@@ -80,6 +80,7 @@ def compile_send_targets(
         targets.append({
             "member_id":   m.id,
             "org_name":    m.organization_name,
+            "name":        m.name,
             "to_address":  to_addr,
             "subject":     render_body(subject_tpl, context),
             "body":        render_body(body_tpl + sig_body, context),

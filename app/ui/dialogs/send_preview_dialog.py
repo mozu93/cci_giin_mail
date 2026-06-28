@@ -35,7 +35,7 @@ class SendPreviewDialog(QDialog):
         left_layout.addWidget(QLabel("<b>宛先一覧</b>"))
         self._recipient_list = QListWidget()
         for t in self._targets:
-            item = QListWidgetItem(f"{t['org_name']}　{t['name']}")
+            item = QListWidgetItem(f"{t['org_name']}　{t.get('name', '')}")
             self._recipient_list.addItem(item)
         self._recipient_list.currentRowChanged.connect(self._on_select)
         left_layout.addWidget(self._recipient_list)
@@ -77,6 +77,6 @@ class SendPreviewDialog(QDialog):
             return
         t = self._targets[row]
         addr = t.get("to_address") or "（メールアドレス無し）"
-        self._to_label.setText(f"{t['org_name']}　{t['name']}　＜{addr}＞")
+        self._to_label.setText(f"{t['org_name']}　{t.get('name', '')}　＜{addr}＞")
         self._subject_edit.setText(t.get("subject", ""))
         self._body_edit.setPlainText(t.get("body", ""))
