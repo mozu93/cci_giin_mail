@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from app.database.connection import get_session
 from app.services.meeting_service import STATUS_OPTIONS, upsert_attendance, get_attendance_data, export_csv
+from app.services.settings_service import get_font_size, set_font_size
 from app.utils import to_katakana
 from app.ui.meeting_widgets import count_label
 
@@ -59,9 +60,19 @@ class PreentryWidget(QWidget):
         self._pre_search.textChanged.connect(self._apply_status_filter)
         btn_csv = QPushButton("CSV出力")
         btn_csv.clicked.connect(self._export_csv)
+        btn_fd = QPushButton("A-")
+        btn_fd.setFixedWidth(36)
+        btn_fd.setToolTip("文字を小さくする")
+        btn_fd.clicked.connect(lambda: self._adjust_font(-1))
+        btn_fu = QPushButton("A+")
+        btn_fu.setFixedWidth(36)
+        btn_fu.setToolTip("文字を大きくする")
+        btn_fu.clicked.connect(lambda: self._adjust_font(1))
         btn_row.addWidget(self._pre_search, 2)
         btn_row.addStretch()
         btn_row.addWidget(btn_csv)
+        btn_row.addWidget(btn_fd)
+        btn_row.addWidget(btn_fu)
         layout.addLayout(btn_row)
 
         filter_row = QHBoxLayout()
@@ -100,9 +111,26 @@ class PreentryWidget(QWidget):
         h.sectionClicked.connect(self._on_pre_header_click)
         self._pre_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._pre_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        _sys_pt = self._pre_table.font().pointSize()
+        _saved_pt = get_font_size("preentry_tab", _sys_pt)
+        _f = self._pre_table.font()
+        _f.setPointSize(_saved_pt)
+        self._pre_table.setFont(_f)
+        self._pre_table.verticalHeader().setDefaultSectionSize(
+            self._pre_table.verticalHeader().defaultSectionSize()
+            + (_saved_pt - _sys_pt) * 2)
         layout.addWidget(self._pre_table)
 
     # ─── データ操作 ────────────────────────────────────────
+
+    def _adjust_font(self, delta: int):
+        f = self._pre_table.font()
+        new_size = max(6, f.pointSize() + delta)
+        f.setPointSize(new_size)
+        self._pre_table.setFont(f)
+        vh = self._pre_table.verticalHeader()
+        vh.setDefaultSectionSize(max(20, vh.defaultSectionSize() + delta * 2))
+        set_font_size("preentry_tab", new_size)
 
     def _load_preentry(self):
         self._pre_table.setRowCount(0)

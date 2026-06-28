@@ -1,7 +1,7 @@
 import sys
 import os
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QFont
 from app.ui.main_window import MainWindow
 from app.ui.dialogs.login_dialog import LoginDialog
 
@@ -57,6 +57,9 @@ QGroupBox::title {
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("cci-mail")
+    _font = app.font()
+    _font.setPointSizeF(10.5)
+    app.setFont(_font)
     app.setStyleSheet(_GLOBAL_STYLE)
 
     _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))

@@ -1,8 +1,10 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView,
+    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
+    QHeaderView, QPushButton,
 )
 from app.database.connection import get_session
 from app.services.reception_log_service import get_logs
+from app.services.settings_service import get_font_size, set_font_size
 
 
 class LogWidget(QWidget):
@@ -16,6 +18,21 @@ class LogWidget(QWidget):
 
     def _build(self):
         layout = QVBoxLayout(self)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_fd = QPushButton("A-")
+        btn_fd.setFixedWidth(36)
+        btn_fd.setToolTip("文字を小さくする")
+        btn_fd.clicked.connect(lambda: self._adjust_font(-1))
+        btn_fu = QPushButton("A+")
+        btn_fu.setFixedWidth(36)
+        btn_fu.setToolTip("文字を大きくする")
+        btn_fu.clicked.connect(lambda: self._adjust_font(1))
+        btn_row.addWidget(btn_fd)
+        btn_row.addWidget(btn_fu)
+        layout.addLayout(btn_row)
+
         self._log_table = QTableWidget(0, 5)
         self._log_table.setHorizontalHeaderLabels(
             ["日時", "担当者", "事業所名", "変更前", "変更後"])
@@ -27,8 +44,25 @@ class LogWidget(QWidget):
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self._log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        _sys_pt = self._log_table.font().pointSize()
+        _saved_pt = get_font_size("log_tab", _sys_pt)
+        _f = self._log_table.font()
+        _f.setPointSize(_saved_pt)
+        self._log_table.setFont(_f)
+        self._log_table.verticalHeader().setDefaultSectionSize(
+            self._log_table.verticalHeader().defaultSectionSize()
+            + (_saved_pt - _sys_pt) * 2)
         layout.addWidget(self._log_table)
         self._meeting_id: int | None = None
+
+    def _adjust_font(self, delta: int):
+        f = self._log_table.font()
+        new_size = max(6, f.pointSize() + delta)
+        f.setPointSize(new_size)
+        self._log_table.setFont(f)
+        vh = self._log_table.verticalHeader()
+        vh.setDefaultSectionSize(max(20, vh.defaultSectionSize() + delta * 2))
+        set_font_size("log_tab", new_size)
 
     def _load_logs(self):
         if not self._meeting_id:
