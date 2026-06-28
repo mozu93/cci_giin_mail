@@ -44,7 +44,7 @@ class MeetingTab(QWidget):
 
         self._inner = QTabWidget()
         self._inner.addTab(self._preentry, "事前入力")
-        self._inner.addTab(self._reception, "受付")
+        self._inner.addTab(self._reception, "当日受付")
         self._inner.addTab(self._log, "受付ログ")
         self._inner.currentChanged.connect(self._on_inner_tab_change)
         layout.addWidget(self._inner)

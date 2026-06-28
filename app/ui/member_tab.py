@@ -46,7 +46,7 @@ class MemberTab(QWidget):
         btn_add = QPushButton("追加")
         btn_add.clicked.connect(self._add)
 
-        btn_file = QPushButton("ファイル ▼")
+        btn_file = QPushButton("ファイル")
         file_menu = QMenu(btn_file)
         file_menu.addAction("インポート", self._import)
         file_menu.addAction("インポート取り消し", self._import_revert)
