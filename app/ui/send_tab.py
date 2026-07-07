@@ -29,6 +29,10 @@ class _SendWorker(QThread):
         self._targets = targets
         self._graph_config = graph_config
         self._job_id = job_id
+        self._cancelled = False
+
+    def request_cancel(self):
+        self._cancelled = True
 
     def run(self):
         session = get_session()
@@ -36,6 +40,12 @@ class _SendWorker(QThread):
             success = error = skip = 0
             total = len(self._targets)
             for i, t in enumerate(self._targets, 1):
+                if self._cancelled:
+                    remaining = total - i + 1
+                    skip += remaining
+                    self.progress.emit(
+                        total, total, f"中止しました（残り{remaining}件は未送信）")
+                    break
                 to_addr = t["to_address"]
                 if not to_addr:
                     add_log(session, self._job_id, t.get("member_id"),
@@ -270,9 +280,15 @@ class SendTab(QWidget):
         self._btn_send.setStyleSheet(
             "font-weight: bold; background-color: #1E40AF; color: white;")
         self._btn_send.clicked.connect(self._execute_send)
+        self._btn_cancel = QPushButton("送信を中止")
+        self._btn_cancel.setStyleSheet(
+            "background-color: #DC2626; color: white;")
+        self._btn_cancel.setVisible(False)
+        self._btn_cancel.clicked.connect(self._cancel_send)
         btn_row.addWidget(btn_test)
         btn_row.addWidget(btn_preview)
         btn_row.addStretch()
+        btn_row.addWidget(self._btn_cancel)
         btn_row.addWidget(self._btn_send)
         layout.addLayout(btn_row)
 
@@ -644,12 +660,27 @@ class SendTab(QWidget):
         self._progress.setMaximum(len(targets))
         self._progress.setValue(0)
         self._btn_send.setEnabled(False)
+        self._btn_cancel.setVisible(True)
 
         self._worker = _SendWorker(targets, graph_config, job_id)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(
             lambda s, e, sk: self._on_finished(job_id, s, e, sk))
         self._worker.start()
+
+    def _cancel_send(self):
+        if not hasattr(self, "_worker") or not self._worker.isRunning():
+            return
+        ret = QMessageBox.question(
+            self, "送信中止確認",
+            "送信を中止しますか？\n未送信の宛先には送信されません。\n"
+            "送信済みの分は取り消せません。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        self._worker.request_cancel()
+        self._btn_cancel.setEnabled(False)
 
     def _on_progress(self, current: int, total: int, message: str):
         self._progress.setValue(current)
@@ -662,6 +693,8 @@ class SendTab(QWidget):
         finally:
             session.close()
         self._btn_send.setEnabled(True)
+        self._btn_cancel.setVisible(False)
+        self._btn_cancel.setEnabled(True)
         self._progress.setVisible(False)
         QMessageBox.information(
             self, "送信完了",
