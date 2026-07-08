@@ -190,11 +190,15 @@ class SendTab(QWidget):
         self._sig_combo = QComboBox()
         self._subject_edit = QLineEdit()
         self._body_edit = QTextEdit()
-        self._body_edit.setMaximumHeight(120)
+        self._body_edit.setMinimumHeight(200)
+        self._body_edit.setMaximumHeight(280)
+        self._btn_expand_body = QPushButton("本文を拡大して編集")
+        self._btn_expand_body.clicked.connect(self._expand_body_edit)
         f.addRow("テンプレート", self._template_combo)
         f.addRow("署名", self._sig_combo)
         f.addRow("件名", self._subject_edit)
         f.addRow("本文", self._body_edit)
+        f.addRow("", self._btn_expand_body)
         return grp
 
     def _build_step3(self) -> QGroupBox:
@@ -436,6 +440,24 @@ class SendTab(QWidget):
                             break
         finally:
             session.close()
+
+    def _expand_body_edit(self):
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout as _QVBoxLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle("本文編集")
+        dlg.resize(700, 600)
+        layout = _QVBoxLayout(dlg)
+        editor = QTextEdit()
+        editor.setPlainText(self._body_edit.toPlainText())
+        layout.addWidget(editor)
+        btn_row = QHBoxLayout()
+        btn_ok = QPushButton("反映して閉じる")
+        btn_ok.clicked.connect(dlg.accept)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_ok)
+        layout.addLayout(btn_row)
+        if dlg.exec():
+            self._body_edit.setPlainText(editor.toPlainText())
 
     # ──────────────────────────────────────────────────────
     # 差し込み・添付
