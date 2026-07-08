@@ -74,6 +74,32 @@ class RecipientPanel(QWidget):
         self._table.setUpdatesEnabled(True)
         self._update_count()
 
+    def select_all_visible(self):
+        self._table.setUpdatesEnabled(False)
+        for row in range(self._table.rowCount()):
+            if self._table.isRowHidden(row):
+                continue
+            cb = self._table.cellWidget(row, 0)
+            if cb:
+                cb.blockSignals(True)
+                cb.setChecked(True)
+                cb.blockSignals(False)
+        self._table.setUpdatesEnabled(True)
+        self._update_count()
+
+    def clear_visible(self):
+        self._table.setUpdatesEnabled(False)
+        for row in range(self._table.rowCount()):
+            if self._table.isRowHidden(row):
+                continue
+            cb = self._table.cellWidget(row, 0)
+            if cb:
+                cb.blockSignals(True)
+                cb.setChecked(False)
+                cb.blockSignals(False)
+        self._table.setUpdatesEnabled(True)
+        self._update_count()
+
     def filter(self, keyword: str):
         if not keyword:
             for row in range(self._table.rowCount()):
@@ -107,6 +133,12 @@ class RecipientPanel(QWidget):
         self._search.textChanged.connect(
             lambda text: self.filter(text))
         search_row.addWidget(self._search)
+        btn_select_all = QPushButton("表示中を全選択")
+        btn_select_all.clicked.connect(self.select_all_visible)
+        btn_clear_visible = QPushButton("表示中を全解除")
+        btn_clear_visible.clicked.connect(self.clear_visible)
+        search_row.addWidget(btn_select_all)
+        search_row.addWidget(btn_clear_visible)
         btn_fd = QPushButton("A-")
         btn_fd.setFixedWidth(36)
         btn_fd.setToolTip("文字を小さくする")
