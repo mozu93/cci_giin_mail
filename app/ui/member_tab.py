@@ -49,6 +49,16 @@ class MemberTab(QWidget):
         btn_add = QPushButton("追加")
         btn_add.clicked.connect(self._add)
 
+        self._btn_edit = QPushButton("編集")
+        self._btn_edit.setEnabled(False)
+        self._btn_edit.clicked.connect(self._edit)
+        self._btn_history = QPushButton("変更履歴")
+        self._btn_history.setEnabled(False)
+        self._btn_history.clicked.connect(self._show_history)
+        self._btn_retire = QPushButton("議員退任")
+        self._btn_retire.setEnabled(False)
+        self._btn_retire.clicked.connect(self._delete)
+
         btn_file = QPushButton("ファイル")
         file_menu = QMenu(btn_file)
         file_menu.addAction("インポート", self._import)
@@ -61,6 +71,9 @@ class MemberTab(QWidget):
         btn_order.clicked.connect(self._order_settings)
 
         row2.addWidget(btn_add)
+        row2.addWidget(self._btn_edit)
+        row2.addWidget(self._btn_history)
+        row2.addWidget(self._btn_retire)
         row2.addWidget(btn_file)
         row2.addWidget(btn_order)
         row2.addStretch()
@@ -99,6 +112,7 @@ class MemberTab(QWidget):
         self._table.doubleClicked.connect(self._edit)
         self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._show_context_menu)
+        self._table.itemSelectionChanged.connect(self._on_selection_changed)
 
         from app.services.settings_service import get_font_size
         from PyQt6.QtGui import QFont as _QFont
@@ -218,6 +232,13 @@ class MemberTab(QWidget):
                     f"{active_count} 件（議員退任者 {retired_count} 件を含む）")
         finally:
             session.close()
+        self._on_selection_changed()
+
+    def _on_selection_changed(self):
+        has_selection = self._table.currentRow() >= 0
+        self._btn_edit.setEnabled(has_selection)
+        self._btn_history.setEnabled(has_selection)
+        self._btn_retire.setEnabled(has_selection)
 
     def _selected_member_id(self) -> int | None:
         row = self._table.currentRow()
