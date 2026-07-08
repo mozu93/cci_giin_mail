@@ -165,6 +165,9 @@ class TemplateTab(QWidget):
     def _new(self):
         if not self._confirm_discard():
             return
+        self._clear_form()
+
+    def _clear_form(self):
         self._current_id = None
         self._name.clear()
         self._subject.clear()
@@ -211,6 +214,5 @@ class TemplateTab(QWidget):
         session = get_session()
         delete_template(session, self._current_id)
         session.close()
-        self._current_id = None
-        self._new()
+        self._clear_form()
         self._load()
