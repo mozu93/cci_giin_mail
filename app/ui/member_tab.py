@@ -161,6 +161,7 @@ class MemberTab(QWidget):
         self._load_positions()
         active_only = not self._show_inactive.isChecked()
         session = get_session()
+        self._table.setSortingEnabled(False)
         try:
             members = get_members(
                 session,
@@ -229,6 +230,7 @@ class MemberTab(QWidget):
                     f"{active_count} 件（議員退任者 {retired_count} 件を含む）")
         finally:
             session.close()
+        self._table.setSortingEnabled(True)
         self._on_selection_changed()
 
     def _on_selection_changed(self):

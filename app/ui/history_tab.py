@@ -73,6 +73,7 @@ class HistoryTab(QWidget):
         finally:
             session.close()
 
+        self._job_table.setSortingEnabled(False)
         self._job_table.setRowCount(0)
         for j in self._jobs:
             row = self._job_table.rowCount()
@@ -86,6 +87,7 @@ class HistoryTab(QWidget):
             self._job_table.setItem(row, 4, QTableWidgetItem(str(j.success_count)))
             self._job_table.setItem(row, 5, QTableWidgetItem(str(j.error_count)))
             self._job_table.item(row, 0).setData(Qt.ItemDataRole.UserRole, j.id)
+        self._job_table.setSortingEnabled(True)
 
         self._log_table.setRowCount(0)
 
