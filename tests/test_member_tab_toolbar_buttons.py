@@ -20,6 +20,38 @@ def test_edit_buttons_disabled_until_row_selected(qtbot, monkeypatch):
     assert tab._btn_retire.isEnabled() is True
 
 
+def test_buttons_redisable_after_refresh_empty_list(qtbot, monkeypatch):
+    fake_session = _FakeSession()
+    monkeypatch.setattr("app.ui.member_tab.get_session", lambda: fake_session)
+    monkeypatch.setattr("app.ui.member_tab.get_members", lambda *a, **k: [_Member()])
+
+    from app.ui.member_tab import MemberTab
+    tab = MemberTab()
+    qtbot.addWidget(tab)
+
+    # Buttons start disabled
+    assert tab._btn_edit.isEnabled() is False
+    assert tab._btn_history.isEnabled() is False
+    assert tab._btn_retire.isEnabled() is False
+
+    # Select row; buttons become enabled
+    tab._table.selectRow(0)
+    assert tab._btn_edit.isEnabled() is True
+    assert tab._btn_history.isEnabled() is True
+    assert tab._btn_retire.isEnabled() is True
+
+    # Re-monkeypatch get_members to return empty list
+    monkeypatch.setattr("app.ui.member_tab.get_members", lambda *a, **k: [])
+
+    # Call refresh() which calls _load(), which clears table and calls _on_selection_changed()
+    tab.refresh()
+
+    # Buttons should be re-disabled because table is now empty
+    assert tab._btn_edit.isEnabled() is False
+    assert tab._btn_history.isEnabled() is False
+    assert tab._btn_retire.isEnabled() is False
+
+
 class _Member:
     def __init__(self):
         self.id = 1
