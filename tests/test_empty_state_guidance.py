@@ -16,6 +16,7 @@ def test_member_tab_shows_guidance_when_empty(qtbot, monkeypatch):
     from app.ui.member_tab import MemberTab
     tab = MemberTab()
     qtbot.addWidget(tab)
+    tab.show()
     assert hasattr(tab, '_empty_hint'), "MemberTab should have _empty_hint attribute"
     assert tab._empty_hint.isVisible() is True
 
@@ -29,6 +30,7 @@ def test_member_tab_hides_guidance_with_filter(qtbot, monkeypatch):
     from app.ui.member_tab import MemberTab
     tab = MemberTab()
     qtbot.addWidget(tab)
+    tab.show()
 
     # Apply search filter
     tab._search.setText("test")
@@ -44,6 +46,7 @@ def test_template_tab_shows_guidance_when_empty(qtbot, monkeypatch):
     from app.ui.template_tab import TemplateTab
     tab = TemplateTab()
     qtbot.addWidget(tab)
+    tab.show()
     assert hasattr(tab, '_empty_hint'), "TemplateTab should have _empty_hint attribute"
     assert tab._empty_hint.isVisible() is True
 
@@ -66,4 +69,5 @@ def test_template_tab_hides_guidance_when_not_empty(qtbot, monkeypatch):
     from app.ui.template_tab import TemplateTab
     tab = TemplateTab()
     qtbot.addWidget(tab)
+    tab.show()
     assert tab._empty_hint.isVisible() is False

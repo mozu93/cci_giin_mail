@@ -18,28 +18,6 @@ class MemberTab(QWidget):
         self._build()
         self._load()
 
-    def showEvent(self, event):
-        """Update empty hint visibility when widget is shown."""
-        super().showEvent(event)
-        self._update_empty_hint_visibility()
-
-    def _update_empty_hint_visibility(self):
-        """Update the visibility of the empty hint label."""
-        if not hasattr(self, '_members'):
-            return
-        no_filter = (
-            not self._search.text().strip()
-            and self._pos_filter.currentData() is None
-            and not self._show_inactive.isChecked()
-        )
-        # Ensure all parents are visible so isVisible() returns True
-        parent = self._empty_hint.parent()
-        while parent:
-            if not parent.isVisible():
-                parent.setVisible(True)
-            parent = parent.parent()
-        self._empty_hint.setVisible(no_filter and len(self._members) == 0)
-
     def refresh(self):
         self._load()
 
@@ -258,7 +236,12 @@ class MemberTab(QWidget):
                 self._count_label.setText(
                     f"{active_count} 件（議員退任者 {retired_count} 件を含む）")
 
-            self._update_empty_hint_visibility()
+            no_filter = (
+                not self._search.text().strip()
+                and self._pos_filter.currentData() is None
+                and not self._show_inactive.isChecked()
+            )
+            self._empty_hint.setVisible(no_filter and len(members) == 0)
         finally:
             session.close()
         self._table.setSortingEnabled(True)

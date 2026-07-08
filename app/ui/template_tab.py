@@ -121,13 +121,6 @@ class TemplateTab(QWidget):
             self._sig_combo.addItem(s.name, s.id)
         self._sig_combo.blockSignals(False)
 
-        # Set visibility of empty hint
-        # Note: ensure all parents are visible so isVisible() returns True
-        parent = self._empty_hint.parent()
-        while parent:
-            if not parent.isVisible():
-                parent.setVisible(True)
-            parent = parent.parent()
         self._empty_hint.setVisible(len(self._templates) == 0)
 
     def _on_select(self, row: int):
