@@ -1,4 +1,6 @@
 # app/ui/settings_tab.py
+import os
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem,
@@ -25,7 +27,8 @@ class SettingsTab(QWidget):
         inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
         inner.addTab(_ExportSettingsWidget(), "出力設定")
-        inner.addTab(_DataWidget(), "データ管理")
+        if os.environ.get("CCI_MAIL_DEV_TOOLS") == "1":
+            inner.addTab(_DataWidget(), "データ管理")
         layout.addWidget(inner)
 
 
