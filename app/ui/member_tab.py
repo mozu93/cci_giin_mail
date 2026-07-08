@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QCheckBox, QMenu
 )
 from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QKeySequence, QShortcut
 from app.database.connection import get_session
 from app.database.models import Position
 from app.services.member_service import get_members, delete_member
@@ -26,6 +26,8 @@ class MemberTab(QWidget):
 
     def _build(self):
         layout = QVBoxLayout(self)
+        QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(
+            lambda: (self._search.setFocus(), self._search.selectAll()))
 
         # ツールバー 1行目：検索・フィルター
         row1 = QHBoxLayout()

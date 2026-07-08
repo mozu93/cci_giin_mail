@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QLabel, QGroupBox, QMessageBox
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeySequence, QShortcut
 from app.database.connection import get_session
 from app.services.template_service import (
     get_templates, create_template, update_template, delete_template
@@ -30,6 +31,7 @@ class TemplateTab(QWidget):
 
     def _build(self):
         layout = QVBoxLayout(self)
+        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._save)
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # 左ペイン：テンプレート一覧
