@@ -18,6 +18,9 @@ class MemberTab(QWidget):
         self._build()
         self._load()
 
+    def refresh(self):
+        self._load()
+
     def set_staff_name(self, name: str):
         self._staff_name = name
 

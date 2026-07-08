@@ -17,6 +17,9 @@ class HistoryTab(QWidget):
         self._build()
         self._load_jobs()
 
+    def refresh(self):
+        self._load_jobs()
+
     def _build(self):
         layout = QVBoxLayout(self)
 
