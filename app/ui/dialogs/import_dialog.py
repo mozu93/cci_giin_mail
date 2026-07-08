@@ -53,6 +53,17 @@ class ImportDialog(QDialog):
         file_row.addWidget(btn_browse)
         layout.addLayout(file_row)
 
+        # データプレビュー（先頭5行）
+        preview_grp = QGroupBox("データプレビュー（先頭5行）")
+        preview_layout = QVBoxLayout(preview_grp)
+        self._preview_table = QTableWidget(0, 0)
+        self._preview_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._preview_table.setMaximumHeight(160)
+        preview_layout.addWidget(self._preview_table)
+        self._row_count_label = QLabel("")
+        preview_layout.addWidget(self._row_count_label)
+        layout.addWidget(preview_grp)
+
         # 列マッピング
         grp = QGroupBox("列マッピング（ファイル読み込み後に設定）")
         form = QFormLayout(grp)
@@ -87,11 +98,27 @@ class ImportDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
             return
+        self._on_file_loaded(path, headers, rows)
+
+    def _on_file_loaded(self, path: str, headers: list[str], rows: list[list]):
         self._file_path.setText(path)
         self._headers = headers
         self._rows = rows
         self._populate_combos(headers)
+        self._populate_preview(headers, rows)
         self._btn_import.setEnabled(True)
+
+    def _populate_preview(self, headers: list[str], rows: list[list]):
+        self._preview_table.setColumnCount(len(headers))
+        self._preview_table.setHorizontalHeaderLabels(headers)
+        preview_rows = rows[:5]
+        self._preview_table.setRowCount(len(preview_rows))
+        for r, row in enumerate(preview_rows):
+            for c, value in enumerate(row):
+                self._preview_table.setItem(r, c, QTableWidgetItem(str(value)))
+        self._preview_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
+        self._row_count_label.setText(f"全 {len(rows)} 件中 先頭{len(preview_rows)}件を表示")
 
     def _populate_combos(self, headers: list[str]):
         for combo in self._combos.values():
