@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem,
     QCheckBox, QMessageBox, QHeaderView, QLabel, QRadioButton, QButtonGroup,
-    QFileDialog, QInputDialog,
+    QFileDialog, QInputDialog, QTextEdit,
 )
 from PyQt6.QtCore import Qt
 from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config, get_html_export_path
@@ -94,8 +94,9 @@ class _SignatureWidget(QWidget):
 
         form = QFormLayout()
         self._name = QLineEdit()
-        self._body = QLineEdit()
-        self._body.setPlaceholderText("署名本文（複数行は\\nで区切る）")
+        self._body = QTextEdit()
+        self._body.setPlaceholderText("署名本文（複数行入力可）")
+        self._body.setMaximumHeight(140)
         form.addRow("署名名", self._name)
         form.addRow("本文", self._body)
         layout.addLayout(form)
@@ -137,7 +138,7 @@ class _SignatureWidget(QWidget):
             return
         s = self._signatures[row]
         self._name.setText(s.name)
-        self._body.setText(s.body.replace("\n", "\\n"))
+        self._body.setPlainText(s.body)
 
     def _selected_id(self) -> int | None:
         row = self._table.currentRow()
@@ -147,7 +148,7 @@ class _SignatureWidget(QWidget):
 
     def _add(self):
         name = self._name.text().strip()
-        body = self._body.text().replace("\\n", "\n")
+        body = self._body.toPlainText()
         if not name:
             QMessageBox.warning(self, "入力エラー", "署名名を入力してください。")
             return
@@ -161,7 +162,7 @@ class _SignatureWidget(QWidget):
         if sig_id is None:
             return
         name = self._name.text().strip()
-        body = self._body.text().replace("\\n", "\n")
+        body = self._body.toPlainText()
         if not name:
             QMessageBox.warning(self, "入力エラー", "署名名を入力してください。")
             return
