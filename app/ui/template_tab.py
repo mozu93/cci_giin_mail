@@ -26,6 +26,8 @@ class TemplateTab(QWidget):
         self._build()
         self._load()
 
+
+
     def _build(self):
         layout = QVBoxLayout(self)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -45,6 +47,12 @@ class TemplateTab(QWidget):
         left_layout.addWidget(QLabel("テンプレート一覧"))
         left_layout.addWidget(self._list)
         left_layout.addLayout(btn_row)
+        self._empty_hint = QLabel(
+            "テンプレートがまだありません。「新規」ボタンから作成してください。")
+        self._empty_hint.setWordWrap(True)
+        self._empty_hint.setStyleSheet("color: #64748B; padding: 4px;")
+        self._empty_hint.setVisible(False)
+        left_layout.addWidget(self._empty_hint)
         splitter.addWidget(left)
 
         # 右ペイン：編集フォーム
@@ -112,6 +120,15 @@ class TemplateTab(QWidget):
         for s in self._signatures:
             self._sig_combo.addItem(s.name, s.id)
         self._sig_combo.blockSignals(False)
+
+        # Set visibility of empty hint
+        # Note: ensure all parents are visible so isVisible() returns True
+        parent = self._empty_hint.parent()
+        while parent:
+            if not parent.isVisible():
+                parent.setVisible(True)
+            parent = parent.parent()
+        self._empty_hint.setVisible(len(self._templates) == 0)
 
     def _on_select(self, row: int):
         if row < 0 or row >= len(self._templates):

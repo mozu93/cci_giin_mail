@@ -18,6 +18,28 @@ class MemberTab(QWidget):
         self._build()
         self._load()
 
+    def showEvent(self, event):
+        """Update empty hint visibility when widget is shown."""
+        super().showEvent(event)
+        self._update_empty_hint_visibility()
+
+    def _update_empty_hint_visibility(self):
+        """Update the visibility of the empty hint label."""
+        if not hasattr(self, '_members'):
+            return
+        no_filter = (
+            not self._search.text().strip()
+            and self._pos_filter.currentData() is None
+            and not self._show_inactive.isChecked()
+        )
+        # Ensure all parents are visible so isVisible() returns True
+        parent = self._empty_hint.parent()
+        while parent:
+            if not parent.isVisible():
+                parent.setVisible(True)
+            parent = parent.parent()
+        self._empty_hint.setVisible(no_filter and len(self._members) == 0)
+
     def refresh(self):
         self._load()
 
@@ -125,6 +147,13 @@ class MemberTab(QWidget):
 
         layout.addWidget(self._table)
 
+        self._empty_hint = QLabel(
+            "会員データがまだ登録されていません。「追加」ボタン、または"
+            "「ファイル→インポート」から会員を登録してください。")
+        self._empty_hint.setStyleSheet("color: #64748B; padding: 8px;")
+        self._empty_hint.setVisible(False)
+        layout.addWidget(self._empty_hint)
+
         self._count_label = QLabel("")
         layout.addWidget(self._count_label)
 
@@ -228,6 +257,8 @@ class MemberTab(QWidget):
                 retired_count = len(members) - active_count
                 self._count_label.setText(
                     f"{active_count} 件（議員退任者 {retired_count} 件を含む）")
+
+            self._update_empty_hint_visibility()
         finally:
             session.close()
         self._table.setSortingEnabled(True)
