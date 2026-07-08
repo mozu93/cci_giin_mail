@@ -22,6 +22,7 @@ class TemplateTab(QWidget):
     def __init__(self):
         super().__init__()
         self._current_id: int | None = None
+        self._snapshot: tuple = ("", "", "", None)
         self._build()
         self._load()
 
@@ -113,6 +114,11 @@ class TemplateTab(QWidget):
     def _on_select(self, row: int):
         if row < 0 or row >= len(self._templates):
             return
+        if not self._confirm_discard():
+            self._list.blockSignals(True)
+            self._select_row_for_id(self._current_id)
+            self._list.blockSignals(False)
+            return
         t = self._templates[row]
         self._current_id = t.id
         self._name.setText(t.name)
@@ -122,18 +128,50 @@ class TemplateTab(QWidget):
             if self._sig_combo.itemData(i) == t.signature_id:
                 self._sig_combo.setCurrentIndex(i)
                 break
+        self._take_snapshot()
+
+    def _select_row_for_id(self, template_id: int | None):
+        for i, t in enumerate(self._templates):
+            if t.id == template_id:
+                self._list.setCurrentRow(i)
+                return
+        self._list.clearSelection()
+
+    def _take_snapshot(self):
+        self._snapshot = (
+            self._name.text(), self._subject.text(),
+            self._body.toPlainText(), self._sig_combo.currentData())
+
+    def _is_dirty(self) -> bool:
+        current = (
+            self._name.text(), self._subject.text(),
+            self._body.toPlainText(), self._sig_combo.currentData())
+        return current != self._snapshot
+
+    def _confirm_discard(self) -> bool:
+        if not self._is_dirty():
+            return True
+        ret = QMessageBox.question(
+            self, "未保存の変更",
+            "編集中の内容が保存されていません。破棄しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        return ret == QMessageBox.StandardButton.Yes
 
     def _insert_placeholder(self, placeholder: str):
         self._body.setFocus()
         self._body.insertPlainText(placeholder)
 
     def _new(self):
+        if not self._confirm_discard():
+            return
         self._current_id = None
         self._name.clear()
         self._subject.clear()
         self._body.clear()
         self._sig_combo.setCurrentIndex(0)
         self._list.clearSelection()
+        self._take_snapshot()
 
     def _save(self):
         name = self._name.text().strip()
@@ -159,6 +197,7 @@ class TemplateTab(QWidget):
             session.close()
         QMessageBox.information(self, "保存", "テンプレートを保存しました。")
         self._load()
+        self._take_snapshot()
 
     def _delete(self):
         if self._current_id is None:
