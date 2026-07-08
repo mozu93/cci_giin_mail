@@ -95,13 +95,12 @@ class MemberTab(QWidget):
         layout.addLayout(font_row)
 
         # 一覧テーブル
-        self._table = QTableWidget(0, 14)
+        self._table = QTableWidget(0, 10)
         self._table.setHorizontalHeaderLabels([
             "写真",
             "会員番号", "会議所役職", "事業所名", "事業所名フリガナ",
             "氏名", "氏名フリガナ", "役職名",
-            "メール1", "メール2", "メール3", "メール4", "メール5",
-            "最終更新日",
+            "メール(件数)", "最終更新日",
         ])
         self._table.horizontalHeader().setSectionResizeMode(
             3, QHeaderView.ResizeMode.Interactive)
@@ -209,20 +208,18 @@ class MemberTab(QWidget):
                         item.setForeground(gray)
                     self._table.setItem(row, i + 1, item)
 
-                # Cols 8-12: メール（旧 7-11）
-                for ei, ea in enumerate(m.email_addresses[:5]):
-                    label = f"（{ea.label}）" if ea.label else ""
-                    item = QTableWidgetItem(f"{ea.address}{label}")
-                    if is_retired:
-                        item.setForeground(gray)
-                    self._table.setItem(row, 8 + ei, item)
+                # Col 8: メール件数（詳細は編集画面で確認）
+                item = QTableWidgetItem(f"{len(m.email_addresses)}件")
+                if is_retired:
+                    item.setForeground(gray)
+                self._table.setItem(row, 8, item)
 
-                # Col 13: 最終更新日（旧 12）
+                # Col 9: 最終更新日
                 upd = m.updated_at.strftime("%Y/%m/%d") if m.updated_at else ""
                 item = QTableWidgetItem(upd)
                 if is_retired:
                     item.setForeground(gray)
-                self._table.setItem(row, 13, item)
+                self._table.setItem(row, 9, item)
             active_count = sum(1 for m in members if m.is_active)
             if active_only:
                 self._count_label.setText(f"{len(members)} 件")
