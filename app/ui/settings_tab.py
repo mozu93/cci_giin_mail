@@ -51,6 +51,8 @@ class _GraphSettingsWidget(QWidget):
         btn_row.addWidget(btn_test)
         btn_row.addStretch()
         layout.addLayout(btn_row)
+        self._status_label = QLabel("")
+        layout.addWidget(self._status_label)
         layout.addStretch()
         self._load()
 
@@ -68,7 +70,8 @@ class _GraphSettingsWidget(QWidget):
             "test_address": self._test_address.text().strip(),
         }
         save_config(config)
-        QMessageBox.information(self, "保存", "設定を保存しました。")
+        from app.ui.widgets.inline_status import show_inline_message
+        show_inline_message(self._status_label, "設定を保存しました")
 
     def _test_connection(self):
         self._save()
@@ -402,6 +405,8 @@ class _ExportSettingsWidget(QWidget):
         btn_row.addWidget(btn_export)
         btn_row.addStretch()
         layout.addLayout(btn_row)
+        self._status_label = QLabel("")
+        layout.addWidget(self._status_label)
         layout.addStretch()
         self._load()
 
@@ -419,7 +424,8 @@ class _ExportSettingsWidget(QWidget):
         config = get_config()
         config["html_export_path"] = self._path_edit.text().strip()
         save_config(config)
-        QMessageBox.information(self, "保存", "設定を保存しました。")
+        from app.ui.widgets.inline_status import show_inline_message
+        show_inline_message(self._status_label, "設定を保存しました")
 
     def _export_now(self):
         path = self._path_edit.text().strip()

@@ -83,6 +83,8 @@ class TemplateTab(QWidget):
         btn_save = QPushButton("保存")
         btn_save.clicked.connect(self._save)
         right_layout.addWidget(btn_save)
+        self._status_label = QLabel("")
+        right_layout.addWidget(self._status_label)
         splitter.addWidget(right)
 
         splitter.setSizes([200, 500])
@@ -198,7 +200,8 @@ class TemplateTab(QWidget):
             return
         finally:
             session.close()
-        QMessageBox.information(self, "保存", "テンプレートを保存しました。")
+        from app.ui.widgets.inline_status import show_inline_message
+        show_inline_message(self._status_label, "テンプレートを保存しました")
         self._load()
         self._take_snapshot()
 
