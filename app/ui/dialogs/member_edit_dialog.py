@@ -23,11 +23,13 @@ class MemberEditDialog(QDialog):
         self._staff_name = staff_name
         self._photo_path: str | None = None
         self._photo_deleted: bool = False
+        self._snapshot: tuple = ()
         self.setWindowTitle("会員編集" if member else "会員追加")
         self.setMinimumWidth(520)
         self._build()
         if member:
             self._load(member)
+        self._take_snapshot()
 
     def _build(self):
         layout = QVBoxLayout(self)
@@ -242,3 +244,35 @@ class MemberEditDialog(QDialog):
             QMessageBox.critical(self, "エラー", str(e))
             return
         self.accept()
+
+    def _current_state(self) -> tuple:
+        emails = tuple(
+            (a.text().strip(), l.text().strip()) for a, l in self._email_rows)
+        return (
+            self._member_number.text().strip(),
+            self._org_name.text().strip(),
+            self._org_kana.text().strip(),
+            self._title.text().strip(),
+            self._name.text().strip(),
+            self._name_kana.text().strip(),
+            self._notes.text().strip(),
+            self._position_combo.currentData(),
+            emails,
+        )
+
+    def _take_snapshot(self):
+        self._snapshot = self._current_state()
+
+    def _is_dirty(self) -> bool:
+        return self._current_state() != self._snapshot
+
+    def reject(self):
+        if self._is_dirty():
+            ret = QMessageBox.question(
+                self, "未保存の変更",
+                "入力内容が保存されていません。破棄しますか？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if ret != QMessageBox.StandardButton.Yes:
+                return
+        super().reject()
