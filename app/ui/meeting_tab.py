@@ -108,7 +108,8 @@ class MeetingTab(QWidget):
             self, "削除確認",
             f"会議「{self._meeting_combo.currentText()}」を削除しますか？\n"
             "出欠データもすべて削除されます。",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
             return
         session = get_session()

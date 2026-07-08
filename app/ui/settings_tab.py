@@ -176,7 +176,8 @@ class _SignatureWidget(QWidget):
             return
         ret = QMessageBox.question(
             self, "削除確認", "この署名を削除しますか？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
             return
         session = get_session()
@@ -460,6 +461,7 @@ class _DataWidget(QWidget):
             self, "一括削除（開発用）",
             "全会員データを完全に削除します。\nこの操作は取り消せません。\n\n本当に実行しますか？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
             return

@@ -276,6 +276,7 @@ class MemberTab(QWidget):
             self, "議員退任処理確認",
             "この会員を議員退任処理しますか？\n一覧から非表示になりますが、変更履歴は保持されます。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
             return

@@ -89,6 +89,7 @@ class ImportRevertDialog(QDialog):
             "・インポートで更新された会員は変更前の状態に戻ります\n\n"
             "この操作は元に戻せません。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
             return

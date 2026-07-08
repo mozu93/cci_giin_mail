@@ -165,7 +165,8 @@ class TemplateTab(QWidget):
             return
         ret = QMessageBox.question(
             self, "削除確認", "このテンプレートを削除しますか？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
             return
         session = get_session()

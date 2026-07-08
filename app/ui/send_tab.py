@@ -642,7 +642,8 @@ class SendTab(QWidget):
         )
         ret = QMessageBox.question(
             self, "送信確認", msg,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
             return
 
