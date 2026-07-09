@@ -3,6 +3,9 @@ from PyQt6.QtWidgets import (
     QPushButton, QMessageBox, QInputDialog, QFrame
 )
 from PyQt6.QtCore import Qt
+from app.database.connection import get_session
+from app.services.staff_service import get_all_staff, create_staff
+from app.services.settings_service import get_last_staff, set_last_staff
 
 
 class LoginDialog(QDialog):
@@ -32,12 +35,15 @@ class LoginDialog(QDialog):
         btn_row = QHBoxLayout()
         self._btn_add = QPushButton("職員を追加")
         self._btn_add.clicked.connect(self._add_staff)
-        btn_login = QPushButton("ログイン")
-        btn_login.setDefault(True)
-        btn_login.clicked.connect(self._login)
+        self._btn_login = QPushButton("ログイン")
+        self._btn_login.setDefault(True)
+        self._btn_login.setEnabled(False)
+        self._btn_login.clicked.connect(self._login)
+        self._combo.currentIndexChanged.connect(
+            lambda: self._btn_login.setEnabled(bool(self._combo.currentData())))
         btn_row.addWidget(self._btn_add)
         btn_row.addStretch()
-        btn_row.addWidget(btn_login)
+        btn_row.addWidget(self._btn_login)
         layout.addLayout(btn_row)
 
         # 区切り線
@@ -73,8 +79,6 @@ class LoginDialog(QDialog):
         )
 
     def _load_staff(self):
-        from app.database.connection import get_session
-        from app.services.staff_service import get_all_staff
         session = get_session()
         try:
             staff = [s for s in get_all_staff(session) if s.is_active]
@@ -82,19 +86,23 @@ class LoginDialog(QDialog):
             session.close()
         self._combo.clear()
         self._combo.addItem("（選択してください）", "")
+        last_staff = get_last_staff()
+        last_index = 0
         for s in staff:
             self._combo.addItem(s.name, s.name)
+            if s.name == last_staff:
+                last_index = self._combo.count() - 1
+        self._combo.setCurrentIndex(last_index)
 
         no_staff = len(staff) == 0
         self._hint.setVisible(no_staff)
         self._btn_add.setVisible(no_staff)
+        self._btn_login.setEnabled(bool(self._combo.currentData()))
 
     def _add_staff(self):
         name, ok = QInputDialog.getText(self, "職員を追加", "職員名を入力してください：")
         if not ok or not name.strip():
             return
-        from app.database.connection import get_session
-        from app.services.staff_service import create_staff
         session = get_session()
         try:
             create_staff(session, name.strip())
@@ -110,6 +118,7 @@ class LoginDialog(QDialog):
             return
         self._staff_name = name
         self._readonly = False
+        set_last_staff(name)
         self.accept()
 
     def _login_readonly(self):

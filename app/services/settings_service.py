@@ -25,3 +25,13 @@ def set_font_size(key: str, size: int):
     data = _load()
     data.setdefault("font_sizes", {})[key] = size
     _save(data)
+
+
+def get_last_staff() -> str:
+    return _load().get("last_staff", "")
+
+
+def set_last_staff(name: str):
+    data = _load()
+    data["last_staff"] = name
+    _save(data)
