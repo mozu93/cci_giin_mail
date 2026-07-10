@@ -13,6 +13,7 @@ from app.services.member_service import get_members
 from app.services.template_service import get_templates, get_template
 from app.services.signature_service import get_signatures, get_default_signature
 from app.services.position_service import get_positions
+from app.services.committee_service import get_committees
 from app.services.staff_service import get_staff_by_name
 from app.services.email_service import compile_send_targets, send_mail, send_test_mail
 from app.services.send_job_service import create_job, start_job, finish_job, add_log
@@ -136,13 +137,17 @@ class SendTab(QWidget):
 
         mode_row = QHBoxLayout()
         self._rb_by_pos = QRadioButton("役職で選ぶ")
+        self._rb_by_committee = QRadioButton("委員会で選ぶ")
         self._rb_by_attend = QRadioButton("会議の出欠で選ぶ")
         self._rb_by_pos.setChecked(True)
         bg = QButtonGroup(self)
         bg.addButton(self._rb_by_pos)
+        bg.addButton(self._rb_by_committee)
         bg.addButton(self._rb_by_attend)
         self._rb_by_pos.toggled.connect(self._on_mode_change)
+        self._rb_by_committee.toggled.connect(self._on_mode_change)
         mode_row.addWidget(self._rb_by_pos)
+        mode_row.addWidget(self._rb_by_committee)
         mode_row.addWidget(self._rb_by_attend)
         mode_row.addStretch()
         layout.addLayout(mode_row)
@@ -157,6 +162,18 @@ class SendTab(QWidget):
         self._pos_list.itemSelectionChanged.connect(self._on_pos_select)
         pp.addWidget(self._pos_list)
         layout.addWidget(self._pos_panel)
+
+        self._committee_panel = QWidget()
+        cp = QVBoxLayout(self._committee_panel)
+        cp.setContentsMargins(0, 0, 0, 0)
+        cp.addWidget(QLabel("委員会（複数選択可 / Ctrl+クリック）："))
+        self._committee_list = QListWidget()
+        self._committee_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self._committee_list.setMaximumHeight(100)
+        self._committee_list.itemSelectionChanged.connect(self._on_committee_select)
+        cp.addWidget(self._committee_list)
+        self._committee_panel.setVisible(False)
+        layout.addWidget(self._committee_panel)
 
         self._attend_panel = QWidget()
         ap = QVBoxLayout(self._attend_panel)
@@ -321,6 +338,14 @@ class SendTab(QWidget):
                 self._pos_list.addItem(item)
             self._pos_list.blockSignals(False)
 
+            self._committee_list.blockSignals(True)
+            self._committee_list.clear()
+            for c in get_committees(session):
+                item = QListWidgetItem(c.name)
+                item.setData(Qt.ItemDataRole.UserRole, c.id)
+                self._committee_list.addItem(item)
+            self._committee_list.blockSignals(False)
+
             self._members = get_members(session)
             self._recipient.load_members(self._members)
 
@@ -352,6 +377,7 @@ class SendTab(QWidget):
     def _clear_all(self):
         self._rb_by_pos.setChecked(True)
         self._pos_list.clearSelection()
+        self._committee_list.clearSelection()
         for cb in self._status_checks.values():
             cb.setChecked(False)
         self._recipient.clear_checks()
@@ -371,9 +397,12 @@ class SendTab(QWidget):
 
     def _on_mode_change(self):
         is_pos = self._rb_by_pos.isChecked()
+        is_committee = self._rb_by_committee.isChecked()
+        is_attend = self._rb_by_attend.isChecked()
         self._pos_panel.setVisible(is_pos)
-        self._attend_panel.setVisible(not is_pos)
-        if not is_pos:
+        self._committee_panel.setVisible(is_committee)
+        self._attend_panel.setVisible(is_attend)
+        if is_attend:
             self._load_meeting_combo()
         self._recipient.clear_checks()
 
@@ -401,6 +430,18 @@ class SendTab(QWidget):
             self._recipient.clear_checks()
             return
         member_ids = {m.id for m in self._members if m.position_id in selected_pos_ids}
+        self._recipient.set_checks_by_member_ids(member_ids)
+
+    def _on_committee_select(self):
+        selected_committee_ids = {
+            item.data(Qt.ItemDataRole.UserRole)
+            for item in self._committee_list.selectedItems()
+        }
+        if not selected_committee_ids:
+            self._recipient.clear_checks()
+            return
+        member_ids = {m.id for m in self._members
+                     if m.committee_id in selected_committee_ids}
         self._recipient.set_checks_by_member_ids(member_ids)
 
     def _on_attend_filter(self):

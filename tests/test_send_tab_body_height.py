@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QTextEdit, QDialog
 def test_body_edit_has_expand_button(qtbot, monkeypatch):
     monkeypatch.setattr("app.ui.send_tab.get_session", lambda: _FakeSession())
     monkeypatch.setattr("app.ui.send_tab.get_positions", lambda s: [])
+    monkeypatch.setattr("app.ui.send_tab.get_committees", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_members", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_templates", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_signatures", lambda s: [])
@@ -21,6 +22,7 @@ def test_expand_body_edit_accept(qtbot, monkeypatch):
     """Test that accepting the expand dialog copies new text back to _body_edit."""
     monkeypatch.setattr("app.ui.send_tab.get_session", lambda: _FakeSession())
     monkeypatch.setattr("app.ui.send_tab.get_positions", lambda s: [])
+    monkeypatch.setattr("app.ui.send_tab.get_committees", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_members", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_templates", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_signatures", lambda s: [])
@@ -57,6 +59,7 @@ def test_expand_body_edit_cancel(qtbot, monkeypatch):
     """Test that canceling the expand dialog leaves _body_edit unchanged."""
     monkeypatch.setattr("app.ui.send_tab.get_session", lambda: _FakeSession())
     monkeypatch.setattr("app.ui.send_tab.get_positions", lambda s: [])
+    monkeypatch.setattr("app.ui.send_tab.get_committees", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_members", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_templates", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_signatures", lambda s: [])
