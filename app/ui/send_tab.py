@@ -100,7 +100,7 @@ class SendTab(QWidget):
         splitter.addWidget(self._recipient)
         splitter.addWidget(self._build_left_column())
 
-        splitter.setSizes([1, 1])
+        splitter.setSizes([380, 380])
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
 
