@@ -97,17 +97,17 @@ class MemberTab(QWidget):
         layout.addLayout(font_row)
 
         # 一覧テーブル
-        self._table = QTableWidget(0, 10)
+        self._table = QTableWidget(0, 11)
         self._table.setHorizontalHeaderLabels([
             "写真",
-            "会員番号", "会議所役職", "事業所名", "事業所名フリガナ",
+            "会員番号", "会議所役職", "委員会", "事業所名", "事業所名フリガナ",
             "氏名", "氏名フリガナ", "役職名",
             "メール(件数)", "最終更新日",
         ])
         self._table.horizontalHeader().setSectionResizeMode(
-            3, QHeaderView.ResizeMode.Interactive)
+            4, QHeaderView.ResizeMode.Interactive)
         self._table.setColumnWidth(0, 44)
-        self._table.setColumnWidth(3, 200)
+        self._table.setColumnWidth(4, 200)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.doubleClicked.connect(self._edit)
@@ -202,10 +202,13 @@ class MemberTab(QWidget):
                         photo_item.setData(Qt.ItemDataRole.DecorationRole, pix)
                 self._table.setItem(row, 0, photo_item)
 
-                # Cols 1-7: テキスト（旧 0-6）
+                committee_name = m.committee.name if m.committee else ""
+
+                # Cols 1-8: テキスト（旧 0-7）
                 values = [
                     m.member_number,
                     pos_name,
+                    committee_name,
                     m.organization_name,
                     m.organization_kana or "",
                     m.name,
@@ -218,18 +221,18 @@ class MemberTab(QWidget):
                         item.setForeground(gray)
                     self._table.setItem(row, i + 1, item)
 
-                # Col 8: メール件数（詳細は編集画面で確認）
+                # Col 9: メール件数（詳細は編集画面で確認）
                 item = QTableWidgetItem(f"{len(m.email_addresses)}件")
                 if is_retired:
                     item.setForeground(gray)
-                self._table.setItem(row, 8, item)
+                self._table.setItem(row, 9, item)
 
-                # Col 9: 最終更新日
+                # Col 10: 最終更新日
                 upd = m.updated_at.strftime("%Y/%m/%d") if m.updated_at else ""
                 item = QTableWidgetItem(upd)
                 if is_retired:
                     item.setForeground(gray)
-                self._table.setItem(row, 9, item)
+                self._table.setItem(row, 10, item)
             active_count = sum(1 for m in members if m.is_active)
             if active_only:
                 self._count_label.setText(f"{len(members)} 件")

@@ -62,6 +62,7 @@ class _Member:
         self.name_kana = ""
         self.title = ""
         self.position = None
+        self.committee = None
         self.email_addresses = []
         self.is_active = True
         self.updated_at = None

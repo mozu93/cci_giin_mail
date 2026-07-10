@@ -68,6 +68,7 @@ def get_members(session: Session, position_id: int | None = None,
     q = (session.query(Member)
          .outerjoin(Member.position)
          .options(contains_eager(Member.position),
+                  selectinload(Member.committee),
                   selectinload(Member.email_addresses)))
     if active_only:
         q = q.filter(Member.is_active == True)
