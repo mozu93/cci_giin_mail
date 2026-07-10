@@ -27,6 +27,16 @@ def set_font_size(key: str, size: int):
     _save(data)
 
 
+def get_hidden_columns(key: str) -> list[int]:
+    return _load().get("hidden_columns", {}).get(key, [])
+
+
+def set_hidden_columns(key: str, hidden_columns: list[int]):
+    data = _load()
+    data.setdefault("hidden_columns", {})[key] = hidden_columns
+    _save(data)
+
+
 def get_last_staff() -> str:
     return _load().get("last_staff", "")
 

@@ -11,6 +11,27 @@ from app.database.models import Position
 from app.services.member_service import get_members, delete_member
 
 
+_COLUMN_LABELS = [
+    "写真",
+    "会員番号", "会議所役職", "委員会", "事業所名", "事業所名フリガナ",
+    "氏名", "氏名フリガナ", "役職名",
+    "メール(件数)", "最終更新日",
+]
+
+
+class _RoleSortItem(QTableWidgetItem):
+    """会議所役職列専用: 順番設定の並び順→事業所名フリガナ順でソートする"""
+
+    def __init__(self, text: str, sort_order: int, kana: str):
+        super().__init__(text)
+        self._sort_key = (sort_order, kana)
+
+    def __lt__(self, other):
+        if isinstance(other, _RoleSortItem):
+            return self._sort_key < other._sort_key
+        return super().__lt__(other)
+
+
 class MemberTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -102,12 +123,7 @@ class MemberTab(QWidget):
 
         # 一覧テーブル
         self._table = QTableWidget(0, 11)
-        self._table.setHorizontalHeaderLabels([
-            "写真",
-            "会員番号", "会議所役職", "委員会", "事業所名", "事業所名フリガナ",
-            "氏名", "氏名フリガナ", "役職名",
-            "メール(件数)", "最終更新日",
-        ])
+        self._table.setHorizontalHeaderLabels(_COLUMN_LABELS)
         self._table.horizontalHeader().setSectionResizeMode(
             4, QHeaderView.ResizeMode.Interactive)
         self._table.horizontalHeader().setStyleSheet(
@@ -123,6 +139,15 @@ class MemberTab(QWidget):
         self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._show_context_menu)
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
+
+        self._table.horizontalHeader().setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.horizontalHeader().customContextMenuRequested.connect(
+            self._show_column_menu)
+        from app.services.settings_service import get_hidden_columns
+        for col in get_hidden_columns("member_tab"):
+            if 0 <= col < len(_COLUMN_LABELS):
+                self._table.setColumnHidden(col, True)
 
         from app.services.settings_service import get_font_size
         from PyQt6.QtGui import QFont as _QFont
@@ -212,6 +237,7 @@ class MemberTab(QWidget):
                 self._table.setItem(row, 0, photo_item)
 
                 committee_name = m.committee.name if m.committee else ""
+                pos_sort_order = m.position.sort_order if m.position else 10**9
 
                 # Cols 1-8: テキスト（旧 0-7）
                 values = [
@@ -225,7 +251,11 @@ class MemberTab(QWidget):
                     m.title or "",
                 ]
                 for i, val in enumerate(values):
-                    item = QTableWidgetItem(val)
+                    if i == 1:
+                        item = _RoleSortItem(
+                            val, pos_sort_order, m.organization_kana or "")
+                    else:
+                        item = QTableWidgetItem(val)
                     if is_retired:
                         item.setForeground(gray)
                     self._table.setItem(row, i + 1, item)
@@ -260,6 +290,23 @@ class MemberTab(QWidget):
             session.close()
         self._table.setSortingEnabled(True)
         self._on_selection_changed()
+
+    def _show_column_menu(self, pos: QPoint):
+        menu = QMenu(self)
+        for col, label in enumerate(_COLUMN_LABELS):
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(not self._table.isColumnHidden(col))
+            action.triggered.connect(
+                lambda checked, c=col: self._toggle_column(c, checked))
+        menu.exec(self._table.horizontalHeader().mapToGlobal(pos))
+
+    def _toggle_column(self, col: int, visible: bool):
+        self._table.setColumnHidden(col, not visible)
+        from app.services.settings_service import set_hidden_columns
+        hidden = [c for c in range(len(_COLUMN_LABELS))
+                  if self._table.isColumnHidden(c)]
+        set_hidden_columns("member_tab", hidden)
 
     def _on_selection_changed(self):
         has_selection = self._table.currentRow() >= 0
