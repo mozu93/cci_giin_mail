@@ -19,11 +19,21 @@ class Position(Base):
     members = relationship("Member", back_populates="position")
 
 
+class Committee(Base):
+    __tablename__ = "committees"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    members = relationship("Member", back_populates="committee")
+
+
 class Member(Base):
     __tablename__ = "members"
     id = Column(Integer, primary_key=True)
     member_number = Column(String, unique=True, nullable=False)
     position_id = Column(Integer, ForeignKey("positions.id"), nullable=True)
+    committee_id = Column(Integer, ForeignKey("committees.id"), nullable=True)
     organization_name = Column(String, nullable=False)
     organization_kana = Column(String, default="")
     title = Column(String, default="")
@@ -39,6 +49,7 @@ class Member(Base):
                         default=datetime.now, onupdate=datetime.now)
 
     position = relationship("Position", back_populates="members")
+    committee = relationship("Committee", back_populates="members")
     email_addresses = relationship(
         "EmailAddress", back_populates="member",
         order_by="EmailAddress.sort_order",

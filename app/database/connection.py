@@ -65,6 +65,15 @@ def _migrate_sqlite(engine):
             conn.execute(text("ALTER TABLE members ADD COLUMN photo_full BLOB"))
             conn.commit()
 
+        members_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
+        }
+        if "committee_id" not in members_cols:
+            conn.execute(text(
+                "ALTER TABLE members ADD COLUMN committee_id INTEGER"
+            ))
+            conn.commit()
+
 
 def _migrate_postgresql(engine):
     from sqlalchemy import inspect, text
@@ -75,6 +84,9 @@ def _migrate_postgresql(engine):
             conn.execute(text("ALTER TABLE members ADD COLUMN photo_thumb BYTEA"))
         if "photo_full" not in members_cols:
             conn.execute(text("ALTER TABLE members ADD COLUMN photo_full BYTEA"))
+
+        if "committee_id" not in members_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN committee_id INTEGER"))
 
 
 def get_engine(db_path: str | None = None):
