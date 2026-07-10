@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QPushButton, QLabel, QLineEdit, QComboBox, QApplication,
+    QPushButton, QLabel, QLineEdit, QComboBox, QApplication, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QPixmap, QFont
@@ -79,7 +79,11 @@ class ReceptionWidget(QWidget):
         layout.addWidget(count_grp)
 
         search_row = QHBoxLayout()
-        search_row.addWidget(QLabel("検索:"))
+        lbl_search = QLabel("検索:")
+        lbl_search.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        search_row.addWidget(lbl_search)
+        search_row.addStretch(1)
         self._search = QLineEdit()
         self._search.setPlaceholderText("事業所名・氏名・会員番号")
         self._search.textChanged.connect(self._filter_reception)
@@ -89,7 +93,8 @@ class ReceptionWidget(QWidget):
         self._search.setMinimumHeight(self._search.sizeHint().height() * 2)
         from app.ui.widgets.search_style import style_search_input
         style_search_input(self._search, max_width=320)
-        search_row.addWidget(self._search, 1)
+        search_row.addWidget(self._search, 2)
+        search_row.addStretch(1)
         btn_font_down = QPushButton("A-")
         btn_font_down.setFixedWidth(36)
         btn_font_down.setToolTip("文字を小さくする")
