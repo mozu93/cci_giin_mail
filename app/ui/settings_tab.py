@@ -568,9 +568,11 @@ class _CommitteeWidget(QWidget):
             QMessageBox.warning(self, "入力エラー", "委員会名を入力してください。")
             return
         session = get_session()
-        next_order = len(self._committees) + 1
-        create_committee(session, name, next_order)
-        session.close()
+        try:
+            next_order = len(self._committees) + 1
+            create_committee(session, name, next_order)
+        finally:
+            session.close()
         self._name.clear()
         self._load()
 
@@ -583,8 +585,10 @@ class _CommitteeWidget(QWidget):
             QMessageBox.warning(self, "入力エラー", "委員会名を入力してください。")
             return
         session = get_session()
-        update_committee(session, committee_id, name=name)
-        session.close()
+        try:
+            update_committee(session, committee_id, name=name)
+        finally:
+            session.close()
         self._load()
 
     def _delete(self):
@@ -595,7 +599,7 @@ class _CommitteeWidget(QWidget):
         try:
             member_count = (
                 session.query(Member)
-                .filter_by(committee_id=committee_id, is_active=True)
+                .filter_by(committee_id=committee_id)
                 .count()
             )
         finally:

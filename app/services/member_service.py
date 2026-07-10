@@ -10,6 +10,7 @@ def member_to_snapshot(member: Member) -> str:
     data = {
         "member_number":     member.member_number,
         "position_name":     member.position.name if member.position else "",
+        "committee_name":    member.committee.name if member.committee else "",
         "organization_name": member.organization_name,
         "organization_kana": member.organization_kana,
         "title":             member.title,
