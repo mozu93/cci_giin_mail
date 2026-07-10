@@ -123,7 +123,7 @@ class RecipientPanel(QWidget):
         hdr = QHBoxLayout()
         hdr.addWidget(QLabel("<b>送信先一覧</b>"))
         hdr.addStretch()
-        self._count_label = QLabel("0件選択")
+        self._count_label = QLabel("0社 0件選択")
         hdr.addWidget(self._count_label)
         layout.addLayout(hdr)
 
@@ -229,14 +229,19 @@ class RecipientPanel(QWidget):
 
     def _update_count(self):
         checked = no_email = 0
+        checked_member_ids: set = set()
         for row in range(self._table.rowCount()):
             cb = self._table.cellWidget(row, 0)
             if cb and cb.isChecked():
                 checked += 1
+                org_item = self._table.item(row, 3)
+                mid = org_item.data(Qt.ItemDataRole.UserRole) if org_item else None
+                if mid is not None:
+                    checked_member_ids.add(mid)
                 item = self._table.item(row, 6)
                 if item and item.text() == _NO_EMAIL_TEXT:
                     no_email += 1
-        self._count_label.setText(f"{checked}件選択")
+        self._count_label.setText(f"{len(checked_member_ids)}社 {checked}件選択")
         if no_email:
             self._no_email_label.setText(
                 f"⚠ メール無し {no_email}件が含まれています（送信時スキップ）")
