@@ -10,8 +10,16 @@ from app.database.models import Member, Position
 from app.services.member_service import (
     create_member, update_member, set_email_addresses, record_member_history
 )
+from app.services.committee_service import get_committees
 
 _MAX_EMAILS = 5
+
+
+class _NoWheelComboBox(QComboBox):
+    """マウスホバー中のスクロールで意図せず選択値が変わらないようにする"""
+
+    def wheelEvent(self, event):
+        event.ignore()
 
 
 class MemberEditDialog(QDialog):
@@ -69,7 +77,8 @@ class MemberEditDialog(QDialog):
         self._title = QLineEdit()
         self._name = QLineEdit()
         self._name_kana = QLineEdit()
-        self._position_combo = QComboBox()
+        self._position_combo = _NoWheelComboBox()
+        self._committee_combo = _NoWheelComboBox()
         self._notes = QLineEdit()
 
         self._positions = self._session.query(Position).order_by(Position.sort_order).all()
@@ -77,8 +86,14 @@ class MemberEditDialog(QDialog):
         for p in self._positions:
             self._position_combo.addItem(p.name, p.id)
 
+        self._committees = get_committees(self._session)
+        self._committee_combo.addItem("（なし）", None)
+        for c in self._committees:
+            self._committee_combo.addItem(c.name, c.id)
+
         form.addRow("会員番号 *", self._member_number)
         form.addRow("会議所役職", self._position_combo)
+        form.addRow("委員会", self._committee_combo)
         form.addRow("事業所名 *", self._org_name)
         form.addRow("事業所名フリガナ", self._org_kana)
         form.addRow("役職名", self._title)
@@ -164,6 +179,10 @@ class MemberEditDialog(QDialog):
             if p.id == member.position_id:
                 self._position_combo.setCurrentIndex(i + 1)
                 break
+        for i, c in enumerate(self._committees):
+            if c.id == member.committee_id:
+                self._committee_combo.setCurrentIndex(i + 1)
+                break
         for i, ea in enumerate(member.email_addresses[:_MAX_EMAILS]):
             self._email_rows[i][0].setText(ea.address)
             self._email_rows[i][1].setText(ea.label or "")
@@ -191,6 +210,7 @@ class MemberEditDialog(QDialog):
             return
 
         position_id = self._position_combo.currentData()
+        committee_id = self._committee_combo.currentData()
         addresses = []
         for i, (addr_w, label_w) in enumerate(self._email_rows, start=1):
             addr = addr_w.text().strip()
@@ -215,6 +235,7 @@ class MemberEditDialog(QDialog):
                     name_kana=self._name_kana.text().strip(),
                     notes=self._notes.text().strip(),
                     position_id=position_id,
+                    committee_id=committee_id,
                 )
                 set_email_addresses(self._session, self._member.id, addresses)
                 self._session.commit()
@@ -227,6 +248,7 @@ class MemberEditDialog(QDialog):
                     name_kana=self._name_kana.text().strip(),
                     notes=self._notes.text().strip(),
                     position_id=position_id,
+                    committee_id=committee_id,
                 )
                 set_email_addresses(self._session, m.id, addresses)
                 self._session.commit()
@@ -257,6 +279,7 @@ class MemberEditDialog(QDialog):
             self._name_kana.text().strip(),
             self._notes.text().strip(),
             self._position_combo.currentData(),
+            self._committee_combo.currentData(),
             emails,
         )
 
