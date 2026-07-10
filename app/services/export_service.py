@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from app.services.member_service import get_members
 
 _HEADERS = [
-    "会員番号", "事業所名", "事業所名フリガナ", "役職名", "氏名", "氏名フリガナ", "会議所役職",
+    "会員番号", "事業所名", "事業所名フリガナ", "役職名", "氏名", "氏名フリガナ", "会議所役職", "委員会",
     "メール1アドレス", "メール1ラベル",
     "メール2アドレス", "メール2ラベル",
     "メール3アドレス", "メール3ラベル",
@@ -21,6 +21,7 @@ def _build_row(member) -> list:
         member.name,
         member.name_kana or "",
         member.position.name if member.position else "",
+        member.committee.name if member.committee else "",
     ]
     for n in range(1, 6):
         ea = emails.get(n)
