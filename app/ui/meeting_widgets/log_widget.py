@@ -33,9 +33,9 @@ class LogWidget(QWidget):
         btn_row.addWidget(btn_fu)
         layout.addLayout(btn_row)
 
+        _log_headers = ["日時", "担当者", "事業所名", "変更前", "変更後"]
         self._log_table = QTableWidget(0, 5)
-        self._log_table.setHorizontalHeaderLabels(
-            ["日時", "担当者", "事業所名", "変更前", "変更後"])
+        self._log_table.setHorizontalHeaderLabels(_log_headers)
         h = self._log_table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -44,6 +44,9 @@ class LogWidget(QWidget):
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         from app.ui.widgets.table_header_style import style_table_header
         style_table_header(self._log_table)
+        from app.ui.widgets.column_visibility import setup_column_visibility_menu
+        setup_column_visibility_menu(
+            self._log_table, _log_headers, "log_table", self)
         self._log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         _sys_pt = self._log_table.font().pointSize()

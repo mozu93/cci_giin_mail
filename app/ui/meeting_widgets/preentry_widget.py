@@ -101,6 +101,9 @@ class PreentryWidget(QWidget):
         h.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         from app.ui.widgets.table_header_style import style_table_header
         style_table_header(self._pre_table)
+        from app.ui.widgets.column_visibility import setup_column_visibility_menu
+        setup_column_visibility_menu(
+            self._pre_table, _PRE_HEADERS, "preentry_table", self)
         self._pre_table.setColumnWidth(0, 120)
         self._pre_table.setColumnWidth(1, 200)
         self._pre_table.setColumnWidth(2, 150)

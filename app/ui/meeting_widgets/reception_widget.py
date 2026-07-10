@@ -126,13 +126,16 @@ class ReceptionWidget(QWidget):
         photo_vl.addStretch()
         body_row.addWidget(photo_w)
 
+        _rec_headers = ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"]
         self._rec_table = _ReceptionTable(0, 7)
-        self._rec_table.setHorizontalHeaderLabels(
-            ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"])
+        self._rec_table.setHorizontalHeaderLabels(_rec_headers)
         h = self._rec_table.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         from app.ui.widgets.table_header_style import style_table_header
         style_table_header(self._rec_table)
+        from app.ui.widgets.column_visibility import setup_column_visibility_menu
+        setup_column_visibility_menu(
+            self._rec_table, _rec_headers, "reception_table", self)
         self._rec_table.setColumnWidth(0, 80)
         self._rec_table.setColumnWidth(1, 200)
         self._rec_table.setColumnWidth(2, 120)
