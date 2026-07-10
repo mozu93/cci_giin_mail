@@ -14,6 +14,13 @@ from app.services.member_service import (
 _MAX_EMAILS = 5
 
 
+class _NoWheelComboBox(QComboBox):
+    """マウスホバー中のスクロールで意図せず選択値が変わらないようにする"""
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+
 class MemberEditDialog(QDialog):
     def __init__(self, session: Session, member: Member | None = None,
                  staff_name: str = "", parent=None):
@@ -69,7 +76,7 @@ class MemberEditDialog(QDialog):
         self._title = QLineEdit()
         self._name = QLineEdit()
         self._name_kana = QLineEdit()
-        self._position_combo = QComboBox()
+        self._position_combo = _NoWheelComboBox()
         self._notes = QLineEdit()
 
         self._positions = self._session.query(Position).order_by(Position.sort_order).all()

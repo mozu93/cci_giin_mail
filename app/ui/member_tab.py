@@ -49,6 +49,8 @@ class MemberTab(QWidget):
         # ツールバー 2行目：操作ボタン
         row2 = QHBoxLayout()
         btn_add = QPushButton("追加")
+        btn_add.setStyleSheet(
+            "font-weight: bold; background-color: #1E40AF; color: white;")
         btn_add.clicked.connect(self._add)
 
         self._btn_edit = QPushButton("編集")
@@ -59,6 +61,8 @@ class MemberTab(QWidget):
         self._btn_history.clicked.connect(self._show_history)
         self._btn_retire = QPushButton("議員退任")
         self._btn_retire.setEnabled(False)
+        self._btn_retire.setStyleSheet(
+            "background-color: #DC2626; color: white;")
         self._btn_retire.clicked.connect(self._delete)
 
         btn_file = QPushButton("ファイル")
@@ -106,6 +110,11 @@ class MemberTab(QWidget):
         ])
         self._table.horizontalHeader().setSectionResizeMode(
             3, QHeaderView.ResizeMode.Interactive)
+        self._table.horizontalHeader().setStyleSheet(
+            "QHeaderView::section {"
+            " background-color: #1E293B; color: white;"
+            " padding: 4px; font-weight: bold; border: 1px solid #334155; }"
+        )
         self._table.setColumnWidth(0, 44)
         self._table.setColumnWidth(3, 200)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
