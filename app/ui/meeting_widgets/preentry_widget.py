@@ -58,6 +58,8 @@ class PreentryWidget(QWidget):
         self._pre_search = QLineEdit()
         self._pre_search.setPlaceholderText("事業所名・事業所名フリガナで検索")
         self._pre_search.textChanged.connect(self._apply_status_filter)
+        from app.ui.widgets.search_style import style_search_input
+        style_search_input(self._pre_search)
         btn_csv = QPushButton("CSV出力")
         btn_csv.clicked.connect(self._export_csv)
         btn_fd = QPushButton("A-")

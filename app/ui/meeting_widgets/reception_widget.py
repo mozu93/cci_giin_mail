@@ -87,6 +87,8 @@ class ReceptionWidget(QWidget):
         _sf.setPointSize(_sf.pointSize() + 3)
         self._search.setFont(_sf)
         self._search.setMinimumHeight(self._search.sizeHint().height() * 2)
+        from app.ui.widgets.search_style import style_search_input
+        style_search_input(self._search, max_width=320)
         search_row.addWidget(self._search, 1)
         btn_font_down = QPushButton("A-")
         btn_font_down.setFixedWidth(36)

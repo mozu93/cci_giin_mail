@@ -55,6 +55,8 @@ class MemberTab(QWidget):
         self._search = QLineEdit()
         self._search.setPlaceholderText("キーワード検索（事業所名・氏名・会員番号）")
         self._search.textChanged.connect(self._load)
+        from app.ui.widgets.search_style import style_search_input
+        style_search_input(self._search)
         self._pos_filter = QComboBox()
         self._pos_filter.addItem("すべての役職", None)
         self._pos_filter.currentIndexChanged.connect(self._load)
