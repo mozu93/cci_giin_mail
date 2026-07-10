@@ -15,6 +15,10 @@ from app.services.signature_service import (
     delete_signature, set_default
 )
 from app.services.staff_service import get_all_staff, create_staff, set_active
+from app.services.committee_service import (
+    get_committees, create_committee, update_committee, delete_committee
+)
+from app.database.models import Member
 
 
 class SettingsTab(QWidget):
@@ -24,6 +28,7 @@ class SettingsTab(QWidget):
         inner = QTabWidget()
         inner.addTab(_GraphSettingsWidget(), "Microsoft 365")
         inner.addTab(_SignatureWidget(), "署名管理")
+        inner.addTab(_CommitteeWidget(), "委員会管理")
         inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
         inner.addTab(_ExportSettingsWidget(), "出力設定")
@@ -498,3 +503,125 @@ class _DataWidget(QWidget):
             QMessageBox.critical(self, "エラー", str(e))
         finally:
             session.close()
+
+
+class _CommitteeWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        self._table = QTableWidget(0, 1)
+        self._table.setHorizontalHeaderLabels(["委員会名"])
+        self._table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._table.itemSelectionChanged.connect(self._on_select)
+        layout.addWidget(self._table)
+
+        form = QFormLayout()
+        self._name = QLineEdit()
+        form.addRow("委員会名", self._name)
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        btn_add = QPushButton("追加")
+        btn_add.clicked.connect(self._add)
+        btn_update = QPushButton("更新")
+        btn_update.clicked.connect(self._update)
+        btn_delete = QPushButton("削除")
+        btn_delete.clicked.connect(self._delete)
+        btn_row.addWidget(btn_add)
+        btn_row.addWidget(btn_update)
+        btn_row.addWidget(btn_delete)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        layout.addStretch()
+        self._load()
+
+    def _load(self):
+        session = get_session()
+        try:
+            self._committees = get_committees(session)
+        finally:
+            session.close()
+        self._table.setRowCount(0)
+        for c in self._committees:
+            row = self._table.rowCount()
+            self._table.insertRow(row)
+            self._table.setItem(row, 0, QTableWidgetItem(c.name))
+            self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, c.id)
+
+    def _on_select(self):
+        row = self._table.currentRow()
+        if row < 0 or row >= len(self._committees):
+            return
+        self._name.setText(self._committees[row].name)
+
+    def _selected_id(self) -> int | None:
+        row = self._table.currentRow()
+        if row < 0:
+            return None
+        return self._table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+
+    def _add(self):
+        name = self._name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "入力エラー", "委員会名を入力してください。")
+            return
+        session = get_session()
+        try:
+            next_order = len(self._committees) + 1
+            create_committee(session, name, next_order)
+        finally:
+            session.close()
+        self._name.clear()
+        self._load()
+
+    def _update(self):
+        committee_id = self._selected_id()
+        if committee_id is None:
+            return
+        name = self._name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "入力エラー", "委員会名を入力してください。")
+            return
+        session = get_session()
+        try:
+            update_committee(session, committee_id, name=name)
+        finally:
+            session.close()
+        self._load()
+
+    def _delete(self):
+        committee_id = self._selected_id()
+        if committee_id is None:
+            return
+        session = get_session()
+        try:
+            member_count = (
+                session.query(Member)
+                .filter_by(committee_id=committee_id)
+                .count()
+            )
+        finally:
+            session.close()
+        if member_count:
+            msg = (f"この委員会には現在 {member_count} 件の会員が所属しています。\n"
+                   "削除すると所属設定が解除されます。削除しますか？")
+        else:
+            msg = "この委員会を削除しますか？"
+        ret = QMessageBox.question(
+            self, "削除確認", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        session = get_session()
+        try:
+            session.query(Member).filter_by(committee_id=committee_id).update(
+                {"committee_id": None})
+            session.commit()
+            delete_committee(session, committee_id)
+        finally:
+            session.close()
+        self._name.clear()
+        self._load()

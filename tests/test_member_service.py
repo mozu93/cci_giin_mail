@@ -1,6 +1,7 @@
 import json
 import pytest
 from app.database.models import Position
+from app.services.committee_service import create_committee
 from app.services.member_service import (
     create_member, update_member, delete_member, get_member,
     get_members, get_member_history, set_email_addresses,
@@ -124,3 +125,13 @@ def test_member_to_snapshot_includes_emails(db_session):
     assert snap["organization_name"] == "○○商事"
     assert len(snap["email_addresses"]) == 1
     assert snap["email_addresses"][0]["address"] == "yamada@example.com"
+
+
+def test_member_to_snapshot_includes_committee(db_session):
+    committee = create_committee(db_session, "広報委員会", 1)
+    m = create_member(db_session, "A-001", "○○商事", "山田 太郎",
+                      committee_id=committee.id)
+    fetched = get_member(db_session, m.id)
+    snap_str = member_to_snapshot(fetched)
+    snap = json.loads(snap_str)
+    assert snap["committee_name"] == "広報委員会"

@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.database.models import Position, MemberHistory
+from app.database.models import Position, Committee, MemberHistory
 from app.services.member_service import (
     create_member, update_member, set_email_addresses,
     record_member_history, get_members
@@ -57,6 +57,7 @@ def import_members(session: Session, rows: list[list],
 
     existing = {m.member_number: m for m in get_members(session, active_only=False)}
     position_map = {p.name: p.id for p in session.query(Position).all()}
+    committee_map = {c.name: c.id for c in session.query(Committee).all()}
     created = updated = 0
     errors: list[str] = []
 
@@ -94,6 +95,18 @@ def import_members(session: Session, rows: list[list],
                 kwargs["position_id"] = position_map[position_name]
             else:
                 kwargs["position_id"] = None
+
+        if "committee_name" in column_map:
+            committee_name = _cell(row, "committee_name")
+            if committee_name:
+                if committee_name not in committee_map:
+                    new_committee = Committee(name=committee_name, sort_order=0)
+                    session.add(new_committee)
+                    session.flush()
+                    committee_map[committee_name] = new_committee.id
+                kwargs["committee_id"] = committee_map[committee_name]
+            else:
+                kwargs["committee_id"] = None
 
         addresses = []
         for n in range(1, 6):
