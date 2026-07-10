@@ -131,6 +131,8 @@ class ReceptionWidget(QWidget):
             ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"])
         h = self._rec_table.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        from app.ui.widgets.table_header_style import style_table_header
+        style_table_header(self._rec_table)
         self._rec_table.setColumnWidth(0, 80)
         self._rec_table.setColumnWidth(1, 200)
         self._rec_table.setColumnWidth(2, 120)

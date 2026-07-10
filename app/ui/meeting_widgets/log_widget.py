@@ -42,6 +42,8 @@ class LogWidget(QWidget):
         h.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        from app.ui.widgets.table_header_style import style_table_header
+        style_table_header(self._log_table)
         self._log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         _sys_pt = self._log_table.font().pointSize()
