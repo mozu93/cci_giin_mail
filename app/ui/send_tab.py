@@ -132,18 +132,21 @@ class SendTab(QWidget):
         btn_clear.clicked.connect(self._clear_all)
         layout.addWidget(btn_clear)
 
-        layout.addWidget(self._build_step1())
-        layout.addWidget(self._build_step2())
-        layout.addWidget(self._build_step3())
-        layout.addWidget(self._build_step4())
-        layout.addWidget(self._build_step5())
+        sections = [self._build_step1(), self._build_step2()]
+        if _dev_tools_enabled():
+            sections.append(self._build_merge_section())
+        sections.append(self._build_attach_section())
+        sections.append(self._build_final_section())
+        for i, grp in enumerate(sections, 1):
+            grp.setTitle(f"Step {i}：{grp.title()}")
+            layout.addWidget(grp)
         layout.addStretch()
 
         scroll.setWidget(inner)
         return scroll
 
     def _build_step1(self) -> QGroupBox:
-        grp = QGroupBox("Step 1：宛先条件")
+        grp = QGroupBox("宛先条件")
         layout = QVBoxLayout(grp)
 
         mode_row = QHBoxLayout()
@@ -216,7 +219,7 @@ class SendTab(QWidget):
         return grp
 
     def _build_step2(self) -> QGroupBox:
-        grp = QGroupBox("Step 2：テンプレート・署名選択")
+        grp = QGroupBox("テンプレート・署名選択")
         outer = QVBoxLayout(grp)
 
         f = QFormLayout()
@@ -262,8 +265,8 @@ class SendTab(QWidget):
 
         return grp
 
-    def _build_step3(self) -> QGroupBox:
-        grp = QGroupBox("Step 3：差し込みデータ（任意）")
+    def _build_merge_section(self) -> QGroupBox:
+        grp = QGroupBox("差し込みデータ（任意）")
         layout = QVBoxLayout(grp)
         btn = QPushButton("CSV/Excelをインポート")
         btn.clicked.connect(self._import_merge)
@@ -272,8 +275,8 @@ class SendTab(QWidget):
         layout.addWidget(self._merge_status)
         return grp
 
-    def _build_step4(self) -> QGroupBox:
-        grp = QGroupBox("Step 4：添付ファイル（任意）")
+    def _build_attach_section(self) -> QGroupBox:
+        grp = QGroupBox("添付ファイル（任意）")
         layout = QVBoxLayout(grp)
 
         common_row = QHBoxLayout()
@@ -326,8 +329,8 @@ class SendTab(QWidget):
 
         return grp
 
-    def _build_step5(self) -> QGroupBox:
-        grp = QGroupBox("Step 5：最終確認・送信")
+    def _build_final_section(self) -> QGroupBox:
+        grp = QGroupBox("最終確認・送信")
         layout = QVBoxLayout(grp)
 
         f = QFormLayout()
@@ -431,7 +434,8 @@ class SendTab(QWidget):
         self._body_edit.clear()
         self._merge_data = {}
         self._col_labels = {}
-        self._merge_status.setText("（未読み込み — col1〜col5は空で送信）")
+        if hasattr(self, "_merge_status"):
+            self._merge_status.setText("（未読み込み — col1〜col5は空で送信）")
         self._clear_common_attach()
         self._clear_indiv_folder()
         self._recipient._search.clear()
