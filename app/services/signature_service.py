@@ -2,24 +2,27 @@ from sqlalchemy.orm import Session
 from app.database.models import Signature
 
 
-def create_signature(session: Session, name: str, body: str,
+def create_signature(session: Session, name: str, body: str, staff_id: int,
                      is_default: bool = False) -> Signature:
-    sig = Signature(name=name, body=body, is_default=is_default)
+    sig = Signature(name=name, body=body, staff_id=staff_id, is_default=is_default)
     session.add(sig)
     session.commit()
     return sig
 
 
-def get_signatures(session: Session) -> list[Signature]:
-    return session.query(Signature).order_by(Signature.name).all()
+def get_signatures(session: Session, staff_id: int) -> list[Signature]:
+    return (session.query(Signature)
+            .filter_by(staff_id=staff_id)
+            .order_by(Signature.name).all())
 
 
-def get_default_signature(session: Session) -> Signature | None:
-    return session.query(Signature).filter_by(is_default=True).first()
+def get_default_signature(session: Session, staff_id: int) -> Signature | None:
+    return (session.query(Signature)
+            .filter_by(staff_id=staff_id, is_default=True).first())
 
 
-def set_default(session: Session, sig_id: int) -> None:
-    session.query(Signature).update({"is_default": False})
+def set_default(session: Session, sig_id: int, staff_id: int) -> None:
+    session.query(Signature).filter_by(staff_id=staff_id).update({"is_default": False})
     sig = session.get(Signature, sig_id)
     if sig:
         sig.is_default = True
