@@ -2,8 +2,8 @@ from sqlalchemy.orm import Session
 from app.database.models import Staff
 
 
-def create_staff(session: Session, name: str) -> Staff:
-    s = Staff(name=name, is_active=True)
+def create_staff(session: Session, name: str, is_admin: bool = False) -> Staff:
+    s = Staff(name=name, is_active=True, is_admin=is_admin)
     session.add(s)
     session.commit()
     return s
@@ -28,4 +28,11 @@ def set_active(session: Session, staff_id: int, is_active: bool) -> None:
     s = session.get(Staff, staff_id)
     if s:
         s.is_active = is_active
+        session.commit()
+
+
+def set_admin(session: Session, staff_id: int, is_admin: bool) -> None:
+    s = session.get(Staff, staff_id)
+    if s:
+        s.is_admin = is_admin
         session.commit()
