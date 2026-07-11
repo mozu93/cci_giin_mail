@@ -427,12 +427,14 @@ class SendTab(QWidget):
                 self._template_combo.addItem(t.name, t.id)
             self._template_combo.blockSignals(False)
 
-            self._signatures = get_signatures(session)
+            staff = get_staff_by_name(session, self._staff_name) if self._staff_name else None
+            staff_id = staff.id if staff else None
+            self._signatures = get_signatures(session, staff_id) if staff_id else []
             self._sig_combo.clear()
             self._sig_combo.addItem("（なし）", None)
             for s in self._signatures:
                 self._sig_combo.addItem(s.name, s.id)
-            default_sig = get_default_signature(session)
+            default_sig = get_default_signature(session, staff_id) if staff_id else None
             if default_sig:
                 for i in range(self._sig_combo.count()):
                     if self._sig_combo.itemData(i) == default_sig.id:
