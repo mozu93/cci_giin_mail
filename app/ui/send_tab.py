@@ -356,8 +356,8 @@ class SendTab(QWidget):
         layout.addLayout(f)
 
         btn_row = QHBoxLayout()
-        btn_test = QPushButton("テスト送信（1通）")
-        btn_test.clicked.connect(self._test_send)
+        self._btn_test = QPushButton("テスト送信（1通）")
+        self._btn_test.clicked.connect(self._test_send)
         btn_preview = QPushButton("差し込みプレビュー")
         btn_preview.clicked.connect(self._show_send_preview)
         self._btn_send = QPushButton("送信実行")
@@ -369,7 +369,7 @@ class SendTab(QWidget):
             "background-color: #DC2626; color: white;")
         self._btn_cancel.setVisible(False)
         self._btn_cancel.clicked.connect(self._cancel_send)
-        btn_row.addWidget(btn_test)
+        btn_row.addWidget(self._btn_test)
         btn_row.addWidget(btn_preview)
         btn_row.addStretch()
         btn_row.addWidget(self._btn_cancel)
@@ -381,6 +381,7 @@ class SendTab(QWidget):
         self._progress_label = QLabel("")
         layout.addWidget(self._progress)
         layout.addWidget(self._progress_label)
+        self._update_test_button_label()
         return grp
 
     # ──────────────────────────────────────────────────────
@@ -389,6 +390,12 @@ class SendTab(QWidget):
 
     def refresh(self):
         self._load_combos()
+        self._update_test_button_label()
+
+    def _update_test_button_label(self):
+        graph_config = get_graph_config()
+        addr = graph_config.get("test_address")
+        self._btn_test.setText(f"{addr} にテスト送信" if addr else "テスト送信（未設定）")
 
     def _load_combos(self):
         session = get_session()
