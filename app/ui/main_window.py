@@ -21,7 +21,7 @@ class MainWindow(QMainWindow):
         else:
             title = "商工会議所メール配信システム"
         self.setWindowTitle(title)
-        self.resize(780, 728)
+        self.resize(1280, 728)
         self.setMinimumSize(700, 500)
         self._build_tabs()
         self._setup_statusbar()
