@@ -105,11 +105,13 @@ class LoginDialog(QDialog):
             return
         session = get_session()
         try:
-            create_staff(session, name.strip())
+            create_staff(session, name.strip(), is_admin=True)
         finally:
             session.close()
         self._load_staff()
-        QMessageBox.information(self, "登録完了", f"「{name.strip()}」を登録しました。")
+        QMessageBox.information(
+            self, "登録完了",
+            f"「{name.strip()}」を管理者として登録しました。")
 
     def _login(self):
         name = self._combo.currentData()
