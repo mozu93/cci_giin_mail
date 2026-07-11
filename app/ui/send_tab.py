@@ -136,16 +136,20 @@ class SendTab(QWidget):
         layout = QVBoxLayout(grp)
 
         mode_row = QHBoxLayout()
+        self._rb_by_list = QRadioButton("名簿から選択")
         self._rb_by_pos = QRadioButton("役職で選ぶ")
         self._rb_by_committee = QRadioButton("委員会で選ぶ")
         self._rb_by_attend = QRadioButton("会議の出欠で選ぶ")
-        self._rb_by_pos.setChecked(True)
         bg = QButtonGroup(self)
+        bg.addButton(self._rb_by_list)
         bg.addButton(self._rb_by_pos)
         bg.addButton(self._rb_by_committee)
         bg.addButton(self._rb_by_attend)
+        self._rb_by_list.toggled.connect(self._on_mode_change)
         self._rb_by_pos.toggled.connect(self._on_mode_change)
         self._rb_by_committee.toggled.connect(self._on_mode_change)
+        self._rb_by_attend.toggled.connect(self._on_mode_change)
+        mode_row.addWidget(self._rb_by_list)
         mode_row.addWidget(self._rb_by_pos)
         mode_row.addWidget(self._rb_by_committee)
         mode_row.addWidget(self._rb_by_attend)
@@ -197,6 +201,7 @@ class SendTab(QWidget):
         self._attend_panel.setVisible(False)
         layout.addWidget(self._attend_panel)
 
+        self._rb_by_list.setChecked(True)
         return grp
 
     def _build_step2(self) -> QGroupBox:
@@ -375,7 +380,7 @@ class SendTab(QWidget):
     # ──────────────────────────────────────────────────────
 
     def _clear_all(self):
-        self._rb_by_pos.setChecked(True)
+        self._rb_by_list.setChecked(True)
         self._pos_list.clearSelection()
         self._committee_list.clearSelection()
         for cb in self._status_checks.values():
