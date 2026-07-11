@@ -92,6 +92,7 @@ class Signature(Base):
     name = Column(String, nullable=False)
     body = Column(Text, nullable=False)
     is_default = Column(Boolean, default=False)
+    staff_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
 
     templates = relationship("EmailTemplate", back_populates="signature")
 
@@ -115,6 +116,7 @@ class Staff(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
 
     send_jobs = relationship("SendJob", back_populates="staff")
 
