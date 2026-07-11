@@ -4,10 +4,10 @@ from PyQt6.QtWidgets import QTextEdit
 def test_body_field_is_textedit_and_preserves_newlines(qtbot, monkeypatch):
     monkeypatch.setattr(
         "app.ui.settings_tab.get_session", lambda: _FakeSession())
-    monkeypatch.setattr("app.ui.settings_tab.get_signatures", lambda s: [])
+    monkeypatch.setattr("app.ui.settings_tab.get_signatures", lambda s, sid: [])
 
     from app.ui.settings_tab import _SignatureWidget
-    w = _SignatureWidget()
+    w = _SignatureWidget(staff_id=1)
     qtbot.addWidget(w)
 
     assert isinstance(w._body, QTextEdit)

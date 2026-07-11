@@ -14,7 +14,9 @@ from app.services.signature_service import (
     get_signatures, create_signature, update_signature,
     delete_signature, set_default
 )
-from app.services.staff_service import get_all_staff, create_staff, set_active
+from app.services.staff_service import (
+    get_all_staff, create_staff, set_active, set_admin, get_staff_by_name
+)
 from app.services.committee_service import (
     get_committees, create_committee, update_committee, delete_committee
 )
@@ -22,15 +24,25 @@ from app.database.models import Member
 
 
 class SettingsTab(QWidget):
-    def __init__(self):
+    def __init__(self, staff_name: str = ""):
         super().__init__()
+        self._staff_name = staff_name
+        session = get_session()
+        try:
+            staff = get_staff_by_name(session, staff_name) if staff_name else None
+        finally:
+            session.close()
+        self._staff_id = staff.id if staff else None
+        is_admin = bool(staff and staff.is_admin)
+
         layout = QVBoxLayout(self)
         inner = QTabWidget()
         inner.setMaximumWidth(900)
         inner.addTab(_GraphSettingsWidget(), "Microsoft 365")
-        inner.addTab(_SignatureWidget(), "署名管理")
+        inner.addTab(_SignatureWidget(self._staff_id), "署名管理")
         inner.addTab(_CommitteeWidget(), "委員会管理")
-        inner.addTab(_StaffWidget(), "職員管理")
+        if is_admin:
+            inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
         inner.addTab(_ExportSettingsWidget(), "出力設定")
         if os.environ.get("CCI_MAIL_DEV_TOOLS") == "1":
@@ -93,8 +105,9 @@ class _GraphSettingsWidget(QWidget):
 
 
 class _SignatureWidget(QWidget):
-    def __init__(self):
+    def __init__(self, staff_id: int | None):
         super().__init__()
+        self._staff_id = staff_id
         layout = QVBoxLayout(self)
         self._table = QTableWidget(0, 2)
         self._table.setHorizontalHeaderLabels(["署名名", "デフォルト"])
@@ -131,11 +144,14 @@ class _SignatureWidget(QWidget):
         self._load()
 
     def _load(self):
-        session = get_session()
-        try:
-            self._signatures = get_signatures(session)
-        finally:
-            session.close()
+        if self._staff_id is None:
+            self._signatures = []
+        else:
+            session = get_session()
+            try:
+                self._signatures = get_signatures(session, self._staff_id)
+            finally:
+                session.close()
         self._table.setRowCount(0)
         for s in self._signatures:
             row = self._table.rowCount()
@@ -164,8 +180,11 @@ class _SignatureWidget(QWidget):
         if not name:
             QMessageBox.warning(self, "入力エラー", "署名名を入力してください。")
             return
+        if self._staff_id is None:
+            QMessageBox.warning(self, "エラー", "担当者情報が取得できないため署名を保存できません。")
+            return
         session = get_session()
-        create_signature(session, name, body)
+        create_signature(session, name, body, self._staff_id)
         session.close()
         self._load()
 
@@ -200,10 +219,10 @@ class _SignatureWidget(QWidget):
 
     def _set_default(self):
         sig_id = self._selected_id()
-        if sig_id is None:
+        if sig_id is None or self._staff_id is None:
             return
         session = get_session()
-        set_default(session, sig_id)
+        set_default(session, sig_id, self._staff_id)
         session.close()
         self._load()
 
