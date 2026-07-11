@@ -36,6 +36,7 @@ def test_committee_filter_checks_only_matching_members(qtbot, monkeypatch):
     monkeypatch.setattr("app.ui.send_tab.get_templates", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_signatures", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_default_signature", lambda s: None)
+    monkeypatch.setattr("app.ui.send_tab.get_staff_by_name", lambda s, name: None)
 
     from app.ui.send_tab import SendTab
     tab = SendTab(staff_name="担当者A")

@@ -33,6 +33,7 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr("app.ui.send_tab.get_templates", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_signatures", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_default_signature", lambda s: None)
+    monkeypatch.setattr("app.ui.send_tab.get_staff_by_name", lambda s, name: None)
 
 
 def test_wildcard_matching_attaches_multiple_files_per_member(qtbot, monkeypatch, tmp_path):

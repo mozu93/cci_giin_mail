@@ -11,6 +11,7 @@ def _patch_common(monkeypatch, test_address=None):
     monkeypatch.setattr("app.ui.send_tab.get_templates", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_signatures", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_default_signature", lambda s: None)
+    monkeypatch.setattr("app.ui.send_tab.get_staff_by_name", lambda s, name: None)
     monkeypatch.setattr(
         "app.ui.send_tab.get_graph_config",
         lambda: {"test_address": test_address} if test_address else {})

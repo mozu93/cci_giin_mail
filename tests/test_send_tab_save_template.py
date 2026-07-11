@@ -26,6 +26,7 @@ def _patch_common(monkeypatch, templates=None):
     monkeypatch.setattr("app.ui.send_tab.get_templates", lambda s: templates or [])
     monkeypatch.setattr("app.ui.send_tab.get_signatures", lambda s: [])
     monkeypatch.setattr("app.ui.send_tab.get_default_signature", lambda s: None)
+    monkeypatch.setattr("app.ui.send_tab.get_staff_by_name", lambda s, name: None)
 
 
 def test_save_as_template_creates_new_when_none_selected(qtbot, monkeypatch):
