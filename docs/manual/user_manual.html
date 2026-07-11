@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商工会議所メール配信システム 使い方マニュアル</title>
+<style>
+  :root {
+    --blue:   #2563EB;
+    --blue-l: #EFF6FF;
+    --green:  #16A34A;
+    --green-l:#F0FDF4;
+    --red:    #DC2626;
+    --red-l:  #FEF2F2;
+    --amber:  #D97706;
+    --amber-l:#FFFBEB;
+    --gray:   #374151;
+    --gray-l: #F9FAFB;
+    --border: #E5E7EB;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Meiryo", "Yu Gothic", sans-serif;
+    font-size: 14px;
+    color: var(--gray);
+    background: #fff;
+    line-height: 1.7;
+  }
+  nav {
+    position: fixed; top: 0; left: 0; width: 230px; height: 100vh;
+    background: var(--gray-l); border-right: 1px solid var(--border);
+    overflow-y: auto; padding: 20px 0;
+  }
+  nav .nav-title {
+    font-size: 12px; font-weight: bold; color: #6B7280;
+    padding: 0 16px 8px; text-transform: uppercase; letter-spacing: .05em;
+  }
+  nav a {
+    display: block; padding: 6px 16px; color: var(--gray);
+    text-decoration: none; font-size: 13px; border-left: 3px solid transparent;
+  }
+  nav a:hover { background: var(--border); }
+  nav a.sub { padding-left: 28px; font-size: 12px; color: #6B7280; }
+  main {
+    margin-left: 230px; padding: 40px 48px; max-width: 960px;
+  }
+  h1 { font-size: 26px; color: #111827; border-bottom: 2px solid var(--blue); padding-bottom: 12px; margin-bottom: 8px; }
+  .version { font-size: 12px; color: #9CA3AF; margin-bottom: 32px; }
+  h2 {
+    font-size: 20px; color: #111827; margin: 48px 0 16px;
+    padding: 10px 16px; background: var(--blue-l);
+    border-left: 4px solid var(--blue); border-radius: 0 6px 6px 0;
+  }
+  h3 { font-size: 16px; color: #1D4ED8; margin: 28px 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  h4 { font-size: 14px; font-weight: bold; color: var(--gray); margin: 20px 0 8px; }
+  p { margin-bottom: 10px; }
+  ul, ol { padding-left: 24px; margin-bottom: 12px; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 13px; }
+  th { background: #F3F4F6; color: #374151; font-weight: bold; text-align: left;
+       padding: 8px 12px; border: 1px solid var(--border); }
+  td { padding: 7px 12px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: #FAFAFA; }
+  .note, .warn, .tip, .danger {
+    padding: 12px 16px; border-radius: 6px; margin: 16px 0; font-size: 13px;
+  }
+  .note   { background: var(--blue-l);  border-left: 4px solid var(--blue);  }
+  .tip    { background: var(--green-l); border-left: 4px solid var(--green); }
+  .warn   { background: var(--amber-l); border-left: 4px solid var(--amber); }
+  .danger { background: var(--red-l);   border-left: 4px solid var(--red);   }
+  .note::before   { content: "ℹ️ "; }
+  .tip::before    { content: "✅ "; }
+  .warn::before   { content: "⚠️ "; }
+  .danger::before { content: "🔴 "; }
+  code {
+    background: #F3F4F6; padding: 1px 5px; border-radius: 3px;
+    font-family: monospace; font-size: 12px;
+  }
+  .steps { counter-reset: step; list-style: none; padding: 0; }
+  .steps li {
+    counter-increment: step;
+    padding: 8px 8px 8px 44px;
+    position: relative; margin-bottom: 6px;
+    background: var(--gray-l); border-radius: 6px;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 12px; top: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--blue); color: #fff;
+    font-size: 12px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #toc { background: var(--gray-l); border: 1px solid var(--border); border-radius: 8px; padding: 16px 24px; margin-bottom: 32px; }
+  #toc h3 { border: none; margin: 0 0 8px; font-size: 14px; }
+  #toc ul { margin: 0; }
+  #toc a { color: var(--blue); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-title">目次</div>
+  <a href="#overview">概要</a>
+  <a href="#login">ログイン</a>
+  <a href="#member">名簿管理</a>
+  <a class="sub" href="#member-add">追加・編集</a>
+  <a class="sub" href="#member-import">インポート・エクスポート</a>
+  <a href="#meeting">会議管理</a>
+  <a href="#send">メール送信</a>
+  <a class="sub" href="#send-step1">宛先条件</a>
+  <a class="sub" href="#send-step2">テンプレート・署名</a>
+  <a class="sub" href="#send-step4">添付ファイル</a>
+  <a class="sub" href="#send-step5">送信・テスト送信</a>
+  <a href="#template">テンプレート管理</a>
+  <a href="#history">送信履歴</a>
+  <a href="#settings">設定</a>
+  <a class="sub" href="#settings-m365">Microsoft 365</a>
+  <a class="sub" href="#settings-signature">署名管理</a>
+  <a class="sub" href="#settings-position">役職・委員会管理</a>
+  <a class="sub" href="#settings-staff">職員管理（管理者）</a>
+  <a href="#update">バージョンアップ</a>
+</nav>
+
+<main>
+
+<h1>商工会議所メール配信システム<br>使い方マニュアル</h1>
+<p class="version">対象バージョン: v1.1.0</p>
+
+<div id="toc">
+  <h3>このマニュアルについて</h3>
+  <ul>
+    <li>会員（事業所）へのメール一斉配信・名簿管理・会議出欠管理を行うアプリの操作ガイドです。</li>
+    <li>各機能はウィンドウ上部のタブで切り替えます。</li>
+    <li>データベース接続やMicrosoft 365の設定については、管理者マニュアルをご覧ください（管理者権限を持つ職員のみ「ヘルプ」メニューから閲覧できます）。</li>
+  </ul>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="overview">概要</h2>
+
+<p>このアプリは、商工会議所の会員（事業所）に対するメール一斉配信と、それに関連する名簿・会議出欠の管理を行うシステムです。</p>
+
+<table>
+  <tr><th>タブ名</th><th>主な用途</th></tr>
+  <tr><td><strong>名簿管理</strong></td><td>会員（事業所）の登録・編集・インポート/エクスポート</td></tr>
+  <tr><td><strong>会議管理</strong></td><td>会議の登録と出欠状況の確認・集計</td></tr>
+  <tr><td><strong>メール送信</strong></td><td>宛先を絞り込んでメールを一斉送信</td></tr>
+  <tr><td><strong>テンプレート</strong></td><td>よく使う件名・本文をテンプレートとして登録（全職員で共有）</td></tr>
+  <tr><td><strong>設定</strong></td><td>Microsoft 365・署名・委員会・職員管理などの各種設定</td></tr>
+  <tr><td><strong>送信履歴</strong></td><td>過去の送信ジョブと送信結果（成功/エラー）の確認</td></tr>
+</table>
+
+<div class="note">名簿・会議・テンプレート・送信履歴などのデータは、全職員で共有されます（管理者が設定したデータベースに保存）。一方、<strong>署名</strong>は職員ごとに個別に管理され、他の職員の署名は見えません。</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="login">ログイン</h2>
+
+<p>アプリを起動すると、最初にログイン画面が表示されます。</p>
+
+<ol class="steps">
+  <li>プルダウンから自分の名前を選択します。</li>
+  <li>「ログイン」ボタンをクリックします。</li>
+</ol>
+
+<div class="note">このアプリのログインにパスワードはありません。プルダウンから自分の名前を選ぶだけの、信頼ベースの簡易的な仕組みです。誤操作防止・画面整理が目的で、不正アクセス防止のためのものではありません。</div>
+
+<h3>閲覧専用ログイン</h3>
+<p>出欠確認だけを行いたい場合は、「閲覧専用でログイン」を選ぶと、編集ができない状態で会議管理タブのみが表示されます。</p>
+
+<h3>職員が誰も登録されていない場合</h3>
+<p>初めてアプリを使うとき、まだ誰も職員登録されていない状態では、ログイン画面に「職員を追加」ボタンが表示されます。ここで最初に登録した人は、自動的に<strong>管理者</strong>になります（後述の「職員管理」参照）。</p>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="member">名簿管理</h2>
+
+<p>会員（事業所）の情報を一覧で管理します。写真・会員番号・会議所役職・委員会・事業所名・氏名・役職名・メールアドレスなどを確認できます。</p>
+
+<h3 id="member-add">会員の追加・編集</h3>
+<ol class="steps">
+  <li>「追加」ボタンで新規会員を登録します（会員番号・事業所名・氏名・メールアドレス等を入力）。</li>
+  <li>一覧から会員を選択し「編集」ボタンで内容を修正します。</li>
+  <li>「変更履歴」ボタンで、その会員の過去の変更内容を確認できます。</li>
+  <li>議員を退任した会員は「議員退任」ボタンで非表示扱いにできます（データ自体は削除されず、変更履歴として残ります）。</li>
+  <li>「副会頭の就任順」ボタンで、副会頭が複数名いる場合の掲載順（就任が古い順）を設定できます。役職そのものの一覧・表示順は<a href="#settings-position">設定 &gt; 役職・委員会管理</a>で管理します。</li>
+</ol>
+
+<div class="tip">キーワード検索欄で事業所名・氏名・会員番号から絞り込めます。「役職」プルダウンで役職ごとの絞り込みも可能です。</div>
+
+<h3 id="member-import">インポート・エクスポート</h3>
+<p>「ファイル」メニューから以下の操作ができます。</p>
+<table>
+  <tr><th>操作</th><th>説明</th></tr>
+  <tr><td>インポート</td><td>Excel/CSVから名簿を一括登録・更新。列マッピングとデータプレビューを確認してから実行できます。</td></tr>
+  <tr><td>インポート取り消し</td><td>直前のインポートを取り消し、インポート前の状態に戻します。</td></tr>
+  <tr><td>エクスポート</td><td>現在の名簿をExcel/CSVとして出力します。</td></tr>
+</table>
+
+<div class="warn">インポートで既存会員と同じ会員番号のデータを取り込むと、既存の内容が上書き更新されます。事前にデータプレビューで内容をよく確認してください。</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="meeting">会議管理</h2>
+
+<p>会議（総会・部会など）を登録し、会員ごとの出欠状況（未回答・欠席・出席・委任・代理）を管理します。</p>
+
+<ul>
+  <li>会議は特定の役職のみを対象にすることも、全会員を対象にすることもできます。</li>
+  <li>各テーブルは列の表示/非表示を切り替えられます（ヘッダー右クリックまたは列設定ボタン）。</li>
+  <li>出欠状況は一覧からその場で更新できます。</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="send">メール送信</h2>
+
+<p>メール送信タブは5つのステップで構成されています（差し込みデータの利用など一部の機能は開発者向けのため、通常は表示されません）。</p>
+
+<h3 id="send-step1">Step1：宛先条件</h3>
+<p>宛先の絞り込み方法を選びます。</p>
+<table>
+  <tr><th>モード</th><th>説明</th></tr>
+  <tr><td>名簿から選択（既定）</td><td>右側の宛先一覧から手動でチェックを入れて選びます。「表示中を全選択/全解除」ボタンで一括操作も可能です。</td></tr>
+  <tr><td>役職で選ぶ</td><td>会議所役職にチェックを入れると、該当する会員が自動的に選択されます（複数選択可）。</td></tr>
+  <tr><td>委員会で選ぶ</td><td>委員会にチェックを入れると、該当する会員が自動的に選択されます（複数選択可）。</td></tr>
+  <tr><td>会議の出欠で選ぶ</td><td>会議と出欠ステータス（未回答・欠席・出席など）を指定して絞り込みます。</td></tr>
+</table>
+
+<h3 id="send-step2">Step2：テンプレート・署名選択</h3>
+<ul>
+  <li>プルダウンからテンプレートを選ぶと、件名・本文・署名が自動入力されます。</li>
+  <li>プレースホルダーボタン（<code>{事業所名}</code> <code>{役職名}</code> <code>{氏名}</code> <code>{会議所役職名}</code>）をクリックすると、本文のカーソル位置に差し込まれます。送信時に各会員の情報に自動置換されます。</li>
+  <li>署名はプルダウンから自分の署名を選びます（署名は職員ごとに個別管理です。登録方法は<a href="#settings-signature">設定 &gt; 署名管理</a>参照）。</li>
+  <li>本文を作成したら「テンプレートとして保存」ボタンで、次回以降も使えるテンプレートとして登録できます。既存のテンプレートを選択中に保存すると上書き確認が出ます。</li>
+</ul>
+
+<h3 id="send-step4">Step4：添付ファイル（任意）</h3>
+<p>「添付ファイルを使用する」にチェックを入れると詳細項目が展開されます。</p>
+<ul>
+  <li><strong>全社共通ファイル</strong>：全員に同じファイルを添付します。</li>
+  <li><strong>会社別ファイル</strong>：会員番号に対応するファイルをフォルダから自動で添付します。ファイル名ルールは <code>{会員番号}_*.pdf</code> のように会員番号の直後にアンダースコアを挟む形式を推奨します（例：<code>A001_請求書.pdf</code>）。「*」部分は任意の文字列にマッチし、1人に複数ファイルが一致した場合は全てまとめて添付されます。</li>
+</ul>
+<div class="warn">チェックを外すと添付ファイルの設定内容は保持されたまま非表示になりますが、その状態で送信すると添付ファイルは付きません。再度チェックを入れると設定内容が復元されます。</div>
+
+<h3 id="send-step5">Step5：最終確認・送信</h3>
+<ul>
+  <li><strong>テスト送信</strong>：設定タブで登録したテスト送信先アドレスに、選択中の宛先のうち1件分の差し込み内容でテストメールを送ります（実際の宛先には送信されません）。テスト送信先が未設定の場合はボタンに「未設定」と表示されます。</li>
+  <li><strong>差し込みプレビュー</strong>：実際に送信される内容を宛先ごとに確認できます。</li>
+  <li><strong>送信実行</strong>：ジョブ名を入力して送信します。送信後は取り消せません。</li>
+  <li><strong>送信を中止</strong>：送信中に中止すると、未送信分はスキップされます（送信済みの分は取り消せません）。</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="template">テンプレート管理</h2>
+
+<p>よく使う件名・本文をテンプレートとして登録・編集・削除します。テンプレートは全職員で共有されます。</p>
+<ul>
+  <li>プレースホルダーボタンで本文に差し込み項目を挿入できます。</li>
+  <li>デフォルト署名を指定できます（送信タブでテンプレートを選ぶと自動的に反映されます）。</li>
+  <li>編集中に保存せず他のテンプレートを選ぼうとすると、未保存の変更を破棄するか確認が出ます。</li>
+  <li><kbd>Ctrl+S</kbd> で保存できます。</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="history">送信履歴</h2>
+
+<p>過去の送信ジョブの一覧と、各ジョブの宛先ごとの送信結果（成功・エラー・スキップ）を確認できます。CSV出力も可能です。</p>
+<div class="note">送信結果の「成功」は、送信サーバー（Microsoft 365）が送信要求を受け付けたことを示します。実際に相手の受信箱に届いたか（迷惑メール判定など）までは確認できません。</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="settings">設定</h2>
+
+<h3 id="settings-m365">Microsoft 365</h3>
+<p>メール送信に必要なテナントID・クライアントID、およびテスト送信先アドレスを設定します。詳しい設定手順は管理者マニュアルを参照してください。テスト送信先は職員ごとに個別のPC設定であり、他の職員とは共有されません。</p>
+
+<h3 id="settings-signature">署名管理</h3>
+<p>自分専用の署名を登録・編集できます（他の職員の署名は見えません）。「デフォルトに設定」した署名は、送信タブ・テンプレートタブで自動的に選択されます。</p>
+
+<h3 id="settings-position">役職・委員会管理</h3>
+<p>会議所役職と委員会の一覧を、左右に並んだ画面でまとめて管理します。ここで登録した役職・委員会は、名簿の会員ごとの設定や、送信タブの「役職で選ぶ」「委員会で選ぶ」モードで使われます。</p>
+<ul>
+  <li><strong>役職</strong>：追加・名称変更・削除に加えて「↑ 上へ」「↓ 下へ」ボタンで表示順を並べ替えられます（例：会頭→副会頭→常議員→監事→議員）。</li>
+  <li><strong>委員会</strong>：追加・名称変更・削除ができます（並び替えは登録順です）。</li>
+  <li>会員が所属している役職・委員会を削除しようとすると、件数を示す確認ダイアログが表示されます。削除すると該当会員の所属設定は解除されます（会員データ自体は削除されません）。</li>
+</ul>
+
+<h3 id="settings-staff">職員管理（管理者のみ）</h3>
+<p>この画面は<strong>管理者権限を持つ職員にのみ表示されます</strong>。</p>
+<ul>
+  <li>職員の追加、有効/無効の切り替えができます。</li>
+  <li>「管理者にする」チェックを入れて追加すると、その職員も管理者になります。</li>
+  <li>既存の職員の管理者権限は「管理者権限 切替」ボタンで変更できます。最後の1人の管理者を非管理者にしようとすると、確認の警告が表示されます（誰も職員管理にアクセスできなくなるため）。</li>
+</ul>
+<div class="danger">管理者が0人になると、以後は職員が誰も職員管理タブにアクセスできなくなります。復旧するには職員を全員無効化してログイン画面から登録し直す（自動的に管理者になります）か、管理者に直接データベースを操作してもらう必要があります。</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="update">バージョンアップ</h2>
+
+<p>新しいバージョンが公開されると、ウィンドウ上部に更新通知バーが表示されます。「ダウンロード」→「今すぐ更新」の順にクリックすると、最新版に更新されます。</p>
+
+</main>
+</body>
+</html>

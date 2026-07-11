@@ -6,6 +6,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
+        ('docs/manual/user_manual.html', 'docs/manual'),
+        ('docs/manual/admin_manual.html', 'docs/manual'),
     ],
     hiddenimports=[
         'sqlalchemy.dialects.sqlite',

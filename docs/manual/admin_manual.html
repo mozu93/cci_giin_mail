@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商工会議所メール配信システム 管理者マニュアル</title>
+<style>
+  :root {
+    --blue:   #2563EB;
+    --blue-l: #EFF6FF;
+    --green:  #16A34A;
+    --green-l:#F0FDF4;
+    --red:    #DC2626;
+    --red-l:  #FEF2F2;
+    --amber:  #D97706;
+    --amber-l:#FFFBEB;
+    --gray:   #374151;
+    --gray-l: #F9FAFB;
+    --border: #E5E7EB;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Meiryo", "Yu Gothic", sans-serif;
+    font-size: 14px;
+    color: var(--gray);
+    background: #fff;
+    line-height: 1.7;
+  }
+  nav {
+    position: fixed; top: 0; left: 0; width: 230px; height: 100vh;
+    background: var(--gray-l); border-right: 1px solid var(--border);
+    overflow-y: auto; padding: 20px 0;
+  }
+  nav .nav-title {
+    font-size: 12px; font-weight: bold; color: #6B7280;
+    padding: 0 16px 8px; text-transform: uppercase; letter-spacing: .05em;
+  }
+  nav a {
+    display: block; padding: 6px 16px; color: var(--gray);
+    text-decoration: none; font-size: 13px; border-left: 3px solid transparent;
+  }
+  nav a:hover { background: var(--border); }
+  main {
+    margin-left: 230px; padding: 40px 48px; max-width: 960px;
+  }
+  h1 { font-size: 26px; color: #111827; border-bottom: 2px solid var(--blue); padding-bottom: 12px; margin-bottom: 8px; }
+  .version { font-size: 12px; color: #9CA3AF; margin-bottom: 32px; }
+  h2 {
+    font-size: 20px; color: #111827; margin: 48px 0 16px;
+    padding: 10px 16px; background: var(--blue-l);
+    border-left: 4px solid var(--blue); border-radius: 0 6px 6px 0;
+  }
+  h3 { font-size: 16px; color: #1D4ED8; margin: 28px 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  h4 { font-size: 14px; font-weight: bold; color: var(--gray); margin: 20px 0 8px; }
+  p { margin-bottom: 10px; }
+  ul, ol { padding-left: 24px; margin-bottom: 12px; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 13px; }
+  th { background: #F3F4F6; color: #374151; font-weight: bold; text-align: left;
+       padding: 8px 12px; border: 1px solid var(--border); }
+  td { padding: 7px 12px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: #FAFAFA; }
+  .note, .warn, .tip, .danger {
+    padding: 12px 16px; border-radius: 6px; margin: 16px 0; font-size: 13px;
+  }
+  .note   { background: var(--blue-l);  border-left: 4px solid var(--blue);  }
+  .tip    { background: var(--green-l); border-left: 4px solid var(--green); }
+  .warn   { background: var(--amber-l); border-left: 4px solid var(--amber); }
+  .danger { background: var(--red-l);   border-left: 4px solid var(--red);   }
+  .note::before   { content: "ℹ️ "; }
+  .tip::before    { content: "✅ "; }
+  .warn::before   { content: "⚠️ "; }
+  .danger::before { content: "🔴 "; }
+  code, pre {
+    background: #F3F4F6; padding: 1px 5px; border-radius: 3px;
+    font-family: monospace; font-size: 12px;
+  }
+  pre { display: block; padding: 12px 16px; margin: 10px 0; overflow-x: auto; line-height: 1.5; }
+  .steps { counter-reset: step; list-style: none; padding: 0; }
+  .steps li {
+    counter-increment: step;
+    padding: 8px 8px 8px 44px;
+    position: relative; margin-bottom: 6px;
+    background: var(--gray-l); border-radius: 6px;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 12px; top: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--blue); color: #fff;
+    font-size: 12px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #toc { background: var(--gray-l); border: 1px solid var(--border); border-radius: 8px; padding: 16px 24px; margin-bottom: 32px; }
+  #toc h3 { border: none; margin: 0 0 8px; font-size: 14px; }
+  #toc ul { margin: 0; }
+  #toc a { color: var(--blue); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  input[type=checkbox] { margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-title">目次</div>
+  <a href="#intro">はじめに</a>
+  <a href="#ch1">第1章　サーバーPCの準備</a>
+  <a href="#ch2">第2章　PostgreSQLのインストール</a>
+  <a href="#ch3">第3章　データベースの作成</a>
+  <a href="#ch4">第4章　他PCからの接続許可</a>
+  <a href="#ch5">第5章　ファイアウォール設定</a>
+  <a href="#ch6">第6章　Windowsアップデート設定</a>
+  <a href="#ch7">第7章　Microsoft 365の設定</a>
+  <a href="#ch8">第8章　職員PCへのアプリ設定</a>
+  <a href="#ch9">第9章　職員・権限管理</a>
+  <a href="#ch10">第10章　設定情報のメモ</a>
+  <a href="#trouble">トラブルシューティング</a>
+</nav>
+
+<main>
+
+<h1>商工会議所メール配信システム<br>管理者マニュアル</h1>
+<p class="version">対象読者: 管理者権限を持つ職員 ／ 想定環境: Windows 10 / 11　社内LAN</p>
+
+<div id="toc">
+  <h3>このマニュアルについて</h3>
+  <ul>
+    <li>1台のPCをデータベースサーバーとして設定し、複数の職員PCでこのシステムを共有して使えるようにする手順を説明します。</li>
+    <li>すでに商工会議所内で請求書発行システム（CCI請求管理システム）用のPostgreSQLサーバーを運用している場合は、<strong>同じサーバーを共用</strong>し、データベース名だけを分けることができます（第3章参照）。</li>
+    <li>本マニュアルは管理者権限を持つ職員のみ、アプリの「ヘルプ」メニューから閲覧できます。</li>
+  </ul>
+</div>
+
+<pre>
+【完成イメージ】
+
+  サーバーPC（このマニュアルで設定）
+  ├─ PostgreSQL（データベース）が常時起動
+  └─ 名簿・会議・テンプレート・送信履歴を一元管理
+
+       ↓ 社内LAN
+
+  職員PC①　職員PC②　職員PC③
+  それぞれにアプリをインストールし、初回起動時に接続設定を行うだけでOK
+</pre>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="intro">はじめに</h2>
+
+<p>このシステムでは、以下の情報が「共有データ」と「各PC個別の設定」に分かれています。</p>
+
+<table>
+  <tr><th>区分</th><th>内容</th><th>保存場所</th></tr>
+  <tr><td>共有データ</td><td>名簿・会議・委員会・職員一覧・テンプレート・送信履歴</td><td>PostgreSQLサーバー（本マニュアルで構築）</td></tr>
+  <tr><td>各PC個別の設定</td><td>データベース接続情報、Microsoft 365設定、テスト送信先アドレス、署名</td><td>各PCのローカルファイル（<code>%APPDATA%\cci-mail\app_config.json</code>）</td></tr>
+</table>
+
+<div class="warn">個別の設定は共有DBには保存されません。<strong>アプリを配布した後、各職員のPCで個別にデータベース接続設定を入力する作業が必要です</strong>（第8章）。</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch1">第1章　サーバーPCの準備</h2>
+
+<h3>1-1　推奨スペック</h3>
+<table>
+  <tr><th>項目</th><th>最低限</th><th>推奨</th></tr>
+  <tr><td>OS</td><td>Windows 10</td><td>Windows 10 / 11</td></tr>
+  <tr><td>メモリ</td><td>2GB</td><td>4GB以上</td></tr>
+  <tr><td>ストレージ空き容量</td><td>2GB</td><td>5GB以上</td></tr>
+  <tr><td>ネットワーク</td><td>LAN接続（有線推奨）</td><td>有線LAN</td></tr>
+</table>
+<p>古いPCでも十分動作します。</p>
+
+<h3>1-2　サーバーPCのIPアドレスを固定する</h3>
+<p>職員PCから接続するために、サーバーPCのIPアドレスが変わらないよう固定します。</p>
+
+<ol class="steps">
+  <li>サーバーPCで <kbd>Windowsキー + R</kbd> を押し、<code>ncpa.cpl</code> と入力して Enter</li>
+  <li>使用中のネットワークアダプター（「イーサネット」など）を右クリック →「プロパティ」</li>
+  <li>「インターネット プロトコル バージョン 4 (TCP/IPv4)」を選択 →「プロパティ」</li>
+  <li>「次のIPアドレスを使う」を選択して以下を入力</li>
+</ol>
+
+<pre>
+IPアドレス：    192.168.1.200　　※社内ネットワークに合わせて設定
+サブネットマスク：255.255.255.0
+デフォルトゲートウェイ：192.168.1.1　※ルーターのIPアドレス
+優先DNSサーバー：192.168.1.1
+</pre>
+
+<div class="note"><strong>確認方法：</strong>設定前に <kbd>Windowsキー + R</kbd> → <code>cmd</code> → <code>ipconfig</code> を実行すると現在のIPアドレスとゲートウェイが確認できます。</div>
+
+<p>「OK」で閉じます。<strong>設定したIPアドレスをメモしておいてください。職員PC設定時に使います。</strong></p>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch2">第2章　PostgreSQLのインストール</h2>
+
+<div class="tip">すでに商工会議所内の他システム（請求書発行システムなど）用にPostgreSQLサーバーが稼働している場合は、この章は不要です。第3章に進んでください。</div>
+
+<h3>2-1　インストーラーのダウンロード</h3>
+<ol class="steps">
+  <li>ブラウザで <code>https://www.postgresql.org/download/windows/</code> を開く</li>
+  <li>「Download the installer」をクリック</li>
+  <li>最新バージョンの「Windows x86-64」をダウンロード</li>
+</ol>
+
+<h3>2-2　インストール</h3>
+<ol class="steps">
+  <li>ダウンロードした <code>postgresql-XX-windows-x64.exe</code> を実行</li>
+  <li>「次へ」を押し続ける（インストール先はデフォルトのままでOK）</li>
+  <li>「Select Components」画面：PostgreSQL Server／pgAdmin 4／Stack Builder にチェックが入っていることを確認</li>
+  <li>「Password」画面：<code>postgres</code> ユーザーのパスワードを設定（<strong>必ずメモしてください</strong>）</li>
+  <li>「Port」画面：<code>5432</code> のままでOK</li>
+  <li>「次へ」→「Install」でインストール開始（数分かかります）</li>
+  <li>完了画面で「Stack Builder」のチェックを外して「Finish」</li>
+</ol>
+
+<h3>2-3　自動起動の確認</h3>
+<p>PostgreSQLはインストール時に自動的にWindowsサービスとして登録されます。</p>
+<ol class="steps">
+  <li><kbd>Windowsキー + R</kbd> → <code>services.msc</code> と入力して Enter</li>
+  <li>「postgresql-x64-XX」というサービスを探す</li>
+  <li>スタートアップの種類が「自動」になっていることを確認（なっていなければプロパティから「自動」に変更）</li>
+</ol>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch3">第3章　データベースの作成</h2>
+
+<h3>3-1　pgAdmin 4を起動</h3>
+<ol class="steps">
+  <li>スタートメニューから「pgAdmin 4」を起動</li>
+  <li>起動時にマスターパスワードを設定するよう求められる場合は、任意のパスワードを設定</li>
+  <li>左側のツリーで「Servers」→「PostgreSQL XX」をクリック</li>
+  <li>インストール時に設定したパスワードを入力して「OK」</li>
+</ol>
+
+<h3>3-2　データベースを作成</h3>
+<ol class="steps">
+  <li>左ツリーの「Databases」を右クリック →「Create」→「Database...」</li>
+  <li>「Database」欄に <code>cci_mail</code> と入力</li>
+  <li>「Save」をクリック</li>
+</ol>
+
+<div class="note">商工会議所内で他システム（請求書発行システムの <code>cci_billing</code> など）と<strong>同じPostgreSQLサーバーを共用</strong>する場合は、この手順で<strong>新しいデータベース</strong>（<code>cci_mail</code>）だけを追加で作成すればOKです。サーバー・ユーザー・パスワードは共通で使い回せます。</div>
+
+<h3>3-3　接続ユーザーの確認</h3>
+<p>デフォルトの <code>postgres</code> ユーザーをそのまま使用します。セキュリティを強化したい場合は専用ユーザーを作成してください（任意）。</p>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch4">第4章　社内の他のPCからの接続を許可する設定</h2>
+
+<div class="note"><strong>セキュリティについて：</strong>この設定はあくまで社内LAN内のPCからの接続を許可するものです。インターネット（外部）からはアクセスできません。</div>
+
+<h3>4-1　postgresql.conf の編集</h3>
+<ol class="steps">
+  <li>エクスプローラーで <code>C:\Program Files\PostgreSQL\XX\data\</code> フォルダを開く（XXはバージョン番号）</li>
+  <li><code>postgresql.conf</code> をメモ帳で開く</li>
+  <li><code>listen_addresses</code> を検索（<kbd>Ctrl+F</kbd>）</li>
+  <li>以下のように変更する</li>
+</ol>
+<pre>変更前：#listen_addresses = 'localhost'
+変更後：listen_addresses = '*'</pre>
+<p>上書き保存します。</p>
+<div class="note">メモ帳で保存できない場合：ファイルをデスクトップにコピー → 編集 → 元のフォルダに戻す</div>
+
+<h3>4-2　pg_hba.conf の編集</h3>
+<p>同じフォルダの <code>pg_hba.conf</code> をメモ帳で開き、ファイルの末尾に以下の1行を追加します。</p>
+<pre>host    all             all             192.168.1.0/24          md5</pre>
+<div class="note"><code>192.168.1.0/24</code> は社内ネットワークのアドレス帯です。ルーターのアドレスが <code>192.168.0.1</code> の場合は <code>192.168.0.0/24</code> に変更してください。すでに他システム用にこの行を追加済みの場合は、そのまま流用でき、この手順は不要です。</div>
+<p>保存して閉じます。</p>
+
+<h3>4-3　PostgreSQLを再起動</h3>
+<ol class="steps">
+  <li><kbd>Windowsキー + R</kbd> → <code>services.msc</code> を開く</li>
+  <li>「postgresql-x64-XX」を右クリック →「再起動」</li>
+</ol>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch5">第5章　Windowsファイアウォールの設定</h2>
+
+<p>社内の他のPCからアクセスできるよう、ポート5432を開放します。すでに他システム用に設定済みの場合はこの章は不要です。</p>
+
+<h3>5-1　受信規則の追加</h3>
+<ol class="steps">
+  <li>スタートメニューで「Windows Defender ファイアウォール」を検索して開く</li>
+  <li>左側の「詳細設定」をクリック</li>
+  <li>左ツリーの「受信の規則」を右クリック →「新しい規則」</li>
+  <li>「ポート」を選択 →「次へ」</li>
+  <li>「TCP」を選択、「特定のローカルポート」に <code>5432</code> と入力 →「次へ」</li>
+  <li>「接続を許可する」→「次へ」</li>
+  <li>「ドメイン」「プライベート」にチェック（「パブリック」は外してOK）→「次へ」</li>
+  <li>名前に <code>PostgreSQL</code> と入力 →「完了」</li>
+</ol>
+
+<h3>5-2　設定の確認（サーバーPC上で実行）</h3>
+<ol class="steps">
+  <li>サーバーPCでスタートメニューを右クリック →「Windows PowerShell」を開く</li>
+  <li>以下のコマンドを入力して Enter</li>
+</ol>
+<pre>Test-NetConnection -ComputerName localhost -Port 5432</pre>
+<p><code>TcpTestSucceeded : True</code> と表示されればOKです。</p>
+
+<h3>5-3　職員PCから接続確認</h3>
+<ol class="steps">
+  <li>職員PCでPowerShellを開く</li>
+  <li>以下のコマンドを入力（IPアドレスはサーバーPCの実際のものに変更）</li>
+</ol>
+<pre>Test-NetConnection -ComputerName 192.168.1.200 -Port 5432</pre>
+<p><code>TcpTestSucceeded : True</code> と表示されればOK。<code>False</code> の場合は第5章-1の手順を再確認してください。</p>
+
+<h3>5-4　ウイルス対策ソフトの確認</h3>
+<p>ウイルス対策ソフト（ウイルスバスター、ESET、Norton 等）を導入している場合、そちらのファイアウォール機能が別途ポートをブロックしている場合があります。</p>
+<div class="warn"><strong>確認方法：</strong>第5章-3の確認で <code>False</code> になる場合、ウイルス対策ソフトを一時的に無効にして再テストする。それで <code>True</code> になればウイルス対策ソフト側の設定が原因です。各ソフトの設定で「ポート5432を許可」するルールを追加してください。</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch6">第6章　Windowsアップデートの設定</h2>
+
+<p>業務時間中に突然再起動されないよう設定します。</p>
+<ol class="steps">
+  <li><kbd>Windowsキー + I</kbd> で設定を開く</li>
+  <li>「Windows Update」→「詳細オプション」→「アクティブ時間」</li>
+  <li>業務時間（例：8:00〜18:00）を設定する</li>
+</ol>
+<p>これにより、業務時間外にのみアップデートの再起動が行われます。</p>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch7">第7章　Microsoft 365 の設定</h2>
+
+<p>メール送信には、Microsoft 365（Azure AD）のアプリ登録が必要です。これはPostgreSQLとは別の、メール送信専用の設定です。</p>
+
+<h3>7-1　Azure ADにアプリを登録する</h3>
+<ol class="steps">
+  <li><code>https://portal.azure.com</code> にアクセスし、管理者権限のあるMicrosoft 365アカウントでログイン</li>
+  <li>「Azure Active Directory」→「アプリの登録」→「新規登録」</li>
+  <li>名前に「商工会議所メール配信システム」などわかりやすい名前を入力</li>
+  <li>「サポートされているアカウントの種類」は「この組織ディレクトリのみに含まれるアカウント」を選択</li>
+  <li>「リダイレクトURI」は「パブリック クライアント/ネイティブ」を選び、<code>http://localhost</code> を入力</li>
+  <li>「登録」をクリック</li>
+</ol>
+
+<h3>7-2　APIのアクセス許可を設定</h3>
+<ol class="steps">
+  <li>登録したアプリの画面で「APIのアクセス許可」を開く</li>
+  <li>「アクセス許可の追加」→「Microsoft Graph」→「委任されたアクセス許可」</li>
+  <li><code>Mail.Send</code> を検索してチェックし追加</li>
+  <li>組織の管理者である場合は「管理者の同意を与えます」をクリック</li>
+</ol>
+
+<h3>7-3　テナントID・クライアントIDを控える</h3>
+<p>アプリの「概要」画面に表示される以下の2つの値を控えます。</p>
+<table>
+  <tr><th>項目</th><th>説明</th></tr>
+  <tr><td>アプリケーション (クライアント) ID</td><td>各職員PCの設定画面「Microsoft 365」タブの「クライアントID」に入力</td></tr>
+  <tr><td>ディレクトリ (テナント) ID</td><td>同「テナントID」に入力</td></tr>
+</table>
+
+<div class="note">これらのID自体はパスワードのような秘密情報ではありませんが、社外に不用意に公開する必要はありません。各職員PCの設定はローカルファイルに保存され、共有DBには保存されません。</div>
+
+<h3>7-4　各職員の初回送信時の認証</h3>
+<p>各職員のPCで初めてメールを送信しようとすると、ブラウザでMicrosoft 365のログイン画面が表示されます。ここで<strong>職員自身のMicrosoft 365アカウント</strong>でログインすると、以後はそのアカウント本人としてメールが送信されます（2回目以降は自動的にログイン済み扱いになります）。</p>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch8">第8章　職員PCへのアプリ設定</h2>
+
+<p>サーバーとMicrosoft 365の設定が完了したら、各職員PCでアプリを起動して接続設定を行います。</p>
+
+<h3>8-1　アプリの初回起動</h3>
+<ol class="steps">
+  <li>GitHubのリリースページ（<code>https://github.com/mozu93/cci_giin_mail/releases</code>）からインストーラーをダウンロードして実行する</li>
+  <li>アプリを起動すると「初期設定」ウィザードが自動的に表示される</li>
+</ol>
+
+<h3>8-2　接続情報の入力</h3>
+<table>
+  <tr><th>項目</th><th>入力値</th></tr>
+  <tr><td>DB種別</td><td><strong>PostgreSQL（複数人共有）</strong> を選択</td></tr>
+  <tr><td>ホスト</td><td>サーバーPCのIPアドレス（例：<code>192.168.1.200</code>）</td></tr>
+  <tr><td>ポート</td><td><code>5432</code></td></tr>
+  <tr><td>データベース名</td><td><code>cci_mail</code></td></tr>
+  <tr><td>ユーザー名</td><td><code>postgres</code></td></tr>
+  <tr><td>パスワード</td><td>インストール時に設定したパスワード</td></tr>
+</table>
+
+<h3>8-3　接続テスト</h3>
+<p>「接続テスト」ボタンをクリックし、「接続に成功しました。」と表示されればOKです。「保存して開始」をクリックしてアプリを使い始めます。</p>
+
+<h3>8-4　Microsoft 365の設定</h3>
+<p>ログイン後、「設定」タブ →「Microsoft 365」で、第7章で控えたテナントID・クライアントIDを入力します。テスト送信先アドレスも、この画面で職員ごとに個別に設定します（自分宛てのアドレスを設定するのがおすすめです）。</p>
+
+<div class="warn">DB接続設定を後から変更したい場合は、「設定」タブ →「データベース接続」から可能ですが、変更を反映するにはアプリの再起動が必要です。</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch9">第9章　職員・権限管理</h2>
+
+<p>「設定」タブの「職員管理」は、<strong>管理者権限を持つ職員にのみ表示されます</strong>。</p>
+
+<h3>9-1　最初の管理者</h3>
+<p>まだ誰も職員登録されていない状態で、ログイン画面から最初に登録した職員が、自動的に管理者になります。</p>
+
+<h3>9-2　職員の追加</h3>
+<ol class="steps">
+  <li>「設定」タブ →「職員管理」を開く</li>
+  <li>職員名を入力し、必要に応じて「管理者にする」にチェックを入れて「追加」</li>
+</ol>
+
+<h3>9-3　管理者権限の付与・剥奪</h3>
+<p>一覧から職員を選択し「管理者権限 切替」ボタンで、管理者/非管理者を切り替えられます。</p>
+<div class="danger">最後の1人の管理者を非管理者にしようとすると、確認の警告が表示されます。管理者が0人になると、以後は誰も職員管理タブにアクセスできなくなり、UI上での復旧手段がありません（職員を全員無効化してログイン画面から登録し直すか、データベースを直接操作する必要があります）。操作は慎重に行ってください。</div>
+
+<h3>9-4　職員の有効/無効</h3>
+<p>退職・異動した職員は削除ではなく「有効/無効切り替え」で無効化することを推奨します（送信履歴等の過去データとの整合性を保つため）。無効化された職員はログイン画面の選択肢から除外されます。</p>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="ch10">第10章　設定情報のメモ</h2>
+
+<p>設定完了後、以下をメモして保管してください。</p>
+<table>
+  <tr><th>項目</th><th>設定値</th></tr>
+  <tr><td>サーバーPCのIPアドレス</td><td>　　　　　　　　　　</td></tr>
+  <tr><td>PostgreSQL バージョン</td><td>　　　　　　　　　　</td></tr>
+  <tr><td>データベース名</td><td>cci_mail</td></tr>
+  <tr><td>ユーザー名</td><td>postgres</td></tr>
+  <tr><td>パスワード</td><td>　　　　　　　　　　</td></tr>
+  <tr><td>Microsoft 365 テナントID</td><td>　　　　　　　　　　</td></tr>
+  <tr><td>Microsoft 365 クライアントID</td><td>　　　　　　　　　　</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<h2 id="trouble">トラブルシューティング</h2>
+
+<h3>接続できない場合のチェックリスト</h3>
+<ul>
+  <li>☐ サーバーPCの電源が入っているか</li>
+  <li>☐ サーバーPCとLANで同じネットワークに接続されているか</li>
+  <li>☐ <code>services.msc</code> でPostgreSQLサービスが「実行中」になっているか</li>
+  <li>☐ ファイアウォールでポート5432が開放されているか（第5章）</li>
+  <li>☐ <code>pg_hba.conf</code> のネットワークアドレス帯が正しいか（第4章）</li>
+  <li>☐ <code>postgresql.conf</code> の <code>listen_addresses = '*'</code> になっているか（第4章）</li>
+  <li>☐ PostgreSQLを再起動したか（第4章-3）</li>
+</ul>
+
+<h3>サーバーPCを再起動した後につながらない</h3>
+<p>通常は自動復旧しますが、30秒〜1分ほど待ってから職員PCでアプリを再起動してみてください。</p>
+
+<h3>メール送信でエラーが出る</h3>
+<ul>
+  <li>「設定」タブのMicrosoft 365設定（テナントID・クライアントID）が正しいか確認してください（第7章）。</li>
+  <li>職員本人のMicrosoft 365アカウントの認証が切れている可能性があります。一度アプリを再起動し、再度サインインを求められたら実行してください。</li>
+  <li>Azure ADのアプリ登録で「APIのアクセス許可」に<code>Mail.Send</code>が正しく設定・同意されているか確認してください（第7章-2）。</li>
+</ul>
+
+<hr>
+<p style="color:#9CA3AF;font-size:12px;">このマニュアルは商工会議所メール配信システム専用です。同一サーバーで請求書発行システム（CCI請求管理システム）を併用している場合、第1〜6章のサーバー設定は共通の作業として一度行えば両システムで使い回せます。</p>
+
+</main>
+</body>
+</html>

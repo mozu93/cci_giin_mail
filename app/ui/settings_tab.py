@@ -20,6 +20,9 @@ from app.services.staff_service import (
 from app.services.committee_service import (
     get_committees, create_committee, update_committee, delete_committee
 )
+from app.services.position_service import (
+    get_positions, create_position, update_position, delete_position
+)
 from app.database.models import Member
 
 
@@ -40,7 +43,7 @@ class SettingsTab(QWidget):
         inner.setMaximumWidth(900)
         inner.addTab(_GraphSettingsWidget(), "Microsoft 365")
         inner.addTab(_SignatureWidget(self._staff_id), "署名管理")
-        inner.addTab(_CommitteeWidget(), "委員会管理")
+        inner.addTab(_PositionCommitteeWidget(), "役職・委員会管理")
         if is_admin:
             inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
@@ -551,6 +554,170 @@ class _DataWidget(QWidget):
             QMessageBox.critical(self, "エラー", str(e))
         finally:
             session.close()
+
+
+class _PositionCommitteeWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        pos_grp = QGroupBox("役職")
+        pos_layout = QVBoxLayout(pos_grp)
+        pos_layout.addWidget(_PositionWidget())
+        committee_grp = QGroupBox("委員会")
+        committee_layout = QVBoxLayout(committee_grp)
+        committee_layout.addWidget(_CommitteeWidget())
+        layout.addWidget(pos_grp)
+        layout.addWidget(committee_grp)
+
+
+class _PositionWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        self._table = QTableWidget(0, 1)
+        self._table.setHorizontalHeaderLabels(["役職名"])
+        self._table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._table.itemSelectionChanged.connect(self._on_select)
+        layout.addWidget(self._table)
+
+        form = QFormLayout()
+        self._name = QLineEdit()
+        form.addRow("役職名", self._name)
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        btn_add = QPushButton("追加")
+        btn_add.clicked.connect(self._add)
+        btn_update = QPushButton("更新")
+        btn_update.clicked.connect(self._update)
+        btn_delete = QPushButton("削除")
+        btn_delete.clicked.connect(self._delete)
+        btn_row.addWidget(btn_add)
+        btn_row.addWidget(btn_update)
+        btn_row.addWidget(btn_delete)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        order_row = QHBoxLayout()
+        btn_up = QPushButton("↑ 上へ")
+        btn_up.clicked.connect(lambda: self._move(-1))
+        btn_down = QPushButton("↓ 下へ")
+        btn_down.clicked.connect(lambda: self._move(1))
+        order_row.addWidget(btn_up)
+        order_row.addWidget(btn_down)
+        order_row.addStretch()
+        layout.addLayout(order_row)
+        layout.addStretch()
+        self._load()
+
+    def _load(self):
+        session = get_session()
+        try:
+            self._positions = get_positions(session)
+        finally:
+            session.close()
+        self._table.setRowCount(0)
+        for p in self._positions:
+            row = self._table.rowCount()
+            self._table.insertRow(row)
+            self._table.setItem(row, 0, QTableWidgetItem(p.name))
+            self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, p.id)
+
+    def _on_select(self):
+        row = self._table.currentRow()
+        if row < 0 or row >= len(self._positions):
+            return
+        self._name.setText(self._positions[row].name)
+
+    def _selected_id(self) -> int | None:
+        row = self._table.currentRow()
+        if row < 0:
+            return None
+        return self._table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+
+    def _add(self):
+        name = self._name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "入力エラー", "役職名を入力してください。")
+            return
+        session = get_session()
+        try:
+            next_order = len(self._positions) + 1
+            create_position(session, name, next_order)
+        finally:
+            session.close()
+        self._name.clear()
+        self._load()
+
+    def _update(self):
+        pos_id = self._selected_id()
+        if pos_id is None:
+            return
+        name = self._name.text().strip()
+        if not name:
+            QMessageBox.warning(self, "入力エラー", "役職名を入力してください。")
+            return
+        session = get_session()
+        try:
+            update_position(session, pos_id, name=name)
+        finally:
+            session.close()
+        self._load()
+
+    def _delete(self):
+        pos_id = self._selected_id()
+        if pos_id is None:
+            return
+        session = get_session()
+        try:
+            member_count = (
+                session.query(Member)
+                .filter_by(position_id=pos_id)
+                .count()
+            )
+        finally:
+            session.close()
+        if member_count:
+            msg = (f"この役職には現在 {member_count} 件の会員が所属しています。\n"
+                   "削除すると所属設定が解除されます。削除しますか？")
+        else:
+            msg = "この役職を削除しますか？"
+        ret = QMessageBox.question(
+            self, "削除確認", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        session = get_session()
+        try:
+            session.query(Member).filter_by(position_id=pos_id).update(
+                {"position_id": None})
+            session.commit()
+            delete_position(session, pos_id)
+        finally:
+            session.close()
+        self._name.clear()
+        self._load()
+
+    def _move(self, delta: int):
+        row = self._table.currentRow()
+        if row < 0:
+            return
+        new_row = row + delta
+        if new_row < 0 or new_row >= len(self._positions):
+            return
+        positions = list(self._positions)
+        positions[row], positions[new_row] = positions[new_row], positions[row]
+        session = get_session()
+        try:
+            for i, p in enumerate(positions, 1):
+                update_position(session, p.id, sort_order=i)
+        finally:
+            session.close()
+        self._load()
+        self._table.selectRow(new_row)
 
 
 class _CommitteeWidget(QWidget):

@@ -96,7 +96,7 @@ class MemberTab(QWidget):
         file_menu.addAction("エクスポート", self._export)
         btn_file.setMenu(file_menu)
 
-        btn_order = QPushButton("順番設定")
+        btn_order = QPushButton("副会頭の就任順")
         btn_order.clicked.connect(self._order_settings)
 
         row2.addWidget(btn_add)

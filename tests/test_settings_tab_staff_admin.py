@@ -20,6 +20,7 @@ def _patch_common(monkeypatch, staff_lookup=None):
     monkeypatch.setattr("app.ui.settings_tab.get_signatures", lambda s, sid: [])
     monkeypatch.setattr("app.ui.settings_tab.get_all_staff", lambda s: [])
     monkeypatch.setattr("app.ui.settings_tab.get_committees", lambda s: [])
+    monkeypatch.setattr("app.ui.settings_tab.get_positions", lambda s: [])
 
 
 def test_staff_tab_hidden_for_non_admin(qtbot, monkeypatch):

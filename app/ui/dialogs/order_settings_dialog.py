@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
+    QDialog, QVBoxLayout, QHBoxLayout,
     QListWidget, QListWidgetItem, QPushButton, QLabel, QMessageBox
 )
 from PyQt6.QtCore import Qt
@@ -8,46 +8,29 @@ from app.database.models import Position, Member
 
 
 class OrderSettingsDialog(QDialog):
-    """役職の表示順と副会頭の就任順を設定するダイアログ"""
+    """副会頭の就任順を設定するダイアログ
+
+    役職そのものの表示順（sort_order）は設定タブの「役職・委員会管理」に統合済み。
+    """
 
     def __init__(self, session: Session, parent=None):
         super().__init__(parent)
         self._session = session
-        self.setWindowTitle("表示順設定")
-        self.resize(500, 460)
+        self.setWindowTitle("副会頭の就任順設定")
+        self.resize(500, 400)
         self._build()
         self._load()
 
     def _build(self):
         layout = QVBoxLayout(self)
 
-        self._tabs = QTabWidget()
-
-        # ── Tab1: 役職の表示順 ──
-        pos_widget = QWidget()
-        pos_layout = QVBoxLayout(pos_widget)
-        pos_layout.addWidget(QLabel(
-            "役職を選択して ↑↓ ボタンで並べ替えてください。\n"
-            "（例: 会頭→副会頭→常議員→監事→議員）"))
-        self._pos_list = QListWidget()
-        self._pos_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        pos_layout.addWidget(self._pos_list)
-        pos_layout.addLayout(self._arrow_buttons(self._pos_list))
-        self._tabs.addTab(pos_widget, "役職の表示順")
-
-        # ── Tab2: 副会頭の就任順 ──
-        fuku_widget = QWidget()
-        fuku_layout = QVBoxLayout(fuku_widget)
-        fuku_layout.addWidget(QLabel(
+        layout.addWidget(QLabel(
             "副会頭を就任が古い順（上）→新しい順（下）に並べ替えてください。\n"
             "（ドラッグまたは ↑↓ ボタンで操作）"))
         self._fuku_list = QListWidget()
         self._fuku_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        fuku_layout.addWidget(self._fuku_list)
-        fuku_layout.addLayout(self._arrow_buttons(self._fuku_list))
-        self._tabs.addTab(fuku_widget, "副会頭の就任順")
-
-        layout.addWidget(self._tabs)
+        layout.addWidget(self._fuku_list)
+        layout.addLayout(self._arrow_buttons(self._fuku_list))
 
         # 保存 / キャンセル
         btns = QHBoxLayout()
@@ -84,15 +67,9 @@ class OrderSettingsDialog(QDialog):
         lw.setCurrentRow(new_row)
 
     def _load(self):
-        # 役職を sort_order 順に表示
         positions = (self._session.query(Position)
                      .order_by(Position.sort_order, Position.id)
                      .all())
-        self._pos_list.clear()
-        for p in positions:
-            item = QListWidgetItem(p.name)
-            item.setData(Qt.ItemDataRole.UserRole, p.id)
-            self._pos_list.addItem(item)
 
         # 副会頭を display_order → organization_kana 順に表示
         fuku_pos = next(
@@ -113,16 +90,6 @@ class OrderSettingsDialog(QDialog):
             self._fuku_list.addItem("（副会頭の役職が登録されていません）")
 
     def _save(self):
-        # 役職の sort_order を保存
-        for i in range(self._pos_list.count()):
-            item = self._pos_list.item(i)
-            pos_id = item.data(Qt.ItemDataRole.UserRole)
-            if pos_id is None:
-                continue
-            pos = self._session.get(Position, pos_id)
-            if pos:
-                pos.sort_order = i + 1
-
         # 副会頭の display_order を保存
         for i in range(self._fuku_list.count()):
             item = self._fuku_list.item(i)

@@ -1,6 +1,10 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel, QApplication,
+    QMessageBox,
 )
+from PyQt6.QtGui import QAction
+from app.database.connection import get_session
+from app.services.staff_service import get_staff_by_name
 from app.ui.member_tab import MemberTab
 from app.ui.meeting_tab import MeetingTab
 from app.ui.send_tab import SendTab
@@ -14,6 +18,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._staff_name = staff_name
         self._readonly = readonly
+        session = get_session()
+        try:
+            staff = get_staff_by_name(session, staff_name) if staff_name else None
+        finally:
+            session.close()
+        self._is_admin = bool(staff and staff.is_admin)
         if readonly:
             title = "商工会議所メール配信システム　【閲覧専用】"
         elif staff_name:
@@ -23,9 +33,38 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title)
         self.resize(1280, 728)
         self.setMinimumSize(700, 500)
+        self._setup_menu()
         self._build_tabs()
         self._setup_statusbar()
         self._center_on_screen()
+
+    def _setup_menu(self):
+        menubar = self.menuBar()
+        help_menu = menubar.addMenu("ヘルプ")
+
+        act_manual = QAction("使い方マニュアル", self)
+        act_manual.triggered.connect(lambda: self._open_manual("user_manual.html"))
+        help_menu.addAction(act_manual)
+
+        if self._is_admin:
+            act_admin_manual = QAction("管理者マニュアル", self)
+            act_admin_manual.triggered.connect(
+                lambda: self._open_manual("admin_manual.html"))
+            help_menu.addAction(act_admin_manual)
+
+    def _open_manual(self, filename: str):
+        import os
+        import sys
+        from pathlib import Path
+        if getattr(sys, "frozen", False):
+            base = Path(sys._MEIPASS)
+        else:
+            base = Path(__file__).parent.parent.parent
+        manual = base / "docs" / "manual" / filename
+        if manual.exists():
+            os.startfile(str(manual))
+        else:
+            QMessageBox.warning(self, "マニュアル", f"マニュアルファイルが見つかりません:\n{manual}")
 
     def _center_on_screen(self):
         screen = QApplication.primaryScreen().availableGeometry()

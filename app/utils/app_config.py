@@ -66,6 +66,15 @@ def get_html_export_path() -> str:
     return get_config().get("html_export_path", "")
 
 
+def is_first_run() -> bool:
+    """設定ファイルが一度も保存されていない（＝DB接続先が未設定の）状態かどうか。
+
+    既存インストール（本機能追加前に作られたconfig）は、キーの有無に関わらず
+    ファイルが存在する時点で「設定済み」とみなし、初回設定ウィザードを出さない。
+    """
+    return not _config_path().exists()
+
+
 def get_pg_config() -> dict:
     """PostgreSQL接続設定を返す"""
     defaults = {
