@@ -81,6 +81,39 @@ def test_build_targets_passes_all_matched_files(qtbot, monkeypatch):
         "filepaths": ["/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"],
         "found": True,
     }]
+    tab._chk_use_attach.setChecked(True)
 
     result = tab._build_targets()
     assert result["A001"] == ["/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"]
+
+
+def test_build_targets_excludes_attachments_when_checkbox_unchecked(qtbot, monkeypatch):
+    members = [_Member(1, "A001", "org1")]
+    _patch_common(monkeypatch)
+    monkeypatch.setattr("app.ui.send_tab.get_members", lambda s: members)
+    monkeypatch.setattr(
+        "app.ui.send_tab.compile_send_targets",
+        lambda **kwargs: kwargs["attach_map"])
+
+    from app.ui.send_tab import SendTab
+    tab = SendTab(staff_name="担当者A")
+    qtbot.addWidget(tab)
+    tab._recipient.set_checks_by_member_ids({1})
+    tab._attach_list = [{
+        "member_number": "A001", "org_name": "org1", "to_address": "a@example.com",
+        "filepaths": ["/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"],
+        "found": True,
+    }]
+
+    # 「添付ファイルを使用する」チェックボックスは初期状態でオフ
+    assert tab._chk_use_attach.isChecked() is False
+
+    result = tab._build_targets()
+    assert result == {}, "チェックボックスがオフの場合は添付を送信対象に含めない"
+    # 内部データ自体はクリアされない（再度チェックすれば復元される）
+    assert tab._attach_list[0]["filepaths"] == [
+        "/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"]
+
+    tab._chk_use_attach.setChecked(True)
+    result2 = tab._build_targets()
+    assert result2["A001"] == ["/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"]

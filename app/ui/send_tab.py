@@ -179,6 +179,7 @@ class SendTab(QWidget):
         self._pos_list.setMaximumHeight(100)
         self._pos_list.itemSelectionChanged.connect(self._on_pos_select)
         pp.addWidget(self._pos_list)
+        self._pos_panel.setVisible(False)
         layout.addWidget(self._pos_panel)
 
         self._committee_panel = QWidget()
@@ -595,8 +596,12 @@ class SendTab(QWidget):
                     QMessageBox.StandardButton.No)
                 if ret != QMessageBox.StandardButton.Yes:
                     return
-                update_template(session, tmpl_id, subject=subject, body=body,
-                                signature_id=sig_id)
+                try:
+                    update_template(session, tmpl_id, subject=subject, body=body,
+                                    signature_id=sig_id)
+                except Exception as e:
+                    QMessageBox.critical(self, "エラー", str(e))
+                    return
                 saved_id = tmpl_id
             else:
                 name, ok = QInputDialog.getText(
@@ -604,8 +609,12 @@ class SendTab(QWidget):
                 name = name.strip()
                 if not ok or not name:
                     return
-                new_tmpl = create_template(session, name, subject, body,
-                                           signature_id=sig_id)
+                try:
+                    new_tmpl = create_template(session, name, subject, body,
+                                               signature_id=sig_id)
+                except Exception as e:
+                    QMessageBox.critical(self, "エラー", str(e))
+                    return
                 saved_id = new_tmpl.id
         finally:
             session.close()
@@ -728,10 +737,12 @@ class SendTab(QWidget):
             if sig:
                 sig_body = "\n\n" + sig.body
 
+        use_attach = self._chk_use_attach.isChecked()
         attach_map: dict[str, list[str]] = {
             r["member_number"]: r["filepaths"]
             for r in self._attach_list if r["found"]
-        }
+        } if use_attach else {}
+        common_attachments = self._common_attachments if use_attach else []
         member_cache = {m.id: m for m in self._members}
         table = self._recipient.table
         no_email_text = self._recipient.no_email_text
@@ -759,7 +770,7 @@ class SendTab(QWidget):
             sig_body=sig_body,
             merge_data=self._merge_data,
             col_labels=self._col_labels,
-            common_attachments=self._common_attachments,
+            common_attachments=common_attachments,
             attach_map=attach_map,
         )
 

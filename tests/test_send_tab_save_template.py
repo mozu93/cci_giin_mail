@@ -81,6 +81,61 @@ def test_save_as_template_overwrites_when_selected(qtbot, monkeypatch):
     assert updated["args"][1]["body"] == "新本文"
 
 
+def test_save_as_template_shows_error_on_create_failure(qtbot, monkeypatch):
+    _patch_common(monkeypatch)
+
+    def fake_create_template(session, name, subject, body, signature_id=None):
+        raise RuntimeError("DB書き込みエラー")
+
+    monkeypatch.setattr("app.ui.send_tab.create_template", fake_create_template)
+    monkeypatch.setattr(QInputDialog, "getText",
+                        staticmethod(lambda *a, **k: ("新テンプレ", True)))
+
+    errors = []
+    monkeypatch.setattr(QMessageBox, "critical",
+                        staticmethod(lambda *a, **k: errors.append(a)))
+
+    from app.ui.send_tab import SendTab
+    tab = SendTab(staff_name="担当者A")
+    qtbot.addWidget(tab)
+    tab._subject_edit.setText("件名A")
+    tab._body_edit.setPlainText("本文A")
+
+    tab._save_as_template()  # 例外が伝播せず、エラーダイアログが出ること
+
+    assert errors, "create_template失敗時はQMessageBox.criticalを表示すること"
+
+
+def test_save_as_template_shows_error_on_update_failure(qtbot, monkeypatch):
+    tmpl = _Template(5, "既存テンプレ", "旧件名", "旧本文")
+    _patch_common(monkeypatch, templates=[tmpl])
+
+    def fake_update_template(session, template_id, **kwargs):
+        raise RuntimeError("DB書き込みエラー")
+
+    monkeypatch.setattr("app.ui.send_tab.update_template", fake_update_template)
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+
+    errors = []
+    monkeypatch.setattr(QMessageBox, "critical",
+                        staticmethod(lambda *a, **k: errors.append(a)))
+
+    from app.ui.send_tab import SendTab
+    tab = SendTab(staff_name="担当者A")
+    qtbot.addWidget(tab)
+    for i in range(tab._template_combo.count()):
+        if tab._template_combo.itemData(i) == 5:
+            tab._template_combo.setCurrentIndex(i)
+            break
+    tab._subject_edit.setText("新件名")
+    tab._body_edit.setPlainText("新本文")
+
+    tab._save_as_template()  # 例外が伝播せず、エラーダイアログが出ること
+
+    assert errors, "update_template失敗時はQMessageBox.criticalを表示すること"
+
+
 def test_save_as_template_requires_subject_and_body(qtbot, monkeypatch):
     _patch_common(monkeypatch)
 
