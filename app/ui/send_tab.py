@@ -1,16 +1,19 @@
 import os
+import glob
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QGroupBox, QFormLayout, QComboBox, QLabel,
     QPushButton, QCheckBox, QLineEdit, QTextEdit,
-    QProgressBar, QFileDialog, QMessageBox,
+    QProgressBar, QFileDialog, QMessageBox, QInputDialog,
     QListWidget, QListWidgetItem, QRadioButton, QButtonGroup,
     QSplitter,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from app.database.connection import get_session
 from app.services.member_service import get_members
-from app.services.template_service import get_templates, get_template
+from app.services.template_service import (
+    get_templates, get_template, create_template, update_template
+)
 from app.services.signature_service import get_signatures, get_default_signature
 from app.services.position_service import get_positions
 from app.services.committee_service import get_committees
@@ -247,6 +250,15 @@ class SendTab(QWidget):
             ph_row.addWidget(btn)
         ph_row.addStretch()
         outer.addLayout(ph_row)
+
+        btn_row2 = QHBoxLayout()
+        self._btn_save_template = QPushButton("テンプレートとして保存")
+        self._btn_save_template.clicked.connect(self._save_as_template)
+        btn_row2.addWidget(self._btn_save_template)
+        btn_row2.addStretch()
+        outer.addLayout(btn_row2)
+        self._step2_status_label = QLabel("")
+        outer.addWidget(self._step2_status_label)
 
         return grp
 
@@ -535,6 +547,48 @@ class SendTab(QWidget):
     def _insert_placeholder(self, placeholder: str):
         self._body_edit.setFocus()
         self._body_edit.insertPlainText(placeholder)
+
+    def _save_as_template(self):
+        subject = self._subject_edit.text().strip()
+        body = self._body_edit.toPlainText().strip()
+        if not subject or not body:
+            QMessageBox.warning(self, "入力エラー", "件名と本文を入力してください。")
+            return
+        sig_id = self._sig_combo.currentData()
+        tmpl_id = self._template_combo.currentData()
+        session = get_session()
+        try:
+            if tmpl_id:
+                tmpl_name = self._template_combo.currentText()
+                ret = QMessageBox.question(
+                    self, "上書き確認",
+                    f"テンプレート「{tmpl_name}」を上書き保存しますか？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No)
+                if ret != QMessageBox.StandardButton.Yes:
+                    return
+                update_template(session, tmpl_id, subject=subject, body=body,
+                                signature_id=sig_id)
+                saved_id = tmpl_id
+            else:
+                name, ok = QInputDialog.getText(
+                    self, "テンプレート名", "新しいテンプレート名を入力してください：")
+                name = name.strip()
+                if not ok or not name:
+                    return
+                new_tmpl = create_template(session, name, subject, body,
+                                           signature_id=sig_id)
+                saved_id = new_tmpl.id
+        finally:
+            session.close()
+
+        self._load_combos()
+        for i in range(self._template_combo.count()):
+            if self._template_combo.itemData(i) == saved_id:
+                self._template_combo.setCurrentIndex(i)
+                break
+        from app.ui.widgets.inline_status import show_inline_message
+        show_inline_message(self._step2_status_label, "テンプレートを保存しました")
 
     # ──────────────────────────────────────────────────────
     # 差し込み・添付
