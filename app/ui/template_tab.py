@@ -13,6 +13,7 @@ from app.services.template_service import (
     get_templates, create_template, update_template, delete_template
 )
 from app.services.signature_service import get_signatures
+from app.services.staff_service import get_staff_by_name
 
 _BASE_PLACEHOLDERS = ["{事業所名}", "{役職名}", "{氏名}", "{会議所役職名}"]
 _MERGE_PLACEHOLDERS = ["{col1}", "{col2}", "{col3}", "{col4}", "{col5}"]
@@ -23,8 +24,9 @@ def _dev_tools_enabled() -> bool:
 
 
 class TemplateTab(QWidget):
-    def __init__(self):
+    def __init__(self, staff_name: str = ""):
         super().__init__()
+        self._staff_name = staff_name
         self._current_id: int | None = None
         self._snapshot: tuple = ("", "", "", None)
         self._build()
@@ -111,7 +113,9 @@ class TemplateTab(QWidget):
         session = get_session()
         try:
             self._templates = get_templates(session)
-            self._signatures = get_signatures(session)
+            staff = get_staff_by_name(session, self._staff_name) if self._staff_name else None
+            staff_id = staff.id if staff else None
+            self._signatures = get_signatures(session, staff_id) if staff_id else []
         finally:
             session.close()
 
