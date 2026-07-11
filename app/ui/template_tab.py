@@ -1,4 +1,5 @@
 # app/ui/template_tab.py
+import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QListWidget, QListWidgetItem, QPushButton,
@@ -13,10 +14,12 @@ from app.services.template_service import (
 )
 from app.services.signature_service import get_signatures
 
-_PLACEHOLDERS = [
-    "{事業所名}", "{役職名}", "{氏名}", "{会議所役職名}",
-    "{col1}", "{col2}", "{col3}", "{col4}", "{col5}",
-]
+_BASE_PLACEHOLDERS = ["{事業所名}", "{役職名}", "{氏名}", "{会議所役職名}"]
+_MERGE_PLACEHOLDERS = ["{col1}", "{col2}", "{col3}", "{col4}", "{col5}"]
+
+
+def _dev_tools_enabled() -> bool:
+    return os.environ.get("CCI_MAIL_DEV_TOOLS") == "1"
 
 
 class TemplateTab(QWidget):
@@ -76,7 +79,10 @@ class TemplateTab(QWidget):
         ph_grp = QGroupBox("使用可能なプレースホルダー（クリックで本文に挿入）")
         ph_layout = QVBoxLayout(ph_grp)
         btn_row = QHBoxLayout()
-        for ph in _PLACEHOLDERS:
+        placeholders = list(_BASE_PLACEHOLDERS)
+        if _dev_tools_enabled():
+            placeholders += _MERGE_PLACEHOLDERS
+        for ph in placeholders:
             btn = QPushButton(ph)
             btn.setFlat(True)
             btn.setStyleSheet(
