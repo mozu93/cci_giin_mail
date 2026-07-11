@@ -17,121 +17,102 @@ def _migrate_sqlite(engine):
     """既存SQLite DBにカラム追加が必要な場合だけ ALTER TABLE を実行する"""
     from sqlalchemy import text
     with engine.connect() as conn:
-        # Check which tables exist
-        tables_result = conn.execute(text(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ))
-        existing_tables = {row[0] for row in tables_result}
+        meetings_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(meetings)"))
+        }
+        if "target_position_ids" not in meetings_cols:
+            conn.execute(text(
+                "ALTER TABLE meetings ADD COLUMN target_position_ids TEXT"
+            ))
+            conn.commit()
 
-        if "meetings" in existing_tables:
-            meetings_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(meetings)"))
-            }
-            if "target_position_ids" not in meetings_cols:
-                conn.execute(text(
-                    "ALTER TABLE meetings ADD COLUMN target_position_ids TEXT"
-                ))
-                conn.commit()
+        members_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
+        }
+        if "display_order" not in members_cols:
+            conn.execute(text(
+                "ALTER TABLE members ADD COLUMN display_order INTEGER"
+            ))
+            conn.commit()
 
-        if "members" in existing_tables:
-            members_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
-            }
-            if "display_order" not in members_cols:
-                conn.execute(text(
-                    "ALTER TABLE members ADD COLUMN display_order INTEGER"
-                ))
-                conn.commit()
-
-        if "attendance_records" in existing_tables:
-            attendance_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(attendance_records)"))
-            }
-            if "actual_status" not in attendance_cols:
-                conn.execute(text(
-                    "ALTER TABLE attendance_records ADD COLUMN actual_status TEXT DEFAULT ''"
-                ))
-                conn.commit()
+        attendance_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(attendance_records)"))
+        }
+        if "actual_status" not in attendance_cols:
+            conn.execute(text(
+                "ALTER TABLE attendance_records ADD COLUMN actual_status TEXT DEFAULT ''"
+            ))
+            conn.commit()
 
         # reception_logs テーブルは create_all で自動生成されるため追加不要
 
-        if "member_history" in existing_tables:
-            history_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(member_history)"))
-            }
-            if "import_batch_id" not in history_cols:
-                conn.execute(text(
-                    "ALTER TABLE member_history ADD COLUMN import_batch_id TEXT"
-                ))
-                conn.commit()
+        history_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(member_history)"))
+        }
+        if "import_batch_id" not in history_cols:
+            conn.execute(text(
+                "ALTER TABLE member_history ADD COLUMN import_batch_id TEXT"
+            ))
+            conn.commit()
 
-        if "members" in existing_tables:
-            members_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
-            }
-            if "photo_thumb" not in members_cols:
-                conn.execute(text("ALTER TABLE members ADD COLUMN photo_thumb BLOB"))
-                conn.commit()
-            if "photo_full" not in members_cols:
-                conn.execute(text("ALTER TABLE members ADD COLUMN photo_full BLOB"))
-                conn.commit()
+        members_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
+        }
+        if "photo_thumb" not in members_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN photo_thumb BLOB"))
+            conn.commit()
+        if "photo_full" not in members_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN photo_full BLOB"))
+            conn.commit()
 
-        if "members" in existing_tables:
-            members_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
-            }
-            if "committee_id" not in members_cols:
-                conn.execute(text(
-                    "ALTER TABLE members ADD COLUMN committee_id INTEGER"
-                ))
-                conn.commit()
+        members_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
+        }
+        if "committee_id" not in members_cols:
+            conn.execute(text(
+                "ALTER TABLE members ADD COLUMN committee_id INTEGER"
+            ))
+            conn.commit()
 
-        if "staff" in existing_tables:
-            staff_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(staff)"))
-            }
-            if "is_admin" not in staff_cols:
-                conn.execute(text(
-                    "ALTER TABLE staff ADD COLUMN is_admin BOOLEAN DEFAULT 0"
-                ))
-                conn.commit()
+        staff_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(staff)"))
+        }
+        if "is_admin" not in staff_cols:
+            conn.execute(text(
+                "ALTER TABLE staff ADD COLUMN is_admin BOOLEAN DEFAULT 0"
+            ))
+            conn.commit()
 
-        if "signatures" in existing_tables:
-            signatures_cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(signatures)"))
-            }
-            if "staff_id" not in signatures_cols:
-                conn.execute(text(
-                    "ALTER TABLE signatures ADD COLUMN staff_id INTEGER"
-                ))
-                conn.commit()
+        signatures_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(signatures)"))
+        }
+        if "staff_id" not in signatures_cols:
+            conn.execute(text(
+                "ALTER TABLE signatures ADD COLUMN staff_id INTEGER"
+            ))
+            conn.commit()
 
 
 def _migrate_postgresql(engine):
     from sqlalchemy import inspect, text
     insp = inspect(engine)
-    table_names = insp.get_table_names()
-
+    members_cols = {col["name"] for col in insp.get_columns("members")}
     with engine.begin() as conn:
-        if "members" in table_names:
-            members_cols = {col["name"] for col in insp.get_columns("members")}
-            if "photo_thumb" not in members_cols:
-                conn.execute(text("ALTER TABLE members ADD COLUMN photo_thumb BYTEA"))
-            if "photo_full" not in members_cols:
-                conn.execute(text("ALTER TABLE members ADD COLUMN photo_full BYTEA"))
+        if "photo_thumb" not in members_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN photo_thumb BYTEA"))
+        if "photo_full" not in members_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN photo_full BYTEA"))
 
-            if "committee_id" not in members_cols:
-                conn.execute(text("ALTER TABLE members ADD COLUMN committee_id INTEGER"))
+        if "committee_id" not in members_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN committee_id INTEGER"))
 
-        if "staff" in table_names:
-            staff_cols = {col["name"] for col in insp.get_columns("staff")}
-            if "is_admin" not in staff_cols:
-                conn.execute(text("ALTER TABLE staff ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
+        staff_cols = {col["name"] for col in insp.get_columns("staff")}
+        if "is_admin" not in staff_cols:
+            conn.execute(text("ALTER TABLE staff ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
 
-        if "signatures" in table_names:
-            signatures_cols = {col["name"] for col in insp.get_columns("signatures")}
-            if "staff_id" not in signatures_cols:
-                conn.execute(text("ALTER TABLE signatures ADD COLUMN staff_id INTEGER"))
+        signatures_cols = {col["name"] for col in insp.get_columns("signatures")}
+        if "staff_id" not in signatures_cols:
+            conn.execute(text("ALTER TABLE signatures ADD COLUMN staff_id INTEGER"))
 
 
 def get_engine(db_path: str | None = None):
