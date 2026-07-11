@@ -21,6 +21,14 @@ from app.utils.app_config import get_graph_config
 from app.ui.recipient_panel import RecipientPanel
 
 
+_BASE_PLACEHOLDERS = ["{事業所名}", "{役職名}", "{氏名}", "{会議所役職名}"]
+_MERGE_PLACEHOLDERS = ["{col1}", "{col2}", "{col3}", "{col4}", "{col5}"]
+
+
+def _dev_tools_enabled() -> bool:
+    return os.environ.get("CCI_MAIL_DEV_TOOLS") == "1"
+
+
 class _SendWorker(QThread):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal(int, int, int)
@@ -206,7 +214,9 @@ class SendTab(QWidget):
 
     def _build_step2(self) -> QGroupBox:
         grp = QGroupBox("Step 2：テンプレート・署名選択")
-        f = QFormLayout(grp)
+        outer = QVBoxLayout(grp)
+
+        f = QFormLayout()
         self._template_combo = QComboBox()
         self._template_combo.currentIndexChanged.connect(self._on_template_select)
         self._sig_combo = QComboBox()
@@ -221,6 +231,23 @@ class SendTab(QWidget):
         f.addRow("件名", self._subject_edit)
         f.addRow("本文", self._body_edit)
         f.addRow("", self._btn_expand_body)
+        outer.addLayout(f)
+
+        ph_row = QHBoxLayout()
+        placeholders = list(_BASE_PLACEHOLDERS)
+        if _dev_tools_enabled():
+            placeholders += _MERGE_PLACEHOLDERS
+        for ph in placeholders:
+            btn = QPushButton(ph)
+            btn.setFlat(True)
+            btn.setStyleSheet(
+                "font-size: 12px; color: #1E40AF; padding: 2px 6px;"
+                "border: 1px solid #BFDBFE; border-radius: 3px;")
+            btn.clicked.connect(lambda checked, p=ph: self._insert_placeholder(p))
+            ph_row.addWidget(btn)
+        ph_row.addStretch()
+        outer.addLayout(ph_row)
+
         return grp
 
     def _build_step3(self) -> QGroupBox:
@@ -504,6 +531,10 @@ class SendTab(QWidget):
         layout.addLayout(btn_row)
         if dlg.exec():
             self._body_edit.setPlainText(editor.toPlainText())
+
+    def _insert_placeholder(self, placeholder: str):
+        self._body_edit.setFocus()
+        self._body_edit.insertPlainText(placeholder)
 
     # ──────────────────────────────────────────────────────
     # 差し込み・添付
