@@ -317,9 +317,11 @@ class SendTab(QWidget):
 
         rule_row = QHBoxLayout()
         rule_row.addWidget(QLabel("ファイル名:"))
-        self._rule_edit = QLineEdit("{会員番号}.pdf")
+        self._rule_edit = QLineEdit("{会員番号}_*.pdf")
         self._rule_edit.setToolTip(
-            "{会員番号} の部分に各会員番号が入ります。\n例: 会員番号が A001 なら → A001.pdf")
+            "{会員番号} の直後にアンダースコアを挟んだ命名を推奨します。\n"
+            "例: A001_請求書.pdf、A001_確認書_○○商事.pdf\n"
+            "* は任意の文字列にマッチします（ワイルドカード）。")
         rule_row.addWidget(self._rule_edit)
         btn_match = QPushButton("添付ファイルを確認・設定")
         btn_match.clicked.connect(self._check_matching)
@@ -672,14 +674,16 @@ class SendTab(QWidget):
         attach_list = []
         for m in members:
             to_addr = m.email_addresses[0].address if m.email_addresses else ""
-            fname = rule.replace("{会員番号}", m.member_number)
-            fpath = os.path.join(self._individual_folder, fname)
+            pattern = os.path.join(
+                self._individual_folder,
+                rule.replace("{会員番号}", glob.escape(m.member_number)))
+            matched = sorted(glob.glob(pattern))
             attach_list.append({
                 "member_number": m.member_number,
                 "org_name":      m.organization_name,
                 "to_address":    to_addr,
-                "filepath":      fpath,
-                "found":         os.path.exists(fpath),
+                "filepaths":     matched,
+                "found":         len(matched) > 0,
             })
         from app.ui.dialogs.attach_confirm_dialog import AttachConfirmDialog
         dlg = AttachConfirmDialog(attach_list, parent=self)
@@ -718,7 +722,7 @@ class SendTab(QWidget):
                 sig_body = "\n\n" + sig.body
 
         attach_map: dict[str, list[str]] = {
-            r["member_number"]: [r["filepath"]]
+            r["member_number"]: r["filepaths"]
             for r in self._attach_list if r["found"]
         }
         member_cache = {m.id: m for m in self._members}

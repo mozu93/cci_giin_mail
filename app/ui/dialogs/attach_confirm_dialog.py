@@ -48,7 +48,8 @@ class AttachConfirmDialog(QDialog):
             self._table.setItem(row, 0, QTableWidgetItem(r["org_name"]))
             self._table.setItem(row, 1, QTableWidgetItem(r["member_number"]))
             self._table.setItem(row, 2, QTableWidgetItem(r["to_address"]))
-            fname = os.path.basename(r["filepath"]) if r["filepath"] else "-"
+            filepaths = r["filepaths"]
+            fname = ", ".join(os.path.basename(p) for p in filepaths) if filepaths else "-"
             self._table.setItem(row, 3, QTableWidgetItem(fname))
             found_item = QTableWidgetItem("○" if r["found"] else "×")
             if not r["found"]:
