@@ -26,6 +26,7 @@ class SettingsTab(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         inner = QTabWidget()
+        inner.setMaximumWidth(900)
         inner.addTab(_GraphSettingsWidget(), "Microsoft 365")
         inner.addTab(_SignatureWidget(), "署名管理")
         inner.addTab(_CommitteeWidget(), "委員会管理")
