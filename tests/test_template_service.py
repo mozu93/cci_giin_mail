@@ -3,6 +3,7 @@ from app.services.template_service import (
     get_templates, get_template
 )
 from app.services.signature_service import create_signature
+from app.services.staff_service import create_staff
 
 
 def test_create_and_get_template(db_session):
@@ -13,7 +14,8 @@ def test_create_and_get_template(db_session):
 
 
 def test_create_template_with_signature(db_session):
-    sig = create_signature(db_session, "標準署名", "商工会議所\n担当：田中")
+    staff = create_staff(db_session, "水谷")
+    sig = create_signature(db_session, "標準署名", "商工会議所\n担当：田中", staff.id)
     t = create_template(db_session, "総会案内", "件名", "本文", signature_id=sig.id)
     fetched = get_template(db_session, t.id)
     assert fetched.signature.name == "標準署名"
