@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QFormLayout, QComboBox, QLabel,
     QPushButton, QCheckBox, QLineEdit, QTextEdit,
     QProgressBar, QFileDialog, QMessageBox, QInputDialog,
-    QListWidget, QListWidgetItem, QRadioButton, QButtonGroup,
+    QRadioButton, QButtonGroup,
     QSplitter,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -173,24 +173,20 @@ class SendTab(QWidget):
         self._pos_panel = QWidget()
         pp = QVBoxLayout(self._pos_panel)
         pp.setContentsMargins(0, 0, 0, 0)
-        pp.addWidget(QLabel("会議所役職（複数選択可 / Ctrl+クリック）："))
-        self._pos_list = QListWidget()
-        self._pos_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        self._pos_list.setMaximumHeight(100)
-        self._pos_list.itemSelectionChanged.connect(self._on_pos_select)
-        pp.addWidget(self._pos_list)
+        pp.addWidget(QLabel("会議所役職（複数選択可）："))
+        self._pos_row = QHBoxLayout()
+        self._pos_checks: dict[int, QCheckBox] = {}
+        pp.addLayout(self._pos_row)
         self._pos_panel.setVisible(False)
         layout.addWidget(self._pos_panel)
 
         self._committee_panel = QWidget()
         cp = QVBoxLayout(self._committee_panel)
         cp.setContentsMargins(0, 0, 0, 0)
-        cp.addWidget(QLabel("委員会（複数選択可 / Ctrl+クリック）："))
-        self._committee_list = QListWidget()
-        self._committee_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        self._committee_list.setMaximumHeight(100)
-        self._committee_list.itemSelectionChanged.connect(self._on_committee_select)
-        cp.addWidget(self._committee_list)
+        cp.addWidget(QLabel("委員会（複数選択可）："))
+        self._committee_row = QHBoxLayout()
+        self._committee_checks: dict[int, QCheckBox] = {}
+        cp.addLayout(self._committee_row)
         self._committee_panel.setVisible(False)
         layout.addWidget(self._committee_panel)
 
@@ -398,24 +394,28 @@ class SendTab(QWidget):
         addr = graph_config.get("test_address")
         self._btn_test.setText(f"{addr} にテスト送信" if addr else "テスト送信（未設定）")
 
+    def _rebuild_check_row(self, row: QHBoxLayout, checks: dict, items: list,
+                          on_change) -> None:
+        while row.count():
+            child = row.takeAt(0)
+            w = child.widget()
+            if w:
+                w.deleteLater()
+        checks.clear()
+        for obj in items:
+            cb = QCheckBox(obj.name)
+            cb.stateChanged.connect(on_change)
+            row.addWidget(cb)
+            checks[obj.id] = cb
+        row.addStretch()
+
     def _load_combos(self):
         session = get_session()
         try:
-            self._pos_list.blockSignals(True)
-            self._pos_list.clear()
-            for p in get_positions(session):
-                item = QListWidgetItem(p.name)
-                item.setData(Qt.ItemDataRole.UserRole, p.id)
-                self._pos_list.addItem(item)
-            self._pos_list.blockSignals(False)
-
-            self._committee_list.blockSignals(True)
-            self._committee_list.clear()
-            for c in get_committees(session):
-                item = QListWidgetItem(c.name)
-                item.setData(Qt.ItemDataRole.UserRole, c.id)
-                self._committee_list.addItem(item)
-            self._committee_list.blockSignals(False)
+            self._rebuild_check_row(self._pos_row, self._pos_checks,
+                                    get_positions(session), self._on_pos_select)
+            self._rebuild_check_row(self._committee_row, self._committee_checks,
+                                    get_committees(session), self._on_committee_select)
 
             self._members = get_members(session)
             self._recipient.load_members(self._members)
@@ -447,8 +447,10 @@ class SendTab(QWidget):
 
     def _clear_all(self):
         self._rb_by_list.setChecked(True)
-        self._pos_list.clearSelection()
-        self._committee_list.clearSelection()
+        for cb in self._pos_checks.values():
+            cb.setChecked(False)
+        for cb in self._committee_checks.values():
+            cb.setChecked(False)
         for cb in self._status_checks.values():
             cb.setChecked(False)
         self._recipient.clear_checks()
@@ -496,8 +498,7 @@ class SendTab(QWidget):
 
     def _on_pos_select(self):
         selected_pos_ids = {
-            item.data(Qt.ItemDataRole.UserRole)
-            for item in self._pos_list.selectedItems()
+            pid for pid, cb in self._pos_checks.items() if cb.isChecked()
         }
         if not selected_pos_ids:
             self._recipient.clear_checks()
@@ -507,8 +508,7 @@ class SendTab(QWidget):
 
     def _on_committee_select(self):
         selected_committee_ids = {
-            item.data(Qt.ItemDataRole.UserRole)
-            for item in self._committee_list.selectedItems()
+            cid for cid, cb in self._committee_checks.items() if cb.isChecked()
         }
         if not selected_committee_ids:
             self._recipient.clear_checks()

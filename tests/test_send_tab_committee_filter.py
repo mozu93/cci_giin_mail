@@ -42,7 +42,7 @@ def test_committee_filter_checks_only_matching_members(qtbot, monkeypatch):
     qtbot.addWidget(tab)
 
     tab._rb_by_committee.setChecked(True)
-    tab._committee_list.setCurrentRow(0)  # 総務・運営委員会を選択
+    tab._committee_checks[1].setChecked(True)  # 総務・運営委員会を選択
 
     selected = tab._recipient.get_selected_members()
     assert [m.id for m in selected] == [1]
