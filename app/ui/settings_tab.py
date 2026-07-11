@@ -231,8 +231,8 @@ class _StaffWidget(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        self._table = QTableWidget(0, 2)
-        self._table.setHorizontalHeaderLabels(["職員名", "有効"])
+        self._table = QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["職員名", "有効", "管理者"])
         self._table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -241,6 +241,8 @@ class _StaffWidget(QWidget):
         form = QFormLayout()
         self._name = QLineEdit()
         form.addRow("職員名", self._name)
+        self._chk_admin = QCheckBox("管理者にする")
+        form.addRow("", self._chk_admin)
         layout.addLayout(form)
 
         btn_row = QHBoxLayout()
@@ -248,8 +250,11 @@ class _StaffWidget(QWidget):
         btn_add.clicked.connect(self._add)
         btn_toggle = QPushButton("有効/無効切り替え")
         btn_toggle.clicked.connect(self._toggle)
+        btn_admin = QPushButton("管理者権限 切替")
+        btn_admin.clicked.connect(self._toggle_admin)
         btn_row.addWidget(btn_add)
         btn_row.addWidget(btn_toggle)
+        btn_row.addWidget(btn_admin)
         btn_row.addStretch()
         layout.addLayout(btn_row)
         self._load()
@@ -266,6 +271,7 @@ class _StaffWidget(QWidget):
             self._table.insertRow(row)
             self._table.setItem(row, 0, QTableWidgetItem(s.name))
             self._table.setItem(row, 1, QTableWidgetItem("○" if s.is_active else "×"))
+            self._table.setItem(row, 2, QTableWidgetItem("●" if s.is_admin else ""))
             self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, s.id)
 
     def _add(self):
@@ -274,9 +280,10 @@ class _StaffWidget(QWidget):
             QMessageBox.warning(self, "入力エラー", "職員名を入力してください。")
             return
         session = get_session()
-        create_staff(session, name)
+        create_staff(session, name, is_admin=self._chk_admin.isChecked())
         session.close()
         self._name.clear()
+        self._chk_admin.setChecked(False)
         self._load()
 
     def _toggle(self):
@@ -286,6 +293,27 @@ class _StaffWidget(QWidget):
         s = self._staff[row]
         session = get_session()
         set_active(session, s.id, not s.is_active)
+        session.close()
+        self._load()
+
+    def _toggle_admin(self):
+        row = self._table.currentRow()
+        if row < 0 or row >= len(self._staff):
+            return
+        s = self._staff[row]
+        if s.is_admin:
+            other_admins = [x for x in self._staff if x.is_admin and x.id != s.id]
+            if not other_admins:
+                ret = QMessageBox.question(
+                    self, "最後の管理者です",
+                    f"「{s.name}」は現在唯一の管理者です。管理者権限を外すと、"
+                    "職員管理タブに誰もアクセスできなくなります。続行しますか？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No)
+                if ret != QMessageBox.StandardButton.Yes:
+                    return
+        session = get_session()
+        set_admin(session, s.id, not s.is_admin)
         session.close()
         self._load()
 
