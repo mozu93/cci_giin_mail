@@ -92,8 +92,9 @@ class TemplateTab(QWidget):
             btn_row.addWidget(btn)
         btn_row.addStretch()
         ph_layout.addLayout(btn_row)
-        ph_layout.addWidget(QLabel(
-            "差し込みデータ: {col1}〜{col5}は送信時にCSV/Excelからインポートした値に置換されます"))
+        if _dev_tools_enabled():
+            ph_layout.addWidget(QLabel(
+                "差し込みデータ: {col1}〜{col5}は送信時にCSV/Excelからインポートした値に置換されます"))
         right_layout.addWidget(ph_grp)
 
         btn_save = QPushButton("保存")
