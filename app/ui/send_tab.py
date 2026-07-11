@@ -279,6 +279,14 @@ class SendTab(QWidget):
         grp = QGroupBox("添付ファイル（任意）")
         layout = QVBoxLayout(grp)
 
+        self._chk_use_attach = QCheckBox("添付ファイルを使用する")
+        self._chk_use_attach.toggled.connect(self._on_use_attach_toggled)
+        layout.addWidget(self._chk_use_attach)
+
+        self._attach_body = QWidget()
+        body_layout = QVBoxLayout(self._attach_body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+
         common_row = QHBoxLayout()
         btn_common = QPushButton("全社共通ファイルを選択")
         btn_common.clicked.connect(self._select_common_attach)
@@ -290,9 +298,9 @@ class SendTab(QWidget):
         common_row.addWidget(btn_common)
         common_row.addWidget(btn_common_clear)
         common_row.addWidget(self._common_label, 1)
-        layout.addLayout(common_row)
+        body_layout.addLayout(common_row)
 
-        layout.addWidget(QLabel(
+        body_layout.addWidget(QLabel(
             "会社別：会員番号に対応するファイルをフォルダから自動で添付します"))
         folder_row = QHBoxLayout()
         btn_folder = QPushButton("フォルダを選択")
@@ -305,7 +313,7 @@ class SendTab(QWidget):
         folder_row.addWidget(btn_folder)
         folder_row.addWidget(btn_folder_clear)
         folder_row.addWidget(self._folder_label, 1)
-        layout.addLayout(folder_row)
+        body_layout.addLayout(folder_row)
 
         rule_row = QHBoxLayout()
         rule_row.addWidget(QLabel("ファイル名:"))
@@ -316,7 +324,7 @@ class SendTab(QWidget):
         btn_match = QPushButton("添付ファイルを確認・設定")
         btn_match.clicked.connect(self._check_matching)
         rule_row.addWidget(btn_match)
-        layout.addLayout(rule_row)
+        body_layout.addLayout(rule_row)
 
         match_row = QHBoxLayout()
         self._match_label = QLabel("")
@@ -325,9 +333,15 @@ class SendTab(QWidget):
         self._btn_show_attach.setVisible(False)
         self._btn_show_attach.clicked.connect(self._show_attach_list)
         match_row.addWidget(self._btn_show_attach)
-        layout.addLayout(match_row)
+        body_layout.addLayout(match_row)
+
+        layout.addWidget(self._attach_body)
+        self._attach_body.setVisible(False)
 
         return grp
+
+    def _on_use_attach_toggled(self, checked: bool):
+        self._attach_body.setVisible(checked)
 
     def _build_final_section(self) -> QGroupBox:
         grp = QGroupBox("最終確認・送信")
@@ -436,6 +450,7 @@ class SendTab(QWidget):
         self._col_labels = {}
         if hasattr(self, "_merge_status"):
             self._merge_status.setText("（未読み込み — col1〜col5は空で送信）")
+        self._chk_use_attach.setChecked(False)
         self._clear_common_attach()
         self._clear_indiv_folder()
         self._recipient._search.clear()
