@@ -112,6 +112,41 @@ def test_browse_wires_file_dialog_and_load_member_file(qtbot, db_session, monkey
     assert dlg._btn_import.isEnabled()
 
 
+def test_auto_map_matches_email_columns_from_export_headers(qtbot, db_session, monkeypatch):
+    """Test that email address/label columns (as produced by export) are auto-mapped."""
+    headers = [
+        "会員番号", "事業所名", "事業所名フリガナ", "役職名", "氏名", "氏名フリガナ",
+        "会議所役職", "委員会",
+        "メール1アドレス", "メール1ラベル",
+        "メール2アドレス", "メール2ラベル",
+        "メール3アドレス", "メール3ラベル",
+        "メール4アドレス", "メール4ラベル",
+        "メール5アドレス", "メール5ラベル",
+    ]
+    rows = [["111"] + [""] * (len(headers) - 1)]
+
+    monkeypatch.setattr(
+        "app.ui.dialogs.import_dialog.load_member_file",
+        lambda path: (headers, rows))
+
+    dlg = ImportDialog(db_session)
+    qtbot.addWidget(dlg)
+    dlg._on_file_loaded("dummy.xlsx", headers, rows)
+
+    expected = {
+        "email_1_address": "メール1アドレス", "email_1_label": "メール1ラベル",
+        "email_2_address": "メール2アドレス", "email_2_label": "メール2ラベル",
+        "email_3_address": "メール3アドレス", "email_3_label": "メール3ラベル",
+        "email_4_address": "メール4アドレス", "email_4_label": "メール4ラベル",
+        "email_5_address": "メール5アドレス", "email_5_label": "メール5ラベル",
+    }
+    for field_key, header in expected.items():
+        combo = dlg._combos[field_key]
+        assert combo.currentText() == header, (
+            f"{field_key} should auto-map to '{header}' but got "
+            f"'{combo.currentText()}'")
+
+
 def test_browse_returns_early_when_no_file_selected(qtbot, db_session, monkeypatch):
     """Test that cancelling the file dialog leaves the preview untouched."""
     monkeypatch.setattr(

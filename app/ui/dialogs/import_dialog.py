@@ -147,6 +147,16 @@ class ImportDialog(QDialog):
             "会議所役職名": "position_name",
             "委員会": "committee_name",
             "所属委員会": "committee_name",
+            "メール1アドレス": "email_1_address",
+            "メール1ラベル": "email_1_label",
+            "メール2アドレス": "email_2_address",
+            "メール2ラベル": "email_2_label",
+            "メール3アドレス": "email_3_address",
+            "メール3ラベル": "email_3_label",
+            "メール4アドレス": "email_4_address",
+            "メール4ラベル": "email_4_label",
+            "メール5アドレス": "email_5_address",
+            "メール5ラベル": "email_5_label",
         }
         for i, h in enumerate(headers):
             if h in auto_map:
