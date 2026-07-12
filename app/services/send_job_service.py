@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.database.models import SendJob, SendLog
 
@@ -60,3 +60,19 @@ def get_job_logs(session: Session, job_id: int) -> list[SendLog]:
             .filter_by(job_id=job_id)
             .order_by(SendLog.id)
             .all())
+
+
+def delete_old_jobs(session: Session, days: int = 365) -> int:
+    """sent_atが基準日より古いSendJobを削除する（関連SendLogもcascadeで削除）。
+    戻り値: 削除件数
+    """
+    cutoff = datetime.now() - timedelta(days=days)
+    old_jobs = (session.query(SendJob)
+                .filter(SendJob.sent_at.isnot(None))
+                .filter(SendJob.sent_at < cutoff)
+                .all())
+    count = len(old_jobs)
+    for job in old_jobs:
+        session.delete(job)
+    session.commit()
+    return count
