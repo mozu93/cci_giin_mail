@@ -92,6 +92,16 @@ def main():
     if dlg.exec() != LoginDialog.DialogCode.Accepted:
         sys.exit(0)
 
+    from app.database.connection import get_session
+    from app.services.send_job_service import delete_old_jobs
+    session = get_session()
+    try:
+        delete_old_jobs(session)
+    except Exception:
+        pass
+    finally:
+        session.close()
+
     window = MainWindow(staff_name=dlg.staff_name(), readonly=dlg.readonly())
     window.show()
     sys.exit(app.exec())
