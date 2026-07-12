@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
-from app.database.models import SendJob, SendLog
+from sqlalchemy.orm import Session, joinedload, load_only
+from app.database.models import SendJob, SendLog, Member
 
 
 def create_job(session: Session, name: str,
@@ -23,7 +23,8 @@ def finish_job(session: Session, job_id: int) -> None:
     job = session.get(SendJob, job_id)
     if job is None:
         return
-    logs = get_job_logs(session, job_id)
+    # 件数集計にはstatusのみ必要なため、member情報はjoinしない
+    logs = session.query(SendLog).filter_by(job_id=job_id).all()
     job.total_count = len(logs)
     job.success_count = sum(1 for l in logs if l.status == "success")
     job.error_count = sum(1 for l in logs if l.status == "error")
@@ -51,12 +52,17 @@ def add_log(session: Session, job_id: int, member_id: int | None,
 
 def get_jobs(session: Session) -> list[SendJob]:
     return (session.query(SendJob)
+            .options(joinedload(SendJob.staff))
             .order_by(SendJob.created_at.desc())
             .all())
 
 
 def get_job_logs(session: Session, job_id: int) -> list[SendLog]:
+    # 呼び出し元(history_tab)が使うのはorganization_nameのみのため、
+    # 写真等の大きな列(photo_thumb/photo_full)は読み込まない
     return (session.query(SendLog)
+            .options(joinedload(SendLog.member)
+                     .load_only(Member.organization_name))
             .filter_by(job_id=job_id)
             .order_by(SendLog.id)
             .all())

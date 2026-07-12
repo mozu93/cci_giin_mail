@@ -10,15 +10,22 @@ def _enable_fk(dbapi_conn, connection_record):
 
 
 @pytest.fixture
-def db_session():
+def db_sessionmaker():
+    """複数セッションを都度生成できるファクトリ。session.close()後の
+    デタッチ挙動を再現するテスト(例: DetachedInstanceErrorの回帰テスト)で使う。"""
     engine = create_engine("sqlite:///:memory:")
     event.listen(engine, "connect", _enable_fk)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
-    session = Session()
+    yield Session
+    Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def db_session(db_sessionmaker):
+    session = db_sessionmaker()
     yield session
     session.close()
-    Base.metadata.drop_all(engine)
 
 
 @pytest.fixture
