@@ -11,6 +11,7 @@ from app.services.member_service import (
     create_member, update_member, set_email_addresses, record_member_history
 )
 from app.services.committee_service import get_committees
+from app.utils import to_hankaku_kana
 
 _MAX_EMAILS = 5
 
@@ -77,6 +78,10 @@ class MemberEditDialog(QDialog):
         self._title = QLineEdit()
         self._name = QLineEdit()
         self._name_kana = QLineEdit()
+        self._org_kana.editingFinished.connect(
+            lambda: self._org_kana.setText(to_hankaku_kana(self._org_kana.text())))
+        self._name_kana.editingFinished.connect(
+            lambda: self._name_kana.setText(to_hankaku_kana(self._name_kana.text())))
         self._position_combo = _NoWheelComboBox()
         self._committee_combo = _NoWheelComboBox()
         self._notes = QLineEdit()
@@ -209,6 +214,8 @@ class MemberEditDialog(QDialog):
             QMessageBox.warning(self, "入力エラー", "変更理由を入力してください。")
             return
 
+        org_kana = to_hankaku_kana(self._org_kana.text().strip())
+        name_kana = to_hankaku_kana(self._name_kana.text().strip())
         position_id = self._position_combo.currentData()
         committee_id = self._committee_combo.currentData()
         addresses = []
@@ -229,10 +236,10 @@ class MemberEditDialog(QDialog):
                     change_reason=self._change_reason.text().strip(),
                     member_number=member_number,
                     organization_name=org_name,
-                    organization_kana=self._org_kana.text().strip(),
+                    organization_kana=org_kana,
                     title=self._title.text().strip(),
                     name=name,
-                    name_kana=self._name_kana.text().strip(),
+                    name_kana=name_kana,
                     notes=self._notes.text().strip(),
                     position_id=position_id,
                     committee_id=committee_id,
@@ -243,9 +250,9 @@ class MemberEditDialog(QDialog):
             else:
                 m = create_member(
                     self._session, member_number, org_name, name,
-                    organization_kana=self._org_kana.text().strip(),
+                    organization_kana=org_kana,
                     title=self._title.text().strip(),
-                    name_kana=self._name_kana.text().strip(),
+                    name_kana=name_kana,
                     notes=self._notes.text().strip(),
                     position_id=position_id,
                     committee_id=committee_id,

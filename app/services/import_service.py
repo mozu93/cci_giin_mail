@@ -8,6 +8,7 @@ from app.services.member_service import (
     create_member, update_member, set_email_addresses,
     record_member_history, get_members
 )
+from app.utils import to_hankaku_kana
 
 
 _CSV_ENCODINGS = ["utf-8-sig", "cp932", "utf-8", "euc-jp"]
@@ -80,9 +81,9 @@ def import_members(session: Session, rows: list[list],
             continue
 
         kwargs = {
-            "organization_kana": _cell(row, "organization_kana"),
+            "organization_kana": to_hankaku_kana(_cell(row, "organization_kana")),
             "title":             _cell(row, "title"),
-            "name_kana":         _cell(row, "name_kana"),
+            "name_kana":         to_hankaku_kana(_cell(row, "name_kana")),
         }
         if "position_name" in column_map:
             position_name = _cell(row, "position_name")

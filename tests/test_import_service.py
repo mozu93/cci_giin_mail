@@ -46,3 +46,13 @@ def test_import_members_sets_email_addresses(db_session, sample_excel):
     members = get_members(db_session, active_only=False)
     suzuki = next(m for m in members if m.member_number == "A-002")
     assert len(suzuki.email_addresses) == 2
+
+
+def test_import_members_converts_kana_to_halfwidth(db_session, sample_excel):
+    from app.services.member_service import get_members
+    _, rows = load_member_file(sample_excel)
+    import_members(db_session, rows, COLUMN_MAP, changed_by="管理者")
+    members = get_members(db_session, active_only=False)
+    yamada = next(m for m in members if m.member_number == "A-001")
+    assert yamada.organization_kana == "ﾏﾙﾏﾙｼｮｳｼﾞ"
+    assert yamada.name_kana == "ﾔﾏﾀﾞ ﾀﾛｳ"
