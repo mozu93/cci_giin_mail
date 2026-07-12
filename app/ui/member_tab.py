@@ -20,11 +20,12 @@ _COLUMN_LABELS = [
 
 
 class _RoleSortItem(QTableWidgetItem):
-    """会議所役職列専用: 順番設定の並び順→事業所名フリガナ順でソートする"""
+    """会議所役職列専用: 順番設定の並び順→就任順(副会頭)→事業所名フリガナ順でソートする"""
 
-    def __init__(self, text: str, sort_order: int, kana: str):
+    def __init__(self, text: str, sort_order: int, display_order, kana: str):
         super().__init__(text)
-        self._sort_key = (sort_order, kana)
+        do = display_order if display_order is not None else 10**9
+        self._sort_key = (sort_order, do, kana)
 
     def __lt__(self, other):
         if isinstance(other, _RoleSortItem):
@@ -133,10 +134,14 @@ class MemberTab(QWidget):
             " background-color: #1E293B; color: white;"
             " padding: 4px; font-weight: bold; border: 1px solid #334155; }"
         )
+        self._table.setStyleSheet(
+            "QTableWidget::item:selected { background-color: #C8E9FA; color: black; }"
+        )
         self._table.setColumnWidth(0, 44)
         self._table.setColumnWidth(4, 200)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._table.doubleClicked.connect(self._edit)
         self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._show_context_menu)
@@ -255,7 +260,8 @@ class MemberTab(QWidget):
                 for i, val in enumerate(values):
                     if i == 1:
                         item = _RoleSortItem(
-                            val, pos_sort_order, m.organization_kana or "")
+                            val, pos_sort_order, m.display_order,
+                            m.organization_kana or "")
                     else:
                         item = QTableWidgetItem(val)
                     if is_retired:

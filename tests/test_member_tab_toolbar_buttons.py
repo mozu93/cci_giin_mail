@@ -67,6 +67,7 @@ class _Member:
         self.is_active = True
         self.updated_at = None
         self.photo_thumb = None
+        self.display_order = None
 
 
 class _FakeQuery:

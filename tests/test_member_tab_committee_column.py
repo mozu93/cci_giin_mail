@@ -17,6 +17,7 @@ def test_member_tab_shows_committee_column(qtbot, monkeypatch):
             self.is_active = True
             self.updated_at = None
             self.photo_thumb = None
+            self.display_order = None
 
     class _FakeQuery:
         def __init__(self, items=None):
