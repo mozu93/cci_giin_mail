@@ -48,7 +48,7 @@ class SettingsTab(QWidget):
             inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
         inner.addTab(_ExportSettingsWidget(), "出力設定")
-        if os.environ.get("CCI_MAIL_DEV_TOOLS") == "1":
+        if is_admin or os.environ.get("CCI_MAIL_DEV_TOOLS") == "1":
             inner.addTab(_DataWidget(), "データ管理")
         layout.addWidget(inner)
 
