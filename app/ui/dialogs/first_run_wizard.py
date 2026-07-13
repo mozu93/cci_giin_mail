@@ -110,7 +110,8 @@ class FirstRunWizard(QDialog):
             engine.dispose()
             QMessageBox.information(self, "接続テスト成功", "PostgreSQLへの接続に成功しました。")
         except Exception as e:
-            QMessageBox.critical(self, "接続テスト失敗", str(e))
+            from app.utils.db_errors import format_connection_error
+            QMessageBox.critical(self, "接続テスト失敗", format_connection_error(e))
 
     def _save(self):
         config = self._build_config()
@@ -120,7 +121,9 @@ class FirstRunWizard(QDialog):
         try:
             get_engine()
         except Exception as e:
-            QMessageBox.critical(self, "エラー", f"データベースに接続できませんでした。\n\n{e}")
+            from app.utils.db_errors import format_connection_error
+            QMessageBox.critical(self, "エラー",
+                                 f"データベースに接続できませんでした。\n\n{format_connection_error(e)}")
             return
         if not self._is_initial_setup:
             QMessageBox.information(self, "保存完了", "DB接続設定を保存しました。")

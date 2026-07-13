@@ -414,7 +414,8 @@ class _DbSettingsWidget(QWidget):
             QMessageBox.information(self, "接続テスト成功",
                                     "PostgreSQLへの接続に成功しました。")
         except Exception as e:
-            QMessageBox.critical(self, "接続テスト失敗", str(e))
+            from app.utils.db_errors import format_connection_error
+            QMessageBox.critical(self, "接続テスト失敗", format_connection_error(e))
 
     def _save(self):
         config = get_config()

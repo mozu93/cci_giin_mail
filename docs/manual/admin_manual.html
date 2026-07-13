@@ -126,7 +126,7 @@
   <h3>このマニュアルについて</h3>
   <ul>
     <li>1台のPCをデータベースサーバーとして設定し、複数の職員PCでこのシステムを共有して使えるようにする手順を説明します。</li>
-    <li>すでに商工会議所内で請求書発行システム（CCI請求管理システム）用のPostgreSQLサーバーを運用している場合は、<strong>同じサーバーを共用</strong>し、データベース名だけを分けることができます（第3章参照）。</li>
+    <li>すでに商工会議所内で請求書発行システム（CCI請求管理システム）用のPostgreSQLサーバーを運用している場合は、<strong>同じサーバーを共用</strong>し、データベース名だけを分けることができます（第3章参照）。他システムの保守作業に巻き込まれたくない場合は、<strong>専用インスタンスを別ポートで構築</strong>することもできます（2-4参照）。</li>
     <li>本マニュアルは管理者権限を持つ職員のみ、アプリの「ヘルプ」メニューから閲覧できます。</li>
   </ul>
 </div>
@@ -194,7 +194,7 @@ IPアドレス：    192.168.1.200　　※社内ネットワークに合わせ�
 <!-- ══════════════════════════════════════════════════════════════ -->
 <h2 id="ch2">第2章　PostgreSQLのインストール</h2>
 
-<div class="tip">すでに商工会議所内の他システム（請求書発行システムなど）用にPostgreSQLサーバーが稼働している場合は、この章は不要です。第3章に進んでください。</div>
+<div class="tip">すでに商工会議所内の他システム（請求書発行システムなど）用にPostgreSQLサーバーが稼働している場合は、この章は不要です。第3章に進んでください。ただし、他システムとの同居に不安がある場合は<a href="#ch2-4">2-4　既存のPostgreSQLと共存させる場合</a>もあわせてご確認ください。</div>
 
 <h3>2-1　インストーラーのダウンロード</h3>
 <ol class="steps">
@@ -222,6 +222,57 @@ IPアドレス：    192.168.1.200　　※社内ネットワークに合わせ�
   <li>スタートアップの種類が「自動」になっていることを確認（なっていなければプロパティから「自動」に変更）</li>
 </ol>
 
+<h3 id="ch2-4">2-4　既存のPostgreSQLと共存させる場合（専用インスタンスを別ポートで構築）</h3>
+<div class="tip">第3章の方法（既存サーバーに <code>cci_mail</code> 用のデータベースを追加するだけ）は手軽ですが、既存サーバーは他システムと共用のため、他システムのバージョンアップ・アンインストール・設定変更（<code>postgresql.conf</code>／<code>pg_hba.conf</code> の変更、リソース競合など）に cci_mail 側が巻き込まれるリスクがあります。<br>管理を完全に分離したい場合は、以下の手順で <strong>cci_mail 専用のPostgreSQLインスタンスをもう一つ、別ポートでインストール</strong>してください。1台のPC上で複数のPostgreSQLインスタンスを同時に動かすことは問題ありません。</div>
+
+<h4>① ポートの空き確認</h4>
+<p>サーバーPC以外のPCから、候補ポート（例：<code>5433</code>）が使われていないことを確認します。</p>
+<pre>Test-NetConnection -ComputerName &lt;サーバーPCのIP&gt; -Port 5433</pre>
+<p><code>TcpTestSucceeded : False</code> であれば未使用です。</p>
+
+<h4>② cci_mail専用インスタンスのインストール</h4>
+<ol class="steps">
+  <li><code>https://www.postgresql.org/download/windows/</code> からインストーラーをダウンロード</li>
+  <li>インストーラーを実行し、以下の項目を<strong>既存インスタンスとは別の値</strong>に指定する</li>
+</ol>
+<table>
+  <tr><th>項目</th><th>指定する値の例</th></tr>
+  <tr><td>インストール先</td><td><code>C:\PostgreSQL\17-cci_mail</code></td></tr>
+  <tr><td>データディレクトリ</td><td><code>C:\PostgreSQL\17-cci_mail\data</code></td></tr>
+  <tr><td>ポート番号</td><td><code>5433</code></td></tr>
+  <tr><td>スーパーユーザーパスワード</td><td>任意（必ずメモしてください）</td></tr>
+</table>
+<p>コマンドラインで無人インストールする場合：</p>
+<pre>postgresql-17.x-windows-x64.exe --mode unattended ^
+  --unattendedmodeui minimal ^
+  --superpassword "スーパーユーザーパスワード" ^
+  --serverport 5433 ^
+  --prefix "C:\PostgreSQL\17-cci_mail" ^
+  --datadir "C:\PostgreSQL\17-cci_mail\data" ^
+  --servicename "postgresql-cci_mail" ^
+  --servicepassword "スーパーユーザーパスワード"</pre>
+
+<h4>③ データベースの作成</h4>
+<pre>"C:\PostgreSQL\17-cci_mail\bin\psql.exe" -U postgres -p 5433 -c "CREATE DATABASE cci_mail;"</pre>
+
+<h4>④ リモート接続の許可</h4>
+<p><strong>このインスタンス専用の</strong> <code>postgresql.conf</code>（例：<code>C:\PostgreSQL\17-cci_mail\data\postgresql.conf</code>）を編集：</p>
+<pre>listen_addresses = '*'</pre>
+<p><strong>このインスタンス専用の</strong> <code>pg_hba.conf</code>（例：<code>C:\PostgreSQL\17-cci_mail\data\pg_hba.conf</code>）に追記：</p>
+<pre>host    all             all             192.168.1.0/24          scram-sha-256</pre>
+<div class="note">既存インスタンスの <code>postgresql.conf</code>／<code>pg_hba.conf</code> は変更しないでください。</div>
+
+<h4>⑤ ファイアウォールの設定</h4>
+<p>第5章の手順で、ポート番号を <code>5433</code> にして受信規則を追加します。</p>
+<pre>netsh advfirewall firewall add rule name="PostgreSQL cci_mail (5433)" dir=in action=allow protocol=TCP localport=5433</pre>
+
+<h4>⑥ サービスの再起動</h4>
+<pre>net stop postgresql-cci_mail
+net start postgresql-cci_mail</pre>
+
+<h4>⑦ 職員PCでの接続設定</h4>
+<p>第8章の手順で接続情報を入力する際、<strong>ポート番号のみ <code>5433</code></strong> にしてください。それ以外（ホスト名・データベース名・ユーザー名・パスワード）は通常どおりです。</p>
+
 <!-- ══════════════════════════════════════════════════════════════ -->
 <h2 id="ch3">第3章　データベースの作成</h2>
 
@@ -240,7 +291,7 @@ IPアドレス：    192.168.1.200　　※社内ネットワークに合わせ�
   <li>「Save」をクリック</li>
 </ol>
 
-<div class="note">商工会議所内で他システム（請求書発行システムの <code>cci_billing</code> など）と<strong>同じPostgreSQLサーバーを共用</strong>する場合は、この手順で<strong>新しいデータベース</strong>（<code>cci_mail</code>）だけを追加で作成すればOKです。サーバー・ユーザー・パスワードは共通で使い回せます。</div>
+<div class="note">商工会議所内で他システム（請求書発行システムの <code>cci_billing</code> など）と<strong>同じPostgreSQLサーバーを共用</strong>する場合は、この手順で<strong>新しいデータベース</strong>（<code>cci_mail</code>）だけを追加で作成すればOKです。サーバー・ユーザー・パスワードは共通で使い回せます。<br>ただし他システムの保守作業に巻き込まれたくない場合は、共用せずに<a href="#ch2-4">2-4　既存のPostgreSQLと共存させる場合</a>の手順で専用インスタンスを構築してください。</div>
 
 <h3>3-3　接続ユーザーの確認</h3>
 <p>デフォルトの <code>postgres</code> ユーザーをそのまま使用します。セキュリティを強化したい場合は専用ユーザーを作成してください（任意）。</p>
