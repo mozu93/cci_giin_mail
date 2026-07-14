@@ -112,10 +112,16 @@ def get_summary(session: Session, meeting_id: int) -> dict:
     return counts
 
 
+def is_meeting_past(meeting: Meeting) -> bool:
+    """会議日を過ぎている（開催済み）かどうかを返す"""
+    return date.today() > meeting.date
+
+
 def get_member_ids_by_status(session: Session, meeting_id: int,
                              statuses: list[str]) -> set[int]:
     """指定した会議・ステータスに該当する会員IDのセットを返す。
-    ステータス未登録の会員は「未回答」として扱う。"""
+    会議日より前は事前登録（status）、会議日を過ぎたら当日受付結果
+    （actual_status）で判定する。ステータス未登録の会員は「未回答」として扱う。"""
     meeting = session.get(Meeting, meeting_id)
     if not meeting:
         return set()
@@ -124,13 +130,19 @@ def get_member_ids_by_status(session: Session, meeting_id: int,
         target_ids = set(json.loads(meeting.target_position_ids))
         members = [m for m in members if m.position_id in target_ids]
     records = {
-        r.member_id: r.status
+        r.member_id: r
         for r in session.query(AttendanceRecord)
         .filter_by(meeting_id=meeting_id).all()
     }
+    if is_meeting_past(meeting):
+        return {
+            m.id for m in members
+            if (records[m.id].actual_status if m.id in records
+                and records[m.id].actual_status else "未回答") in statuses
+        }
     return {
         m.id for m in members
-        if records.get(m.id, "未回答") in statuses
+        if (records[m.id].status if m.id in records else "未回答") in statuses
     }
 
 

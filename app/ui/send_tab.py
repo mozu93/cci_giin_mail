@@ -199,6 +199,9 @@ class SendTab(QWidget):
         self._meeting_combo.currentIndexChanged.connect(self._on_attend_filter)
         mrow.addWidget(self._meeting_combo, 1)
         ap.addLayout(mrow)
+        self._attend_source_label = QLabel("")
+        self._attend_source_label.setStyleSheet("color: #6B7280; font-size: 11px;")
+        ap.addWidget(self._attend_source_label)
         srow = QHBoxLayout()
         srow.addWidget(QLabel("対象:"))
         self._status_checks: dict[str, QCheckBox] = {}
@@ -520,14 +523,29 @@ class SendTab(QWidget):
         self._recipient.set_checks_by_member_ids(member_ids)
 
     def _on_attend_filter(self):
+        from app.services.meeting_service import get_member_ids_by_status, is_meeting_past
+        from app.database.models import Meeting
+
         meeting_id = self._meeting_combo.currentData()
-        statuses = [s for s, cb in self._status_checks.items() if cb.isChecked()]
-        if not meeting_id or not statuses:
+        if not meeting_id:
+            self._attend_source_label.setText("")
             self._recipient.clear_checks()
             return
-        from app.services.meeting_service import get_member_ids_by_status
+
         session = get_session()
         try:
+            meeting = session.get(Meeting, meeting_id)
+            if meeting and is_meeting_past(meeting):
+                self._attend_source_label.setText(
+                    "※ 会議日を過ぎているため「当日受付」の結果を使用します")
+            else:
+                self._attend_source_label.setText(
+                    "※ 会議日前のため「事前登録」の出欠を使用します")
+
+            statuses = [s for s, cb in self._status_checks.items() if cb.isChecked()]
+            if not statuses:
+                self._recipient.clear_checks()
+                return
             member_ids = get_member_ids_by_status(session, meeting_id, statuses)
         finally:
             session.close()
