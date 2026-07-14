@@ -56,3 +56,29 @@ def test_import_members_converts_kana_to_halfwidth(db_session, sample_excel):
     yamada = next(m for m in members if m.member_number == "A-001")
     assert yamada.organization_kana == "ﾏﾙﾏﾙｼｮｳｼﾞ"
     assert yamada.name_kana == "ﾔﾏﾀﾞ ﾀﾛｳ"
+
+
+def test_import_members_row_error_does_not_lose_other_rows(db_session, monkeypatch):
+    """1トランザクションにまとめても、1行の失敗が他行の登録を巻き込まないこと
+    （SAVEPOINTによる行単位ロールバックの回帰テスト）。"""
+    import app.services.import_service as import_service
+    from app.services.member_service import get_members, create_member as real_create_member
+
+    def _fake_create_member(session, member_number, *args, **kwargs):
+        if member_number == "A-002":
+            raise RuntimeError("想定される行単位のエラー")
+        return real_create_member(session, member_number, *args, **kwargs)
+
+    monkeypatch.setattr(import_service, "create_member", _fake_create_member)
+
+    ok_row = ["A-001", "○○商事", "", "", "山田 太郎", "", "", "yamada@example.com", ""]
+    bad_row = ["A-002", "△△産業", "", "", "鈴木 花子", "", "", "suzuki@example.com", ""]
+
+    result = import_members(db_session, [ok_row, bad_row], COLUMN_MAP,
+                            changed_by="管理者")
+
+    assert result["created"] == 1
+    assert len(result["errors"]) == 1
+
+    members = get_members(db_session, active_only=False)
+    assert [m.member_number for m in members] == ["A-001"]

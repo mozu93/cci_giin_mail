@@ -27,8 +27,13 @@ def member_to_snapshot(member: Member) -> str:
 
 
 def create_member(session: Session, member_number: str,
-                  organization_name: str, name: str, **kwargs) -> Member:
-    """会員を作成する。履歴は呼び出し元でメール設定後に record_member_history() で記録すること。"""
+                  organization_name: str, name: str,
+                  commit: bool = True, **kwargs) -> Member:
+    """会員を作成する。履歴は呼び出し元でメール設定後に record_member_history() で記録すること。
+
+    commit=Falseの場合はflushのみ行い、コミットとエラー時のロールバックは
+    呼び出し元（複数件をまとめて1トランザクションで扱う場合など）に委ねる。
+    """
     member = Member(
         member_number=member_number,
         organization_name=organization_name,
@@ -37,15 +42,20 @@ def create_member(session: Session, member_number: str,
     )
     session.add(member)
     try:
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
     except IntegrityError:
-        session.rollback()
+        if commit:
+            session.rollback()
         raise
     return member
 
 
 def record_member_history(session: Session, member_id: int,
-                          changed_by: str, change_reason: str) -> None:
+                          changed_by: str, change_reason: str,
+                          commit: bool = True) -> None:
     """現在のメンバー状態（メールアドレス含む）をスナップショットとして履歴に記録する。"""
     member = session.get(Member, member_id)
     if member is None:
@@ -56,7 +66,10 @@ def record_member_history(session: Session, member_id: int,
         change_reason=change_reason,
         snapshot=member_to_snapshot(member),
     ))
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
 
 
 def get_member(session: Session, member_id: int) -> Member | None:
@@ -110,7 +123,8 @@ def set_email_addresses(session: Session, member_id: int,
 
 
 def update_member(session: Session, member_id: int,
-                  changed_by: str, change_reason: str, **kwargs) -> Member:
+                  changed_by: str, change_reason: str,
+                  commit: bool = True, **kwargs) -> Member:
     member = session.get(Member, member_id)
     if member is None:
         raise ValueError(f"会員ID {member_id} が見つかりません")
@@ -125,7 +139,10 @@ def update_member(session: Session, member_id: int,
     for key, value in kwargs.items():
         setattr(member, key, value)
     member.updated_at = datetime.now()
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     return member
 
 

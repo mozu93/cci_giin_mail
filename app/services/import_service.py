@@ -119,33 +119,37 @@ def import_members(session: Session, rows: list[list],
                     "sort_order": n,
                 })
 
+        savepoint = session.begin_nested()
         try:
             if member_number in existing:
                 update_member(session, existing[member_number].id,
                               changed_by=changed_by,
                               change_reason="Excelインポートによる更新",
                               organization_name=organization_name,
-                              name=name, **kwargs)
+                              name=name, commit=False, **kwargs)
                 if addresses:
                     set_email_addresses(session,
                                         existing[member_number].id, addresses)
-                    session.commit()
                 updated += 1
             else:
                 m = create_member(session, member_number,
-                                  organization_name, name, **kwargs)
+                                  organization_name, name,
+                                  commit=False, **kwargs)
                 existing[member_number] = m  # 同一ファイル内の重複を更新扱いにする
                 if addresses:
                     set_email_addresses(session, m.id, addresses)
-                    session.commit()
                 # メールアドレス設定後にスナップショットを記録
                 record_member_history(session, m.id,
                                       changed_by=changed_by,
-                                      change_reason="新規登録")
+                                      change_reason="新規登録",
+                                      commit=False)
                 created += 1
+            savepoint.commit()
         except IntegrityError:
+            savepoint.rollback()
             errors.append(f"行{i} ({member_number}): 会員番号が重複しています")
         except Exception as e:
+            savepoint.rollback()
             errors.append(f"行{i} ({member_number}): {e}")
 
     # このインポートで追加された MemberHistory 全件にバッチIDを付与

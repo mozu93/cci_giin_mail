@@ -80,9 +80,10 @@ def main():
             get_engine()
             break
         except Exception as e:
+            from app.utils.db_errors import format_connection_error
             QMessageBox.critical(
                 None, "DB接続エラー",
-                f"データベースに接続できませんでした。\n\n{e}\n\n設定を確認してください。")
+                f"データベースに接続できませんでした。\n\n{format_connection_error(e)}\n\n設定を確認してください。")
             reset_engine()
             dlg = FirstRunWizard(is_initial_setup=False)
             if dlg.exec() != FirstRunWizard.DialogCode.Accepted:
