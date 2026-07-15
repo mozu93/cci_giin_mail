@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QInputDialog, QTextEdit,
 )
 from PyQt6.QtCore import Qt
-from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config, get_html_export_path
+from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config, get_html_export_path, save_html_export_path
 from app.database.connection import get_session
 from app.services.signature_service import (
     get_signatures, create_signature, update_signature,
@@ -481,9 +481,7 @@ class _ExportSettingsWidget(QWidget):
             self._path_edit.setText(path)
 
     def _save(self):
-        config = get_config()
-        config["html_export_path"] = self._path_edit.text().strip()
-        save_config(config)
+        save_html_export_path(self._path_edit.text().strip())
         from app.ui.widgets.inline_status import show_inline_message
         show_inline_message(self._status_label, "設定を保存しました")
 

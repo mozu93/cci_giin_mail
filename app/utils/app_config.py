@@ -62,8 +62,55 @@ def get_db_type() -> str:
 
 
 def get_html_export_path() -> str:
-    """HTML出力先ファイルパス（未設定時は空文字）"""
+    """HTML出力先ファイルパス（未設定時は空文字）
+
+    PostgreSQLモード（複数台共有）ではDBに保存し、全端末で共有する。
+    SQLiteモード（1台用）では従来通り端末ローカルのapp_config.jsonに保存する。
+    """
+    if get_db_type() == "postgresql":
+        return _get_shared_setting("html_export_path", "")
     return get_config().get("html_export_path", "")
+
+
+def save_html_export_path(path: str) -> None:
+    """HTML出力先ファイルパスを保存する（DB種別に応じて保存先を切り替え）"""
+    if get_db_type() == "postgresql":
+        _set_shared_setting("html_export_path", path)
+    else:
+        config = get_config()
+        config["html_export_path"] = path
+        save_config(config)
+
+
+def _get_shared_setting(key: str, default: str = "") -> str:
+    """PostgreSQLモード時、複数端末で共有する設定値をDBから取得する"""
+    try:
+        from app.database.connection import get_session
+        from app.database.models import AppSetting
+        session = get_session()
+        try:
+            row = session.get(AppSetting, key)
+            return row.value if row is not None and row.value is not None else default
+        finally:
+            session.close()
+    except Exception:
+        return default
+
+
+def _set_shared_setting(key: str, value: str) -> None:
+    """PostgreSQLモード時、複数端末で共有する設定値をDBに保存する"""
+    from app.database.connection import get_session
+    from app.database.models import AppSetting
+    session = get_session()
+    try:
+        row = session.get(AppSetting, key)
+        if row is None:
+            session.add(AppSetting(key=key, value=value))
+        else:
+            row.value = value
+        session.commit()
+    finally:
+        session.close()
 
 
 def is_first_run() -> bool:

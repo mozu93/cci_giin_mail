@@ -10,6 +10,12 @@ class Base(DeclarativeBase):
     pass
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=True)
+
+
 class Position(Base):
     __tablename__ = "positions"
     id = Column(Integer, primary_key=True)
