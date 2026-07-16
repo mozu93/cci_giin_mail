@@ -85,29 +85,6 @@ def import_members(session: Session, rows: list[list],
             "title":             _cell(row, "title"),
             "name_kana":         to_hankaku_kana(_cell(row, "name_kana")),
         }
-        if "position_name" in column_map:
-            position_name = _cell(row, "position_name")
-            if position_name:
-                if position_name not in position_map:
-                    new_pos = Position(name=position_name, sort_order=0)
-                    session.add(new_pos)
-                    session.flush()
-                    position_map[position_name] = new_pos.id
-                kwargs["position_id"] = position_map[position_name]
-            else:
-                kwargs["position_id"] = None
-
-        if "committee_name" in column_map:
-            committee_name = _cell(row, "committee_name")
-            if committee_name:
-                if committee_name not in committee_map:
-                    new_committee = Committee(name=committee_name, sort_order=0)
-                    session.add(new_committee)
-                    session.flush()
-                    committee_map[committee_name] = new_committee.id
-                kwargs["committee_id"] = committee_map[committee_name]
-            else:
-                kwargs["committee_id"] = None
 
         addresses = []
         for n in range(1, 6):
@@ -119,8 +96,40 @@ def import_members(session: Session, rows: list[list],
                     "sort_order": n,
                 })
 
+        # 会議所役職・委員会のマスタ新規作成もこの行のSAVEPOINT内で行う。
+        # SAVEPOINT開始前にflushすると、この行が失敗してロールバックしても
+        # 新規マスタ行だけが未使用のまま残ってしまい、同じ名称を使う後続行にも
+        # 無効なIDを渡してしまう（=委員会列がインポートされない不具合の原因）。
+        new_position_name = None
+        new_committee_name = None
         savepoint = session.begin_nested()
         try:
+            if "position_name" in column_map:
+                position_name = _cell(row, "position_name")
+                if position_name:
+                    if position_name not in position_map:
+                        new_pos = Position(name=position_name, sort_order=0)
+                        session.add(new_pos)
+                        session.flush()
+                        position_map[position_name] = new_pos.id
+                        new_position_name = position_name
+                    kwargs["position_id"] = position_map[position_name]
+                else:
+                    kwargs["position_id"] = None
+
+            if "committee_name" in column_map:
+                committee_name = _cell(row, "committee_name")
+                if committee_name:
+                    if committee_name not in committee_map:
+                        new_committee = Committee(name=committee_name, sort_order=0)
+                        session.add(new_committee)
+                        session.flush()
+                        committee_map[committee_name] = new_committee.id
+                        new_committee_name = committee_name
+                    kwargs["committee_id"] = committee_map[committee_name]
+                else:
+                    kwargs["committee_id"] = None
+
             if member_number in existing:
                 update_member(session, existing[member_number].id,
                               changed_by=changed_by,
@@ -147,9 +156,17 @@ def import_members(session: Session, rows: list[list],
             savepoint.commit()
         except IntegrityError:
             savepoint.rollback()
+            if new_position_name is not None:
+                position_map.pop(new_position_name, None)
+            if new_committee_name is not None:
+                committee_map.pop(new_committee_name, None)
             errors.append(f"行{i} ({member_number}): 会員番号が重複しています")
         except Exception as e:
             savepoint.rollback()
+            if new_position_name is not None:
+                position_map.pop(new_position_name, None)
+            if new_committee_name is not None:
+                committee_map.pop(new_committee_name, None)
             errors.append(f"行{i} ({member_number}): {e}")
 
     # このインポートで追加された MemberHistory 全件にバッチIDを付与
