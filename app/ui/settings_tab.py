@@ -506,7 +506,7 @@ class _DataWidget(QWidget):
         grp = QGroupBox("会員データ一括削除（開発用）")
         grp_layout = QVBoxLayout(grp)
         grp_layout.addWidget(QLabel(
-            "全会員データを完全に削除します。\n"
+            "全会員データ（会議所役職・委員会の設定を含む）を完全に削除します。\n"
             "この操作は取り消せません。開発・テスト時のみ使用してください。"
         ))
         btn = QPushButton("一括削除を実行")
@@ -517,14 +517,15 @@ class _DataWidget(QWidget):
         layout.addStretch()
 
     def _bulk_delete(self):
-        from app.database.connection import get_session
         from app.database.models import (
             Member, EmailAddress, MemberHistory,
             AttendanceRecord, ReceptionLog, SendLog,
+            Position, Committee,
         )
         ret = QMessageBox.warning(
             self, "一括削除（開発用）",
-            "全会員データを完全に削除します。\nこの操作は取り消せません。\n\n本当に実行しますか？",
+            "全会員データ（会議所役職・委員会の設定を含む）を完全に削除します。\n"
+            "この操作は取り消せません。\n\n本当に実行しますか？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -546,8 +547,11 @@ class _DataWidget(QWidget):
             session.query(MemberHistory).delete()
             session.query(EmailAddress).delete()
             session.query(Member).delete()
+            session.query(Position).delete()
+            session.query(Committee).delete()
             session.commit()
-            QMessageBox.information(self, "完了", "全会員データを削除しました。")
+            QMessageBox.information(
+                self, "完了", "全会員データ（会議所役職・委員会の設定を含む）を削除しました。")
         except Exception as e:
             session.rollback()
             QMessageBox.critical(self, "エラー", str(e))
