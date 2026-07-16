@@ -58,3 +58,20 @@ def test_delete_committee_with_members_warns_and_nulls_committee_id(
     db_session.expire_all()
     updated_member = db_session.get(Member, member_id)
     assert updated_member.committee_id is None
+
+
+def test_position_committee_widget_refresh_reloads_committees_added_elsewhere(
+        qtbot, monkeypatch, db_session):
+    monkeypatch.setattr("app.ui.settings_tab.get_session", lambda: db_session)
+
+    from app.ui.settings_tab import _PositionCommitteeWidget
+    w = _PositionCommitteeWidget()
+    qtbot.addWidget(w)
+    assert w._committee_widget._table.rowCount() == 0
+
+    # 他のタブ(名簿インポート等)がこのウィジェットを介さずに委員会を追加した状況を再現
+    create_committee(db_session, "総務・運営委員会", 1)
+
+    w.refresh()
+    assert w._committee_widget._table.rowCount() == 1
+    assert w._committee_widget._table.item(0, 0).text() == "総務・運営委員会"

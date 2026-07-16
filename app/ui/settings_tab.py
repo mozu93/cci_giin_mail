@@ -43,7 +43,8 @@ class SettingsTab(QWidget):
         inner.setMaximumWidth(900)
         inner.addTab(_GraphSettingsWidget(), "Microsoft 365")
         inner.addTab(_SignatureWidget(self._staff_id), "署名管理")
-        inner.addTab(_PositionCommitteeWidget(), "役職・委員会管理")
+        self._position_committee_widget = _PositionCommitteeWidget()
+        inner.addTab(self._position_committee_widget, "役職・委員会管理")
         if is_admin:
             inner.addTab(_StaffWidget(), "職員管理")
         inner.addTab(_DbSettingsWidget(), "データベース接続")
@@ -51,6 +52,9 @@ class SettingsTab(QWidget):
         if is_admin or os.environ.get("CCI_MAIL_DEV_TOOLS") == "1":
             inner.addTab(_DataWidget(), "データ管理")
         layout.addWidget(inner)
+
+    def refresh(self):
+        self._position_committee_widget.refresh()
 
 
 class _GraphSettingsWidget(QWidget):
@@ -571,12 +575,18 @@ class _PositionCommitteeWidget(QWidget):
         layout = QHBoxLayout(self)
         pos_grp = QGroupBox("役職")
         pos_layout = QVBoxLayout(pos_grp)
-        pos_layout.addWidget(_PositionWidget())
+        self._position_widget = _PositionWidget()
+        pos_layout.addWidget(self._position_widget)
         committee_grp = QGroupBox("委員会")
         committee_layout = QVBoxLayout(committee_grp)
-        committee_layout.addWidget(_CommitteeWidget())
+        self._committee_widget = _CommitteeWidget()
+        committee_layout.addWidget(self._committee_widget)
         layout.addWidget(pos_grp)
         layout.addWidget(committee_grp)
+
+    def refresh(self):
+        self._position_widget._load()
+        self._committee_widget._load()
 
 
 class _PositionWidget(QWidget):
