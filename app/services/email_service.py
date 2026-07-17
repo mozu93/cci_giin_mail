@@ -26,7 +26,7 @@ def build_message(to_address: str, subject: str, body: str,
     attachment_list = []
     for path in attachments:
         if not os.path.exists(path):
-            continue
+            raise FileNotFoundError(f"添付ファイルが見つかりません: {path}")
         with open(path, "rb") as f:
             content = base64.b64encode(f.read()).decode("utf-8")
         attachment_list.append({

@@ -107,3 +107,23 @@ def test_send_mail_raises_after_max_429_retries(monkeypatch):
     with pytest.raises(RuntimeError):
         email_service.send_mail({}, "to@example.com", "件名", "本文",
                                 access_token="token")
+
+
+def test_build_message_missing_attachment_raises(tmp_path):
+    missing = str(tmp_path / "missing.pdf")
+    with pytest.raises(FileNotFoundError):
+        build_message("to@example.com", "件名", "本文", [missing])
+
+
+def test_send_mail_raises_for_missing_attachment_without_http_call(tmp_path, monkeypatch):
+    from app.services import email_service
+
+    def fail_post(*args, **kwargs):
+        raise AssertionError("添付ファイルが無い場合はHTTPリクエストを送ってはいけない")
+
+    monkeypatch.setattr(email_service.requests, "post", fail_post)
+    missing = str(tmp_path / "missing.pdf")
+
+    with pytest.raises(FileNotFoundError):
+        email_service.send_mail({}, "to@example.com", "件名", "本文",
+                                attachments=[missing], access_token="token")
