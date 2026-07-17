@@ -198,3 +198,11 @@ class AttendanceRecord(Base):
     member = relationship("Member")
     __table_args__ = (UniqueConstraint("meeting_id", "member_id",
                                        name="uq_meeting_member"),)
+
+
+class ProcessedAttendanceMail(Base):
+    __tablename__ = "processed_attendance_mails"
+    id = Column(Integer, primary_key=True)
+    message_id = Column(String, unique=True, nullable=False)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
+    processed_at = Column(DateTime, nullable=False, default=datetime.now)

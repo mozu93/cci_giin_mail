@@ -63,3 +63,32 @@ def test_normalize_org_name_strips_company_suffixes_and_spaces():
     assert normalize_org_name("スーパーサンシ株式会社") == normalize_org_name("スーパーサンシ")
     assert normalize_org_name("三重相互（株）") == normalize_org_name("三重相互(株)")
     assert normalize_org_name("三重 相互") == normalize_org_name("三重相互")
+
+
+from app.services.attendance_mail_service import match_member
+from app.services.member_service import create_member
+
+
+def test_match_member_unique_match(db_session):
+    create_member(db_session, "A-001", "○○商事", "山田太郎")
+    m = match_member(db_session, "○○商事")
+    assert m is not None
+    assert m.member_number == "A-001"
+
+
+def test_match_member_normalizes_company_suffix(db_session):
+    create_member(db_session, "A-001", "スーパーサンシ株式会社", "高倉護")
+    m = match_member(db_session, "スーパーサンシ（株）")
+    assert m is not None
+    assert m.member_number == "A-001"
+
+
+def test_match_member_returns_none_when_no_match(db_session):
+    create_member(db_session, "A-001", "○○商事", "山田太郎")
+    assert match_member(db_session, "存在しない会社") is None
+
+
+def test_match_member_returns_none_when_ambiguous(db_session):
+    create_member(db_session, "A-001", "山田商事", "山田太郎")
+    create_member(db_session, "A-002", "山田商事", "山田次郎")
+    assert match_member(db_session, "山田商事") is None

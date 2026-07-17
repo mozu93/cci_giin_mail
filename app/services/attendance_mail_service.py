@@ -1,4 +1,6 @@
 import re
+from sqlalchemy.orm import Session
+from app.database.models import Member
 
 STATUS_MAP = {
     "出席": "出席",
@@ -43,3 +45,13 @@ def normalize_org_name(name: str) -> str:
         result = result.replace(suf, "")
     result = re.sub(r"\s+", "", result)
     return result
+
+
+def match_member(session: Session, org_name_raw: str) -> Member | None:
+    """事業所名を正規化して一意に一致する会員を返す。0件/複数件一致はNone。"""
+    target = normalize_org_name(org_name_raw)
+    members = session.query(Member).filter(Member.is_active == True).all()
+    matches = [m for m in members if normalize_org_name(m.organization_name) == target]
+    if len(matches) == 1:
+        return matches[0]
+    return None
