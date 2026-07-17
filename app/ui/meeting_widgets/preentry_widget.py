@@ -31,6 +31,8 @@ class PreentryWidget(QWidget):
 
     def load(self, meeting_id: int | None):
         self._meeting_id = meeting_id
+        if self._btn_mail_import is not None:
+            self._btn_mail_import.setEnabled(meeting_id is not None)
         self._load_preentry()
 
     def _open_mail_import(self):

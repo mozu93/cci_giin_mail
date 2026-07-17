@@ -37,3 +37,17 @@ def test_mail_import_button_opens_dialog_and_refreshes(qtbot, db_session, monkey
 
     assert _FakeDialog.created_with == meeting.id
     assert reload_called == [True]
+
+
+def test_mail_import_button_disabled_without_meeting(qtbot, db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.ui.meeting_widgets.preentry_widget.get_session", lambda: db_session)
+    from app.ui.meeting_widgets.preentry_widget import PreentryWidget
+    w = PreentryWidget(readonly=False)
+    qtbot.addWidget(w)
+    w.load(None)
+    assert w._btn_mail_import.isEnabled() is False
+
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    w.load(meeting.id)
+    assert w._btn_mail_import.isEnabled() is True
