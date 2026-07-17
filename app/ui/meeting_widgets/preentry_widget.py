@@ -10,6 +10,8 @@ from app.services.meeting_service import STATUS_OPTIONS, upsert_attendance, get_
 from app.services.settings_service import get_font_size, set_font_size
 from app.utils import to_katakana
 from app.ui.meeting_widgets import count_label
+from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
+from app.utils.app_config import get_graph_config
 
 _PRE_COL_KEYS = ["position", "org_name", "org_kana", "title", "name",
                  "status", "proxy_title", "proxy_name"]
@@ -31,6 +33,14 @@ class PreentryWidget(QWidget):
         self._meeting_id = meeting_id
         self._load_preentry()
 
+    def _open_mail_import(self):
+        if self._meeting_id is None:
+            return
+        dlg = AttendanceMailImportDialog(
+            meeting_id=self._meeting_id, graph_config=get_graph_config(), parent=self)
+        if dlg.exec():
+            self._load_preentry()
+
     # ─── UI構築 ────────────────────────────────────────────
 
     def _build(self):
@@ -51,10 +61,14 @@ class PreentryWidget(QWidget):
         layout.addWidget(pre_grp)
 
         btn_row = QHBoxLayout()
+        self._btn_mail_import = None
         if not self._readonly:
             btn_reset = QPushButton("並び替え解除")
             btn_reset.clicked.connect(self._reset_sort)
             btn_row.addWidget(btn_reset)
+            self._btn_mail_import = QPushButton("メールから出欠を取り込む")
+            self._btn_mail_import.clicked.connect(self._open_mail_import)
+            btn_row.addWidget(self._btn_mail_import)
         self._pre_search = QLineEdit()
         self._pre_search.setPlaceholderText("事業所名・事業所名フリガナで検索")
         self._pre_search.textChanged.connect(self._apply_status_filter)
