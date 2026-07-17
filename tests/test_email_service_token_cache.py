@@ -34,7 +34,7 @@ def _patch_msal(monkeypatch, cache_file):
 
     monkeypatch.setattr(email_service.msal, "PublicClientApplication", fake_pca)
 
-    return build_calls, cache_calls, captured_kwargs
+    return build_calls, cache_calls, captured_kwargs, fake_persistence, fake_cache
 
 
 def test_get_access_token_uses_encrypted_persistence(monkeypatch, tmp_path):
@@ -43,14 +43,14 @@ def test_get_access_token_uses_encrypted_persistence(monkeypatch, tmp_path):
     monkeypatch.setattr(email_service, "_CACHE_FILE", cache_file)
     monkeypatch.setattr(email_service, "_LEGACY_CACHE_FILE", legacy_file)
 
-    build_calls, cache_calls, captured_kwargs = _patch_msal(monkeypatch, cache_file)
+    build_calls, cache_calls, captured_kwargs, fake_persistence, fake_cache = _patch_msal(monkeypatch, cache_file)
 
     token = email_service.get_access_token({"client_id": "cid", "tenant_id": "tid"})
 
     assert token == "abc123"
     assert build_calls == [str(cache_file)]
-    assert len(cache_calls) == 1
-    assert captured_kwargs["token_cache"] is not None
+    assert cache_calls == [fake_persistence]
+    assert captured_kwargs["token_cache"] is fake_cache
 
 
 def test_get_access_token_removes_legacy_plaintext_cache(monkeypatch, tmp_path):
