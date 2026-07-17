@@ -50,6 +50,13 @@ def build_message(to_address: str, subject: str, body: str,
     }
 
 
+ATTACHMENT_SIZE_LIMIT_BYTES = 3 * 1024 * 1024  # Graph sendMail直添付の実用上限（約3MB）
+
+
+def total_attachment_size(paths: list[str]) -> int:
+    return sum(os.path.getsize(p) for p in paths if os.path.exists(p))
+
+
 def compile_send_targets(
     checked_rows: list[dict],
     subject_tpl: str,

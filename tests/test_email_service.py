@@ -1,5 +1,7 @@
 import pytest
-from app.services.email_service import render_body, build_message
+from app.services.email_service import (
+    render_body, build_message, total_attachment_size
+)
 
 
 class _FakeResponse:
@@ -127,3 +129,18 @@ def test_send_mail_raises_for_missing_attachment_without_http_call(tmp_path, mon
     with pytest.raises(FileNotFoundError):
         email_service.send_mail({}, "to@example.com", "件名", "本文",
                                 attachments=[missing], access_token="token")
+
+
+def test_total_attachment_size_sums_existing_files(tmp_path):
+    f1 = tmp_path / "a.txt"
+    f1.write_bytes(b"x" * 100)
+    f2 = tmp_path / "b.txt"
+    f2.write_bytes(b"y" * 200)
+    assert total_attachment_size([str(f1), str(f2)]) == 300
+
+
+def test_total_attachment_size_ignores_missing_files(tmp_path):
+    f1 = tmp_path / "a.txt"
+    f1.write_bytes(b"x" * 50)
+    missing = str(tmp_path / "missing.txt")
+    assert total_attachment_size([str(f1), missing]) == 50

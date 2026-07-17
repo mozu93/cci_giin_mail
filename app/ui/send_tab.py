@@ -20,7 +20,8 @@ from app.services.position_service import get_positions
 from app.services.committee_service import get_committees
 from app.services.staff_service import get_staff_by_name
 from app.services.email_service import (
-    compile_send_targets, send_mail, send_test_mail, get_access_token
+    compile_send_targets, send_mail, send_test_mail, get_access_token,
+    total_attachment_size, ATTACHMENT_SIZE_LIMIT_BYTES,
 )
 from app.services.send_job_service import create_job, start_job, finish_job, add_log
 from app.utils.app_config import get_graph_config
@@ -36,6 +37,19 @@ def _dev_tools_enabled() -> bool:
 
 
 _SEND_INTERVAL_SECONDS = 2.0
+
+
+def _split_oversized_targets(targets: list[dict]) -> tuple[list[dict], list[dict]]:
+    """添付合計サイズが上限を超えるターゲットを分離する。
+    戻り値: (上限内のターゲット, 上限超過のターゲット)
+    """
+    ok, oversized = [], []
+    for t in targets:
+        if total_attachment_size(t.get("attachments", [])) > ATTACHMENT_SIZE_LIMIT_BYTES:
+            oversized.append(t)
+        else:
+            ok.append(t)
+    return ok, oversized
 
 
 class _SendWorker(QThread):
@@ -842,6 +856,22 @@ class SendTab(QWidget):
         if not targets:
             QMessageBox.warning(self, "エラー", "宛先を選択してください。")
             return
+
+        targets, oversized = _split_oversized_targets(targets)
+        if oversized:
+            names = "\n".join(f"・{t['org_name']}" for t in oversized)
+            ret = QMessageBox.question(
+                self, "添付サイズ超過",
+                f"以下の宛先は添付ファイル合計サイズが上限（3MB）を超えています。\n"
+                f"送信対象から除外して続行しますか？\n\n{names}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if ret != QMessageBox.StandardButton.Yes:
+                return
+            if not targets:
+                QMessageBox.warning(self, "エラー", "送信可能な宛先がありません。")
+                return
+
         job_name = self._job_name.text().strip()
         if not job_name:
             QMessageBox.warning(self, "エラー", "ジョブ名を入力してください。")
