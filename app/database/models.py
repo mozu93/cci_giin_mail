@@ -207,3 +207,19 @@ class ProcessedAttendanceMail(Base):
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
     received_at = Column(DateTime, nullable=False)
     processed_at = Column(DateTime, nullable=False, default=datetime.now)
+
+
+class AttendanceMailAlias(Base):
+    """出欠連絡メールの事業所名表記 → 会員 の紐付けを記憶するテーブル。
+
+    一度手動または自動でマッチングが確定した組み合わせを覚えておき、
+    同じ表記のメールが次回以降も同じ会員に自動マッチングされるようにする。
+    """
+    __tablename__ = "attendance_mail_aliases"
+    id = Column(Integer, primary_key=True)
+    org_name_key = Column(String, unique=True, nullable=False)
+    org_name_raw = Column(String, nullable=False)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now,
+                        onupdate=datetime.now)
+    member = relationship("Member")

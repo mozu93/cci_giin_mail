@@ -11,6 +11,7 @@ from app.utils.app_config import (
     get_attendance_mail_folder, save_attendance_mail_folder,
     get_attendance_mail_subject_filter, save_attendance_mail_subject_filter,
 )
+from app.ui.dialogs.attendance_mail_alias_dialog import AttendanceMailAliasDialog
 
 
 class _NoWheelComboBox(QComboBox):
@@ -30,7 +31,7 @@ class AttendanceMailImportDialog(QDialog):
     def __init__(self, meeting_id: int, graph_config: dict, parent=None):
         super().__init__(parent)
         self.setWindowTitle("メールから出欠を取り込む")
-        self.resize(760, 520)
+        self.resize(1180, 560)
         self._meeting_id = meeting_id
         self._graph_config = graph_config
         self._rows = []
@@ -53,14 +54,23 @@ class AttendanceMailImportDialog(QDialog):
         btn_search.clicked.connect(self._search)
         btn_row.addWidget(btn_search)
         btn_row.addStretch()
+        btn_aliases = QPushButton("事業所名の紐付けを管理...")
+        btn_aliases.clicked.connect(self._open_alias_dialog)
+        btn_row.addWidget(btn_aliases)
         layout.addLayout(btn_row)
 
         self._table = QTableWidget(0, 7)
         self._table.setHorizontalHeaderLabels([
             "事業所名（メール記載）", "氏名", "出欠", "代理役職・代理者名",
             "備考", "既存の登録", "会員"])
+        self._table.setColumnWidth(self._COL_ORG, 180)
+        self._table.setColumnWidth(self._COL_NAME, 110)
+        self._table.setColumnWidth(self._COL_STATUS, 60)
+        self._table.setColumnWidth(self._COL_PROXY, 160)
+        self._table.setColumnWidth(self._COL_NOTES, 140)
+        self._table.setColumnWidth(self._COL_EXISTING, 120)
         self._table.horizontalHeader().setSectionResizeMode(
-            self._COL_ORG, QHeaderView.ResizeMode.Stretch)
+            self._COL_MEMBER, QHeaderView.ResizeMode.Stretch)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         layout.addWidget(self._table)
 
@@ -107,6 +117,10 @@ class AttendanceMailImportDialog(QDialog):
             session.close()
 
         self._status_label.setText(f"{len(self._rows)} 件のメールを読み込みました。")
+
+    def _open_alias_dialog(self):
+        dlg = AttendanceMailAliasDialog(parent=self)
+        dlg.exec()
 
     def _refresh_table(self, members):
         self._table.setRowCount(0)

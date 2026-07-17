@@ -3,8 +3,10 @@ import requests
 from dataclasses import dataclass
 from datetime import datetime
 from sqlalchemy import func
-from sqlalchemy.orm import Session
-from app.database.models import Member, AttendanceRecord, ProcessedAttendanceMail, Meeting
+from sqlalchemy.orm import Session, joinedload
+from app.database.models import (
+    Member, AttendanceRecord, ProcessedAttendanceMail, Meeting,
+    AttendanceMailAlias)
 from app.services.email_service import get_access_token
 from app.services.meeting_service import upsert_attendance
 
@@ -47,22 +49,92 @@ def parse_body(body_text: str) -> dict:
 
 
 def normalize_org_name(name: str) -> str:
-    """会員突合用に事業所名を正規化する（法人格表記・空白を除去）。"""
+    """会員突合用に事業所名を正規化する（法人格表記・空白・文字化け記号を除去）。
+
+    '?' はメール送信元側で㈱記号や異体字漢字がデコードできず失われた際に
+    残る印。除去しないと本来一致するはずの表記まで不一致になってしまう。
+    """
     result = name
     for suf in _ORG_SUFFIXES:
         result = result.replace(suf, "")
+    result = result.replace("?", "")
     result = re.sub(r"\s+", "", result)
     return result
 
 
 def match_member(session: Session, org_name_raw: str) -> Member | None:
-    """事業所名を正規化して一意に一致する会員を返す。0件/複数件一致はNone。"""
+    """事業所名から会員を突合する。
+
+    1. 過去に確定させた紐付け（AttendanceMailAlias）があればそれを優先する
+    2. 正規化した表記が一意に一致する会員を探す
+    3. 一意な完全一致が無ければ、正規化表記が包含関係にある会員を探す
+       （例: メール記載「近鉄百貨店」⊂ 会員データ「近鉄百貨店四日市店」）
+    いずれも0件/複数件該当する場合はNoneを返す（要手動選択）。
+    """
     target = normalize_org_name(org_name_raw)
+    if not target:
+        return None
+
+    alias = session.query(AttendanceMailAlias).filter_by(org_name_key=target).first()
+    if alias is not None:
+        return session.get(Member, alias.member_id)
+
     members = session.query(Member).filter(Member.is_active == True).all()
-    matches = [m for m in members if normalize_org_name(m.organization_name) == target]
-    if len(matches) == 1:
-        return matches[0]
+    keyed = [(m, normalize_org_name(m.organization_name)) for m in members]
+    keyed = [(m, k) for m, k in keyed if k]
+
+    exact = [m for m, k in keyed if k == target]
+    if len(exact) == 1:
+        return exact[0]
+    if exact:
+        return None
+
+    contains = [m for m, k in keyed if target in k or k in target]
+    if len(contains) == 1:
+        return contains[0]
     return None
+
+
+def upsert_alias(session: Session, org_name_raw: str, member_id: int) -> None:
+    """事業所名表記→会員の紐付けを記憶（既存なら上書き）する。
+
+    誤った紐付けを直したい場合は、正しい会員を選び直して再度反映すれば
+    ここで上書きされる。
+    """
+    key = normalize_org_name(org_name_raw)
+    if not key:
+        return
+    alias = session.query(AttendanceMailAlias).filter_by(org_name_key=key).first()
+    if alias is None:
+        session.add(AttendanceMailAlias(
+            org_name_key=key, org_name_raw=org_name_raw, member_id=member_id))
+    else:
+        alias.org_name_raw = org_name_raw
+        alias.member_id = member_id
+
+
+def list_aliases(session: Session) -> list[AttendanceMailAlias]:
+    """登録済みの事業所名紐付けを一覧取得する（管理画面用）。"""
+    return (session.query(AttendanceMailAlias)
+           .options(joinedload(AttendanceMailAlias.member))
+           .order_by(AttendanceMailAlias.org_name_raw)
+           .all())
+
+
+def delete_alias(session: Session, alias_id: int) -> None:
+    """紐付けを削除する。以後は自動突合ロジックにフォールバックする。"""
+    alias = session.get(AttendanceMailAlias, alias_id)
+    if alias is not None:
+        session.delete(alias)
+        session.commit()
+
+
+def update_alias_member(session: Session, alias_id: int, member_id: int) -> None:
+    """誤って登録された紐付けの会員を修正する。"""
+    alias = session.get(AttendanceMailAlias, alias_id)
+    if alias is not None:
+        alias.member_id = member_id
+        session.commit()
 
 
 def get_since_datetime(session: Session, meeting_id: int) -> datetime:
@@ -247,6 +319,7 @@ def commit_rows(session: Session, meeting_id: int, rows: list[AttendanceMailRow]
         session.add(ProcessedAttendanceMail(
             message_id=row.message_id, meeting_id=meeting_id,
             received_at=row.received_at))
+        upsert_alias(session, row.org_name_raw, member_id)
         applied += 1
     session.commit()
     return {"applied": applied, "skipped": skipped}

@@ -65,6 +65,12 @@ def test_normalize_org_name_strips_company_suffixes_and_spaces():
     assert normalize_org_name("三重 相互") == normalize_org_name("三重相互")
 
 
+def test_normalize_org_name_strips_stray_question_mark_from_lost_characters():
+    # '?' はメール送信元でデコードできず失われた文字（㈱記号や異体字漢字など）の印。
+    assert normalize_org_name("三菱ケミカル?東海事業所") == normalize_org_name(
+        "三菱ケミカル（株）東海事業所")
+
+
 from app.services.attendance_mail_service import match_member
 from app.services.member_service import create_member
 
@@ -92,6 +98,50 @@ def test_match_member_returns_none_when_ambiguous(db_session):
     create_member(db_session, "A-001", "山田商事", "山田太郎")
     create_member(db_session, "A-002", "山田商事", "山田次郎")
     assert match_member(db_session, "山田商事") is None
+
+
+def test_match_member_matches_when_mail_org_name_is_contained_in_member_org_name(db_session):
+    # メールは支店名を省略した表記、会員データはフル表記のケース
+    create_member(db_session, "A-001", "（株）近鉄百貨店四日市店", "清水一広")
+    m = match_member(db_session, "近鉄百貨店")
+    assert m is not None
+    assert m.member_number == "A-001"
+
+
+def test_match_member_containment_returns_none_when_ambiguous(db_session):
+    create_member(db_session, "A-001", "近鉄百貨店四日市店", "清水一広")
+    create_member(db_session, "A-002", "近鉄百貨店津店", "田中次郎")
+    assert match_member(db_session, "近鉄百貨店") is None
+
+
+def test_match_member_prefers_saved_alias_over_heuristics(db_session):
+    """通常の突合ロジックが選ぶ会員と異なっていても、保存済みの紐付けを優先する
+    （手動で紐付けを修正した結果を常に尊重するため）。"""
+    from app.services.attendance_mail_service import upsert_alias
+    heuristic_pick = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    manually_assigned = create_member(db_session, "A-002", "△△興業", "佐藤次郎")
+    upsert_alias(db_session, "○○商事", manually_assigned.id)
+    db_session.commit()
+
+    m = match_member(db_session, "○○商事")
+    assert m is not None
+    assert m.member_number == "A-002"
+
+
+def test_upsert_alias_overwrites_wrong_mapping(db_session):
+    from app.services.attendance_mail_service import upsert_alias
+    from app.database.models import AttendanceMailAlias
+    wrong = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    correct = create_member(db_session, "A-002", "○○商事西支店", "山田次郎")
+
+    upsert_alias(db_session, "○○商事西", wrong.id)
+    db_session.commit()
+    upsert_alias(db_session, "○○商事西", correct.id)
+    db_session.commit()
+
+    aliases = db_session.query(AttendanceMailAlias).all()
+    assert len(aliases) == 1
+    assert aliases[0].member_id == correct.id
 
 
 from datetime import date, datetime
@@ -362,6 +412,73 @@ def test_get_since_datetime_returns_latest_processed_received_at(db_session):
 
     since = get_since_datetime(db_session, meeting.id)
     assert since == datetime(2026, 7, 10, 12, 0, 0)
+
+
+def test_commit_rows_saves_alias_so_next_import_auto_matches(db_session):
+    """一度手動選択でマッチングさせた事業所名は、次回以降は自動で同じ会員に
+    マッチングされる（誤マッチングで手動選択したケースを想定）。"""
+    # 会員データとメール記載の表記が包含関係にも無く、完全一致もしない例
+    member = create_member(db_session, "A-001", "丸丸物産グループ", "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+
+    # 1回目: 自動マッチングは失敗するが、手動で選択して反映
+    messages = [{"id": "msg-1", "body_text": _body(org="○○商事"),
+                 "received_at": datetime(2026, 7, 10, 9, 0, 0)}]
+    rows = build_preview(db_session, meeting.id, messages)
+    assert rows[0].matched_member is None
+    commit_rows(db_session, meeting.id, rows, {0: member.id})
+
+    # 2回目: 同じ表記のメールは自動的に同じ会員にマッチングされる
+    messages2 = [{"id": "msg-2", "body_text": _body(org="○○商事"),
+                  "received_at": datetime(2026, 7, 15, 9, 0, 0)}]
+    rows2 = build_preview(db_session, meeting.id, messages2)
+    assert rows2[0].matched_member is not None
+    assert rows2[0].matched_member.member_number == "A-001"
+
+
+from app.services.attendance_mail_service import (
+    list_aliases, delete_alias, update_alias_member, upsert_alias)
+from app.database.models import AttendanceMailAlias
+
+
+def test_list_aliases_returns_saved_aliases_with_member(db_session):
+    member = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    upsert_alias(db_session, "○○商事株式会社", member.id)
+    db_session.commit()
+
+    aliases = list_aliases(db_session)
+    assert len(aliases) == 1
+    assert aliases[0].member.member_number == "A-001"
+
+
+def test_delete_alias_removes_mapping_and_falls_back_to_heuristics(db_session):
+    member = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    other = create_member(db_session, "A-002", "○○商事別会社", "佐藤次郎")
+    upsert_alias(db_session, "○○商事", other.id)
+    db_session.commit()
+    alias_id = db_session.query(AttendanceMailAlias).first().id
+
+    delete_alias(db_session, alias_id)
+
+    assert db_session.query(AttendanceMailAlias).count() == 0
+    # 紐付け削除後は通常の突合（完全一致）にフォールバックする
+    m = match_member(db_session, "○○商事")
+    assert m is not None
+    assert m.member_number == "A-001"
+
+
+def test_update_alias_member_corrects_wrong_mapping(db_session):
+    wrong = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    correct = create_member(db_session, "A-002", "○○商事別会社", "佐藤次郎")
+    upsert_alias(db_session, "○○商事", wrong.id)
+    db_session.commit()
+    alias_id = db_session.query(AttendanceMailAlias).first().id
+
+    update_alias_member(db_session, alias_id, correct.id)
+
+    m = match_member(db_session, "○○商事")
+    assert m is not None
+    assert m.member_number == "A-002"
 
 
 def test_commit_rows_skips_rows_with_unrecognized_status(db_session):
