@@ -52,6 +52,17 @@ def _split_oversized_targets(targets: list[dict]) -> tuple[list[dict], list[dict
     return ok, oversized
 
 
+_CONSECUTIVE_ERROR_LIMIT = 5
+
+
+def _log_skipped_remaining(session, job_id, targets, start_index) -> int:
+    """targets[start_index:] を送信ログにskipとして記録する。戻り値: 記録した件数"""
+    for t in targets[start_index:]:
+        add_log(session, job_id, t.get("member_id"), t.get("to_address", ""),
+                t.get("subject", ""), "skip")
+    return len(targets) - start_index
+
+
 class _SendWorker(QThread):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal(int, int, int)
@@ -72,10 +83,12 @@ class _SendWorker(QThread):
         session = get_session()
         try:
             success = error = skip = 0
+            consecutive_errors = 0
             total = len(self._targets)
             for i, t in enumerate(self._targets, 1):
                 if self._cancelled:
-                    remaining = total - i + 1
+                    remaining = _log_skipped_remaining(
+                        session, self._job_id, self._targets, i - 1)
                     skip += remaining
                     self.progress.emit(
                         total, total, f"中止しました（残り{remaining}件は未送信）")
@@ -94,12 +107,23 @@ class _SendWorker(QThread):
                     add_log(session, self._job_id, t.get("member_id"),
                             to_addr, t["subject"], "success")
                     success += 1
+                    consecutive_errors = 0
                     self.progress.emit(i, total, f"送信済: {t['org_name']}")
                 except Exception as e:
                     add_log(session, self._job_id, t.get("member_id"),
                             to_addr, t["subject"], "error", str(e))
                     error += 1
+                    consecutive_errors += 1
                     self.progress.emit(i, total, f"エラー: {t['org_name']} — {e}")
+                    if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
+                        remaining = _log_skipped_remaining(
+                            session, self._job_id, self._targets, i)
+                        skip += remaining
+                        self.progress.emit(
+                            total, total,
+                            f"エラーが{_CONSECUTIVE_ERROR_LIMIT}件連続したため中断しました"
+                            f"（残り{remaining}件は未送信）")
+                        break
                 if i < total and not self._cancelled:
                     time.sleep(_SEND_INTERVAL_SECONDS)
             self.finished.emit(success, error, skip)
