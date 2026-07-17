@@ -9,6 +9,7 @@ from app.services.member_service import (
     record_member_history, get_members
 )
 from app.utils import to_hankaku_kana
+from app.utils.validators import is_valid_email
 
 
 _CSV_ENCODINGS = ["utf-8-sig", "cp932", "utf-8", "euc-jp"]
@@ -90,6 +91,10 @@ def import_members(session: Session, rows: list[list],
         for n in range(1, 6):
             addr = _cell(row, f"email_{n}_address")
             if addr:
+                if not is_valid_email(addr):
+                    errors.append(
+                        f"行{i} ({member_number}): メールアドレス{n}の形式が不正です（除外）: {addr}")
+                    continue
                 addresses.append({
                     "address":    addr,
                     "label":      _cell(row, f"email_{n}_label"),

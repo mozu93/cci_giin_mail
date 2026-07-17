@@ -1,15 +1,18 @@
 import base64
 import os
+import time
 import requests
 import msal
 from pathlib import Path
+from msal_extensions import build_encrypted_persistence, PersistedTokenCache
 
 _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
              "col1", "col2", "col3", "col4", "col5"]
 
 _SCOPES = ["https://graph.microsoft.com/Mail.Send",
            "https://graph.microsoft.com/Mail.Read"]
-_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
+_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache_v2.bin"
+_LEGACY_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
 
 
 def render_body(template: str, context: dict) -> str:
@@ -25,7 +28,7 @@ def build_message(to_address: str, subject: str, body: str,
     attachment_list = []
     for path in attachments:
         if not os.path.exists(path):
-            continue
+            raise FileNotFoundError(f"添付ファイルが見つかりません: {path}")
         with open(path, "rb") as f:
             content = base64.b64encode(f.read()).decode("utf-8")
         attachment_list.append({
@@ -47,6 +50,13 @@ def build_message(to_address: str, subject: str, body: str,
         },
         "saveToSentItems": "true",
     }
+
+
+ATTACHMENT_SIZE_LIMIT_BYTES = 3 * 1024 * 1024  # Graph sendMail直添付の実用上限（約3MB）
+
+
+def total_attachment_size(paths: list[str]) -> int:
+    return sum(os.path.getsize(p) for p in paths if os.path.exists(p))
 
 
 def compile_send_targets(
@@ -91,9 +101,13 @@ def compile_send_targets(
 
 
 def get_access_token(graph_config: dict) -> str:
-    cache = msal.SerializableTokenCache()
-    if _CACHE_FILE.exists():
-        cache.deserialize(_CACHE_FILE.read_text(encoding="utf-8"))
+    _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _LEGACY_CACHE_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+    persistence = build_encrypted_persistence(str(_CACHE_FILE))
+    cache = PersistedTokenCache(persistence)
 
     app = msal.PublicClientApplication(
         client_id=graph_config["client_id"],
@@ -109,10 +123,6 @@ def get_access_token(graph_config: dict) -> str:
     if not result:
         result = app.acquire_token_interactive(scopes=_SCOPES)
 
-    if cache.has_state_changed:
-        _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _CACHE_FILE.write_text(cache.serialize(), encoding="utf-8")
-
     if not result or "access_token" not in result:
         desc = result.get("error_description", str(result)) if result else "不明なエラー"
         raise RuntimeError(f"Microsoft 365 認証に失敗しました: {desc}")
@@ -120,18 +130,36 @@ def get_access_token(graph_config: dict) -> str:
     return result["access_token"]
 
 
+_MAX_RATE_LIMIT_RETRIES = 3
+_DEFAULT_RETRY_AFTER_SECONDS = 5
+
+
 def send_mail(graph_config: dict, to_address: str, subject: str,
-              body: str, attachments: list[str] | None = None) -> None:
-    token = get_access_token(graph_config)
+              body: str, attachments: list[str] | None = None,
+              access_token: str | None = None) -> None:
+    token = access_token or get_access_token(graph_config)
     payload = build_message(to_address, subject, body, attachments or [])
-    resp = requests.post(
-        "https://graph.microsoft.com/v1.0/me/sendMail",
-        headers={"Authorization": f"Bearer {token}",
-                 "Content-Type": "application/json"},
-        json=payload,
-        timeout=30,
-    )
-    if resp.status_code not in (200, 202):
+    headers = {"Authorization": f"Bearer {token}",
+               "Content-Type": "application/json"}
+    attempt = 0
+    while True:
+        resp = requests.post(
+            "https://graph.microsoft.com/v1.0/me/sendMail",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        if resp.status_code in (200, 202):
+            return
+        if resp.status_code == 429 and attempt < _MAX_RATE_LIMIT_RETRIES:
+            try:
+                wait_seconds = int(resp.headers.get(
+                    "Retry-After", _DEFAULT_RETRY_AFTER_SECONDS))
+            except ValueError:
+                wait_seconds = _DEFAULT_RETRY_AFTER_SECONDS
+            time.sleep(wait_seconds)
+            attempt += 1
+            continue
         raise RuntimeError(
             f"送信失敗 ({resp.status_code}): {resp.text[:200]}"
         )

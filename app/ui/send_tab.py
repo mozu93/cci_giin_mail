@@ -1,5 +1,6 @@
 import os
 import glob
+import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QGroupBox, QFormLayout, QComboBox, QLabel,
@@ -18,7 +19,10 @@ from app.services.signature_service import get_signatures, get_default_signature
 from app.services.position_service import get_positions
 from app.services.committee_service import get_committees
 from app.services.staff_service import get_staff_by_name
-from app.services.email_service import compile_send_targets, send_mail, send_test_mail
+from app.services.email_service import (
+    compile_send_targets, send_mail, send_test_mail, get_access_token,
+    total_attachment_size, ATTACHMENT_SIZE_LIMIT_BYTES,
+)
 from app.services.send_job_service import create_job, start_job, finish_job, add_log
 from app.utils.app_config import get_graph_config
 from app.ui.recipient_panel import RecipientPanel
@@ -32,15 +36,44 @@ def _dev_tools_enabled() -> bool:
     return os.environ.get("CCI_MAIL_DEV_TOOLS") == "1"
 
 
+_SEND_INTERVAL_SECONDS = 2.0
+
+
+def _split_oversized_targets(targets: list[dict]) -> tuple[list[dict], list[dict]]:
+    """添付合計サイズが上限を超えるターゲットを分離する。
+    戻り値: (上限内のターゲット, 上限超過のターゲット)
+    """
+    ok, oversized = [], []
+    for t in targets:
+        if total_attachment_size(t.get("attachments", [])) > ATTACHMENT_SIZE_LIMIT_BYTES:
+            oversized.append(t)
+        else:
+            ok.append(t)
+    return ok, oversized
+
+
+_CONSECUTIVE_ERROR_LIMIT = 5
+
+
+def _log_skipped_remaining(session, job_id, targets, start_index) -> int:
+    """targets[start_index:] を送信ログにskipとして記録する。戻り値: 記録した件数"""
+    for t in targets[start_index:]:
+        add_log(session, job_id, t.get("member_id"), t.get("to_address", ""),
+                t.get("subject", ""), "skip")
+    return len(targets) - start_index
+
+
 class _SendWorker(QThread):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal(int, int, int)
 
-    def __init__(self, targets: list[dict], graph_config: dict, job_id: int):
+    def __init__(self, targets: list[dict], graph_config: dict, job_id: int,
+                access_token: str):
         super().__init__()
         self._targets = targets
         self._graph_config = graph_config
         self._job_id = job_id
+        self._access_token = access_token
         self._cancelled = False
 
     def request_cancel(self):
@@ -50,10 +83,12 @@ class _SendWorker(QThread):
         session = get_session()
         try:
             success = error = skip = 0
+            consecutive_errors = 0
             total = len(self._targets)
             for i, t in enumerate(self._targets, 1):
                 if self._cancelled:
-                    remaining = total - i + 1
+                    remaining = _log_skipped_remaining(
+                        session, self._job_id, self._targets, i - 1)
                     skip += remaining
                     self.progress.emit(
                         total, total, f"中止しました（残り{remaining}件は未送信）")
@@ -67,16 +102,30 @@ class _SendWorker(QThread):
                     continue
                 try:
                     send_mail(self._graph_config, to_addr, t["subject"],
-                              t["body"], t.get("attachments", []))
+                              t["body"], t.get("attachments", []),
+                              access_token=self._access_token)
                     add_log(session, self._job_id, t.get("member_id"),
                             to_addr, t["subject"], "success")
                     success += 1
+                    consecutive_errors = 0
                     self.progress.emit(i, total, f"送信済: {t['org_name']}")
                 except Exception as e:
                     add_log(session, self._job_id, t.get("member_id"),
                             to_addr, t["subject"], "error", str(e))
                     error += 1
+                    consecutive_errors += 1
                     self.progress.emit(i, total, f"エラー: {t['org_name']} — {e}")
+                    if consecutive_errors >= _CONSECUTIVE_ERROR_LIMIT:
+                        remaining = _log_skipped_remaining(
+                            session, self._job_id, self._targets, i)
+                        skip += remaining
+                        self.progress.emit(
+                            total, total,
+                            f"エラーが{_CONSECUTIVE_ERROR_LIMIT}件連続したため中断しました"
+                            f"（残り{remaining}件は未送信）")
+                        break
+                if i < total and not self._cancelled:
+                    time.sleep(_SEND_INTERVAL_SECONDS)
             self.finished.emit(success, error, skip)
         finally:
             session.close()
@@ -831,6 +880,22 @@ class SendTab(QWidget):
         if not targets:
             QMessageBox.warning(self, "エラー", "宛先を選択してください。")
             return
+
+        targets, oversized = _split_oversized_targets(targets)
+        if oversized:
+            names = "\n".join(f"・{t['org_name']}" for t in oversized)
+            ret = QMessageBox.question(
+                self, "添付サイズ超過",
+                f"以下の宛先は添付ファイル合計サイズが上限（3MB）を超えています。\n"
+                f"送信対象から除外して続行しますか？\n\n{names}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if ret != QMessageBox.StandardButton.Yes:
+                return
+            if not targets:
+                QMessageBox.warning(self, "エラー", "送信可能な宛先がありません。")
+                return
+
         job_name = self._job_name.text().strip()
         if not job_name:
             QMessageBox.warning(self, "エラー", "ジョブ名を入力してください。")
@@ -861,6 +926,12 @@ class SendTab(QWidget):
         if ret != QMessageBox.StandardButton.Yes:
             return
 
+        try:
+            access_token = get_access_token(graph_config)
+        except Exception as e:
+            QMessageBox.critical(self, "認証エラー", str(e))
+            return
+
         session = get_session()
         try:
             staff = get_staff_by_name(session, self._staff_name)
@@ -877,7 +948,7 @@ class SendTab(QWidget):
         self._btn_send.setEnabled(False)
         self._btn_cancel.setVisible(True)
 
-        self._worker = _SendWorker(targets, graph_config, job_id)
+        self._worker = _SendWorker(targets, graph_config, job_id, access_token)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(
             lambda s, e, sk: self._on_finished(job_id, s, e, sk))

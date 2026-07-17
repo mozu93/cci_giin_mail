@@ -12,6 +12,7 @@ from app.services.member_service import (
 )
 from app.services.committee_service import get_committees
 from app.utils import to_hankaku_kana
+from app.utils.validators import is_valid_email
 
 _MAX_EMAILS = 5
 
@@ -227,6 +228,13 @@ class MemberEditDialog(QDialog):
                     "label":      label_w.text().strip(),
                     "sort_order": i,
                 })
+
+        invalid = [a["address"] for a in addresses if not is_valid_email(a["address"])]
+        if invalid:
+            QMessageBox.warning(
+                self, "入力エラー",
+                "メールアドレスの形式が正しくありません:\n" + "\n".join(invalid))
+            return
 
         try:
             if self._member:
