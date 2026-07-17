@@ -2,8 +2,9 @@ import re
 import requests
 from dataclasses import dataclass
 from sqlalchemy.orm import Session
-from app.database.models import Member, AttendanceRecord
+from app.database.models import Member, AttendanceRecord, ProcessedAttendanceMail
 from app.services.email_service import get_access_token
+from app.services.meeting_service import upsert_attendance
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -158,3 +159,23 @@ def fetch_messages(graph_config: dict, folder_name: str, subject_filter: str,
             "body_text": item.get("body", {}).get("content", ""),
         })
     return messages
+
+
+def commit_rows(session: Session, meeting_id: int, rows: list[AttendanceMailRow],
+                selected_member_by_index: dict[int, int]) -> dict:
+    """会員が選択されている行だけ出欠に反映し、対象メールを処理済みとして記録する。"""
+    applied = skipped = 0
+    for i, row in enumerate(rows):
+        member_id = selected_member_by_index.get(i)
+        if member_id is None:
+            skipped += 1
+            continue
+        upsert_attendance(
+            session, meeting_id, member_id, row.status,
+            proxy_title=row.proxy_title, proxy_name=row.proxy_name,
+            notes=row.notes)
+        session.add(ProcessedAttendanceMail(
+            message_id=row.message_id, meeting_id=meeting_id))
+        applied += 1
+    session.commit()
+    return {"applied": applied, "skipped": skipped}

@@ -255,3 +255,38 @@ def test_fetch_messages_raises_when_folder_not_found(monkeypatch):
 
     with pytest.raises(ValueError, match="見つかりません"):
         fetch_messages({}, "存在しないフォルダ", "", exclude_ids=set())
+
+
+from app.services.attendance_mail_service import commit_rows
+from app.database.models import ProcessedAttendanceMail, AttendanceRecord
+
+
+def test_commit_rows_applies_selected_rows_and_records_message_id(db_session):
+    from app.services.member_service import create_member
+    member = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+
+    messages = [{"id": "msg-1", "body_text": _body(status="出席")}]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    result = commit_rows(db_session, meeting.id, rows,
+                         selected_member_by_index={0: member.id})
+
+    assert result == {"applied": 1, "skipped": 0}
+    record = (db_session.query(AttendanceRecord)
+             .filter_by(meeting_id=meeting.id, member_id=member.id).first())
+    assert record.status == "出席"
+    processed = db_session.query(ProcessedAttendanceMail).all()
+    assert len(processed) == 1
+    assert processed[0].message_id == "msg-1"
+
+
+def test_commit_rows_skips_rows_without_selected_member(db_session):
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    messages = [{"id": "msg-1", "body_text": _body(org="存在しない会社")}]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    result = commit_rows(db_session, meeting.id, rows, selected_member_by_index={})
+
+    assert result == {"applied": 0, "skipped": 1}
+    assert db_session.query(ProcessedAttendanceMail).count() == 0
