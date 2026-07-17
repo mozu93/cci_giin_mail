@@ -1,5 +1,6 @@
 import os
 import glob
+import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QGroupBox, QFormLayout, QComboBox, QLabel,
@@ -18,7 +19,9 @@ from app.services.signature_service import get_signatures, get_default_signature
 from app.services.position_service import get_positions
 from app.services.committee_service import get_committees
 from app.services.staff_service import get_staff_by_name
-from app.services.email_service import compile_send_targets, send_mail, send_test_mail
+from app.services.email_service import (
+    compile_send_targets, send_mail, send_test_mail, get_access_token
+)
 from app.services.send_job_service import create_job, start_job, finish_job, add_log
 from app.utils.app_config import get_graph_config
 from app.ui.recipient_panel import RecipientPanel
@@ -32,15 +35,20 @@ def _dev_tools_enabled() -> bool:
     return os.environ.get("CCI_MAIL_DEV_TOOLS") == "1"
 
 
+_SEND_INTERVAL_SECONDS = 2.0
+
+
 class _SendWorker(QThread):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal(int, int, int)
 
-    def __init__(self, targets: list[dict], graph_config: dict, job_id: int):
+    def __init__(self, targets: list[dict], graph_config: dict, job_id: int,
+                access_token: str):
         super().__init__()
         self._targets = targets
         self._graph_config = graph_config
         self._job_id = job_id
+        self._access_token = access_token
         self._cancelled = False
 
     def request_cancel(self):
@@ -67,7 +75,8 @@ class _SendWorker(QThread):
                     continue
                 try:
                     send_mail(self._graph_config, to_addr, t["subject"],
-                              t["body"], t.get("attachments", []))
+                              t["body"], t.get("attachments", []),
+                              access_token=self._access_token)
                     add_log(session, self._job_id, t.get("member_id"),
                             to_addr, t["subject"], "success")
                     success += 1
@@ -77,6 +86,8 @@ class _SendWorker(QThread):
                             to_addr, t["subject"], "error", str(e))
                     error += 1
                     self.progress.emit(i, total, f"エラー: {t['org_name']} — {e}")
+                if i < total and not self._cancelled:
+                    time.sleep(_SEND_INTERVAL_SECONDS)
             self.finished.emit(success, error, skip)
         finally:
             session.close()
@@ -861,6 +872,12 @@ class SendTab(QWidget):
         if ret != QMessageBox.StandardButton.Yes:
             return
 
+        try:
+            access_token = get_access_token(graph_config)
+        except Exception as e:
+            QMessageBox.critical(self, "認証エラー", str(e))
+            return
+
         session = get_session()
         try:
             staff = get_staff_by_name(session, self._staff_name)
@@ -877,7 +894,7 @@ class SendTab(QWidget):
         self._btn_send.setEnabled(False)
         self._btn_cancel.setVisible(True)
 
-        self._worker = _SendWorker(targets, graph_config, job_id)
+        self._worker = _SendWorker(targets, graph_config, job_id, access_token)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(
             lambda s, e, sk: self._on_finished(job_id, s, e, sk))
