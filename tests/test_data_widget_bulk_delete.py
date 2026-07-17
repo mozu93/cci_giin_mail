@@ -2,7 +2,8 @@ from datetime import date
 
 from PyQt6.QtWidgets import QMessageBox, QInputDialog
 
-from app.database.models import ReceptionLog, AttendanceRecord, Meeting, SendJob, SendLog
+from app.database.models import (
+    ReceptionLog, AttendanceRecord, Meeting, SendJob, SendLog, ProcessedAttendanceMail)
 from app.services.committee_service import get_committees, create_committee
 from app.services.position_service import get_positions, create_position
 from app.services.member_service import create_member, get_members
@@ -70,6 +71,28 @@ def test_bulk_delete_also_clears_meetings_attendance_and_send_history(
     assert db_session.query(ReceptionLog).all() == []
     assert db_session.query(SendJob).all() == []
     assert db_session.query(SendLog).all() == []
+
+
+def test_bulk_delete_clears_meetings_with_processed_attendance_mail(
+        qtbot, monkeypatch, db_session):
+    """会議に紐づくProcessedAttendanceMail（メール取込の処理済み記録）が
+    残っていると、外部キー制約により会議の削除が失敗する不具合の回帰テスト。"""
+    monkeypatch.setattr("app.ui.settings_tab.get_session", lambda: db_session)
+    _confirm(monkeypatch)
+
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 1))
+    db_session.add(ProcessedAttendanceMail(
+        message_id="msg-1", meeting_id=meeting.id,
+        received_at=date(2026, 7, 1)))
+    db_session.commit()
+
+    from app.ui.settings_tab import _DataWidget
+    w = _DataWidget()
+    qtbot.addWidget(w)
+    w._bulk_delete()
+
+    assert db_session.query(Meeting).all() == []
+    assert db_session.query(ProcessedAttendanceMail).all() == []
 
 
 def test_bulk_delete_cancelled_keeps_positions_and_committees(

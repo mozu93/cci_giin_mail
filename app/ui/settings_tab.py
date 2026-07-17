@@ -526,6 +526,7 @@ class _DataWidget(QWidget):
             Member, EmailAddress, MemberHistory,
             AttendanceRecord, ReceptionLog, SendLog,
             Position, Committee, Meeting, SendJob,
+            ProcessedAttendanceMail,
         )
         ret = QMessageBox.warning(
             self, "一括削除（開発用）",
@@ -553,6 +554,7 @@ class _DataWidget(QWidget):
             session.query(MemberHistory).delete()
             session.query(EmailAddress).delete()
             session.query(Member).delete()
+            session.query(ProcessedAttendanceMail).delete()
             session.query(Meeting).delete()
             session.query(SendJob).delete()
             session.query(Position).delete()
