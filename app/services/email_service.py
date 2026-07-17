@@ -4,6 +4,7 @@ import time
 import requests
 import msal
 from pathlib import Path
+from msal_extensions import build_encrypted_persistence, PersistedTokenCache
 
 _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
              "col1", "col2", "col3", "col4", "col5"]
@@ -99,9 +100,9 @@ def compile_send_targets(
 
 
 def get_access_token(graph_config: dict) -> str:
-    cache = msal.SerializableTokenCache()
-    if _CACHE_FILE.exists():
-        cache.deserialize(_CACHE_FILE.read_text(encoding="utf-8"))
+    _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    persistence = build_encrypted_persistence(str(_CACHE_FILE))
+    cache = PersistedTokenCache(persistence)
 
     app = msal.PublicClientApplication(
         client_id=graph_config["client_id"],
@@ -116,10 +117,6 @@ def get_access_token(graph_config: dict) -> str:
 
     if not result:
         result = app.acquire_token_interactive(scopes=_SCOPES)
-
-    if cache.has_state_changed:
-        _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _CACHE_FILE.write_text(cache.serialize(), encoding="utf-8")
 
     if not result or "access_token" not in result:
         desc = result.get("error_description", str(result)) if result else "不明なエラー"
