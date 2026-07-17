@@ -82,3 +82,16 @@ def test_import_members_row_error_does_not_lose_other_rows(db_session, monkeypat
 
     members = get_members(db_session, active_only=False)
     assert [m.member_number for m in members] == ["A-001"]
+
+
+def test_import_members_skips_invalid_email_but_keeps_member(db_session):
+    row = ["A-300", "テスト商事", "", "", "山田 太郎", "", "", "invalid-email", ""]
+    result = import_members(db_session, [row], COLUMN_MAP, changed_by="管理者")
+
+    assert result["created"] == 1
+    assert any("メールアドレス" in e for e in result["errors"])
+
+    from app.services.member_service import get_members
+    members = get_members(db_session, active_only=False)
+    member = next(m for m in members if m.member_number == "A-300")
+    assert member.email_addresses == []
