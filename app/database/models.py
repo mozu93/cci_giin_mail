@@ -193,6 +193,7 @@ class AttendanceRecord(Base):
     actual_status = Column(String, nullable=True, default="")   # 当日受付入力
     proxy_title = Column(String, default="")
     proxy_name = Column(String, default="")
+    notes = Column(Text, default="")
     meeting = relationship("Meeting", back_populates="records")
     member = relationship("Member")
     __table_args__ = (UniqueConstraint("meeting_id", "member_id",

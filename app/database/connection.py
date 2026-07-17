@@ -43,6 +43,11 @@ def _migrate_sqlite(engine):
                 "ALTER TABLE attendance_records ADD COLUMN actual_status TEXT DEFAULT ''"
             ))
             conn.commit()
+        if "notes" not in attendance_cols:
+            conn.execute(text(
+                "ALTER TABLE attendance_records ADD COLUMN notes TEXT DEFAULT ''"
+            ))
+            conn.commit()
 
         # reception_logs テーブルは create_all で自動生成されるため追加不要
 
@@ -113,6 +118,10 @@ def _migrate_postgresql(engine):
         signatures_cols = {col["name"] for col in insp.get_columns("signatures")}
         if "staff_id" not in signatures_cols:
             conn.execute(text("ALTER TABLE signatures ADD COLUMN staff_id INTEGER"))
+
+        attendance_cols = {col["name"] for col in insp.get_columns("attendance_records")}
+        if "notes" not in attendance_cols:
+            conn.execute(text("ALTER TABLE attendance_records ADD COLUMN notes TEXT DEFAULT ''"))
 
 
 def get_engine(db_path: str | None = None):

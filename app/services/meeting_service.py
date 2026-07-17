@@ -30,7 +30,7 @@ def delete_meeting(session: Session, meeting_id: int) -> None:
 
 def upsert_attendance(session: Session, meeting_id: int, member_id: int,
                       status: str, proxy_title: str = "",
-                      proxy_name: str = "") -> AttendanceRecord:
+                      proxy_name: str = "", notes: str = "") -> AttendanceRecord:
     r = (session.query(AttendanceRecord)
          .filter_by(meeting_id=meeting_id, member_id=member_id)
          .first())
@@ -40,6 +40,7 @@ def upsert_attendance(session: Session, meeting_id: int, member_id: int,
     r.status = status
     r.proxy_title = proxy_title
     r.proxy_name = proxy_name
+    r.notes = notes
     session.commit()
     return r
 
