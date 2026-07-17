@@ -5,7 +5,8 @@ from PyQt6.QtWidgets import (
 )
 from app.database.connection import get_session
 from app.services.member_service import get_members
-from app.services.attendance_mail_service import fetch_messages, build_preview, commit_rows
+from app.services.attendance_mail_service import (
+    fetch_messages, build_preview, commit_rows, get_since_datetime)
 from app.utils.app_config import (
     get_attendance_mail_folder, save_attendance_mail_folder,
     get_attendance_mail_subject_filter, save_attendance_mail_subject_filter,
@@ -92,18 +93,19 @@ class AttendanceMailImportDialog(QDialog):
                 r.message_id for r in
                 session.query(ProcessedAttendanceMail).all()
             }
+            since = get_since_datetime(session, self._meeting_id)
             try:
                 messages = fetch_messages(
-                    self._graph_config, folder_name, subject_filter, processed_ids)
+                    self._graph_config, folder_name, subject_filter, processed_ids, since)
             except (ValueError, RuntimeError) as e:
                 QMessageBox.critical(self, "エラー", str(e))
                 return
             self._rows = build_preview(session, self._meeting_id, messages)
             members = get_members(session, active_only=True)
+            self._refresh_table(members)
         finally:
             session.close()
 
-        self._refresh_table(members)
         self._status_label.setText(f"{len(self._rows)} 件のメールを読み込みました。")
 
     def _refresh_table(self, members):

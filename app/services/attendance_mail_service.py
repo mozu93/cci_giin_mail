@@ -1,8 +1,10 @@
 import re
 import requests
 from dataclasses import dataclass
+from datetime import datetime
+from sqlalchemy import func
 from sqlalchemy.orm import Session
-from app.database.models import Member, AttendanceRecord, ProcessedAttendanceMail
+from app.database.models import Member, AttendanceRecord, ProcessedAttendanceMail, Meeting
 from app.services.email_service import get_access_token
 from app.services.meeting_service import upsert_attendance
 
@@ -63,6 +65,21 @@ def match_member(session: Session, org_name_raw: str) -> Member | None:
     return None
 
 
+def get_since_datetime(session: Session, meeting_id: int) -> datetime:
+    """指定した会議についてこれまで取り込んだメールの最新受信日時を返す。
+
+    まだ1件も取り込んでいない場合は、会議開催月の1日を返す
+    （常議員会の出欠連絡は開催月内にしか来ない運用のため）。
+    """
+    latest = (session.query(func.max(ProcessedAttendanceMail.received_at))
+             .filter_by(meeting_id=meeting_id)
+             .scalar())
+    if latest is not None:
+        return latest
+    meeting = session.get(Meeting, meeting_id)
+    return datetime(meeting.date.year, meeting.date.month, 1)
+
+
 @dataclass
 class AttendanceMailRow:
     message_id: str
@@ -74,6 +91,7 @@ class AttendanceMailRow:
     notes: str
     matched_member: Member | None
     existing_status: str | None
+    received_at: datetime
 
 
 def build_preview(session: Session, meeting_id: int,
@@ -98,6 +116,7 @@ def build_preview(session: Session, meeting_id: int,
             notes=fields["notes"],
             matched_member=member,
             existing_status=None,
+            received_at=msg["received_at"],
         )
         key = normalize_org_name(fields["org_name"])
         by_org[key] = row
@@ -114,10 +133,11 @@ def build_preview(session: Session, meeting_id: int,
 
 
 def _resolve_folder_id(token: str, folder_name: str) -> str:
+    escaped_name = folder_name.replace("'", "''")
     resp = requests.get(
         f"{_GRAPH_BASE}/me/mailFolders",
         headers={"Authorization": f"Bearer {token}"},
-        params={"$filter": f"displayName eq '{folder_name}'"},
+        params={"$filter": f"displayName eq '{escaped_name}'"},
         timeout=30,
     )
     if resp.status_code != 200:
@@ -130,17 +150,28 @@ def _resolve_folder_id(token: str, folder_name: str) -> str:
     return values[0]["id"]
 
 
+def _parse_graph_datetime(raw: str) -> datetime:
+    """Graph APIのreceivedDateTime（UTC、小数秒桁数が可変）をnaive datetimeにする。"""
+    raw = raw.rstrip("Z")
+    if "." in raw:
+        raw = raw.split(".")[0]
+    return datetime.strptime(raw, "%Y-%m-%dT%H:%M:%S")
+
+
 def fetch_messages(graph_config: dict, folder_name: str, subject_filter: str,
-                   exclude_ids: set[str]) -> list[dict]:
-    """指定フォルダ内のメールをGraph APIで取得する（受信日時の古い順）。"""
+                   exclude_ids: set[str], since: datetime) -> list[dict]:
+    """指定フォルダ内で since より後に受信したメールをGraph APIで取得する
+    （受信日時の古い順）。"""
     token = get_access_token(graph_config)
     folder_id = _resolve_folder_id(token, folder_name)
+    since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     resp = requests.get(
         f"{_GRAPH_BASE}/me/mailFolders/{folder_id}/messages",
         headers={"Authorization": f"Bearer {token}",
                  "Prefer": 'outlook.body-content-type="text"'},
         params={"$top": 200, "$orderby": "receivedDateTime asc",
-                "$select": "id,subject,receivedDateTime,body"},
+                "$select": "id,subject,receivedDateTime,body",
+                "$filter": f"receivedDateTime gt {since_iso}"},
         timeout=30,
     )
     if resp.status_code != 200:
@@ -157,17 +188,22 @@ def fetch_messages(graph_config: dict, folder_name: str, subject_filter: str,
             "id": item["id"],
             "subject": item.get("subject", ""),
             "body_text": item.get("body", {}).get("content", ""),
+            "received_at": _parse_graph_datetime(item["receivedDateTime"]),
         })
     return messages
 
 
 def commit_rows(session: Session, meeting_id: int, rows: list[AttendanceMailRow],
                 selected_member_by_index: dict[int, int]) -> dict:
-    """会員が選択されている行だけ出欠に反映し、対象メールを処理済みとして記録する。"""
+    """会員が選択されていて、かつ出欠区分を正しく認識できた行だけ出欠に反映し、
+    対象メールを処理済みとして記録する。出欠区分が認識できなかった行
+    （STATUS_MAPに無い値、status==""）は、会員が選択されていてもスキップする
+    （空文字のステータスを業務データに書き込まないため）。
+    """
     applied = skipped = 0
     for i, row in enumerate(rows):
         member_id = selected_member_by_index.get(i)
-        if member_id is None:
+        if member_id is None or not row.status:
             skipped += 1
             continue
         upsert_attendance(
@@ -175,7 +211,8 @@ def commit_rows(session: Session, meeting_id: int, rows: list[AttendanceMailRow]
             proxy_title=row.proxy_title, proxy_name=row.proxy_name,
             notes=row.notes)
         session.add(ProcessedAttendanceMail(
-            message_id=row.message_id, meeting_id=meeting_id))
+            message_id=row.message_id, meeting_id=meeting_id,
+            received_at=row.received_at))
         applied += 1
     session.commit()
     return {"applied": applied, "skipped": skipped}

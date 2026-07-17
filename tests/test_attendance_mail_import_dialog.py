@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from app.services.meeting_service import create_meeting
 from app.services.member_service import create_member
 from app.database.models import ProcessedAttendanceMail, AttendanceRecord
@@ -17,10 +17,11 @@ def test_search_populates_table_with_matched_member_preselected(
 
     monkeypatch.setattr(
         "app.ui.dialogs.attendance_mail_import_dialog.fetch_messages",
-        lambda graph_config, folder, subject, exclude_ids: [
+        lambda graph_config, folder, subject, exclude_ids, since: [
             {"id": "msg-1", "body_text": (
                 "【出　　欠】出席\n【事業所名】○○商事\n【氏　　名】山田太郎\n"
-                "【代理者名】\n【代理役職】\n【備考】")},
+                "【代理者名】\n【代理役職】\n【備考】"),
+             "received_at": datetime(2026, 7, 10)},
         ])
 
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
@@ -43,10 +44,11 @@ def test_search_leaves_unmatched_row_unselected(qtbot, monkeypatch, db_session):
 
     monkeypatch.setattr(
         "app.ui.dialogs.attendance_mail_import_dialog.fetch_messages",
-        lambda graph_config, folder, subject, exclude_ids: [
+        lambda graph_config, folder, subject, exclude_ids, since: [
             {"id": "msg-1", "body_text": (
                 "【出　　欠】出席\n【事業所名】存在しない会社\n【氏　　名】不明\n"
-                "【代理者名】\n【代理役職】\n【備考】")},
+                "【代理者名】\n【代理役職】\n【備考】"),
+             "received_at": datetime(2026, 7, 10)},
         ])
 
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
@@ -67,13 +69,15 @@ def test_apply_commits_only_selected_rows(qtbot, monkeypatch, db_session):
 
     monkeypatch.setattr(
         "app.ui.dialogs.attendance_mail_import_dialog.fetch_messages",
-        lambda graph_config, folder, subject, exclude_ids: [
+        lambda graph_config, folder, subject, exclude_ids, since: [
             {"id": "msg-1", "body_text": (
                 "【出　　欠】出席\n【事業所名】○○商事\n【氏　　名】山田太郎\n"
-                "【代理者名】\n【代理役職】\n【備考】")},
+                "【代理者名】\n【代理役職】\n【備考】"),
+             "received_at": datetime(2026, 7, 10)},
             {"id": "msg-2", "body_text": (
                 "【出　　欠】欠席\n【事業所名】存在しない会社\n【氏　　名】不明\n"
-                "【代理者名】\n【代理役職】\n【備考】")},
+                "【代理者名】\n【代理役職】\n【備考】"),
+             "received_at": datetime(2026, 7, 10)},
         ])
 
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
@@ -103,10 +107,11 @@ def test_no_wheel_combo_ignores_wheel_event(qtbot, monkeypatch, db_session):
 
     monkeypatch.setattr(
         "app.ui.dialogs.attendance_mail_import_dialog.fetch_messages",
-        lambda graph_config, folder, subject, exclude_ids: [
+        lambda graph_config, folder, subject, exclude_ids, since: [
             {"id": "msg-1", "body_text": (
                 "【出　　欠】出席\n【事業所名】○○商事\n【氏　　名】山田太郎\n"
-                "【代理者名】\n【代理役職】\n【備考】")},
+                "【代理者名】\n【代理役職】\n【備考】"),
+             "received_at": datetime(2026, 7, 10)},
         ])
 
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
@@ -122,3 +127,39 @@ def test_no_wheel_combo_ignores_wheel_event(qtbot, monkeypatch, db_session):
         Qt.ScrollPhase.NoScrollPhase, False)
     combo.wheelEvent(event)
     assert combo.currentIndex() == before
+
+
+def test_search_survives_session_close_before_table_refresh(qtbot, monkeypatch, db_sessionmaker):
+    session = db_sessionmaker()
+    monkeypatch.setattr(
+        "app.ui.dialogs.attendance_mail_import_dialog.get_session",
+        lambda: db_sessionmaker())
+    member = create_member(session, "A-001", "○○商事", "山田太郎")
+    meeting = create_meeting(session, "常議員会", date(2026, 7, 20))
+    # id を先に確保しておく。create_member/create_meeting はcommitするため、
+    # session.close()後にORM属性へアクセスすると(expire_on_commitにより)
+    # DetachedInstanceErrorになり、_searchの修正とは無関係な箇所で
+    # テストが失敗してしまう。
+    member_id = member.id
+    meeting_id = meeting.id
+    session.close()
+
+    monkeypatch.setattr(
+        "app.ui.dialogs.attendance_mail_import_dialog.fetch_messages",
+        lambda graph_config, folder, subject, exclude_ids, since: [
+            {"id": "msg-1", "body_text": (
+                "【出　　欠】出席\n【事業所名】○○商事\n【氏　　名】山田太郎\n"
+                "【代理者名】\n【代理役職】\n【備考】"),
+             "received_at": datetime(2026, 7, 10)},
+        ])
+
+    from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
+    dlg = AttendanceMailImportDialog(meeting_id=meeting_id, graph_config={})
+    qtbot.addWidget(dlg)
+
+    dlg._search()  # get_session() called inside _search returns a FRESH session each
+                    # time (matching production get_session() semantics), which _search
+                    # closes in its own finally block before returning — this test fails
+                    # with DetachedInstanceError if _refresh_table runs after that close
+    combo = dlg._table.cellWidget(0, dlg._COL_MEMBER)
+    assert combo.currentData() == member_id

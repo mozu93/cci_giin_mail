@@ -94,7 +94,7 @@ def test_match_member_returns_none_when_ambiguous(db_session):
     assert match_member(db_session, "山田商事") is None
 
 
-from datetime import date
+from datetime import date, datetime
 from app.services.attendance_mail_service import build_preview
 from app.services.meeting_service import create_meeting, upsert_attendance
 
@@ -129,7 +129,8 @@ def test_build_preview_matches_member_and_status(db_session):
 
     messages = [{"id": "msg-1", "body_text": _body(status="出席(※代理)",
                                                     proxy_name="別所喜三生",
-                                                    proxy_title="監査役")}]
+                                                    proxy_title="監査役"),
+                 "received_at": datetime(2026, 7, 10, 9, 0, 0)}]
     rows = build_preview(db_session, meeting.id, messages)
 
     assert len(rows) == 1
@@ -147,7 +148,8 @@ def test_build_preview_shows_existing_status_when_already_recorded(db_session):
     meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
     upsert_attendance(db_session, meeting.id, member.id, "出席")
 
-    messages = [{"id": "msg-2", "body_text": _body(status="欠席")}]
+    messages = [{"id": "msg-2", "body_text": _body(status="欠席"),
+                 "received_at": datetime(2026, 7, 10, 9, 0, 0)}]
     rows = build_preview(db_session, meeting.id, messages)
 
     assert rows[0].existing_status == "出席"
@@ -160,8 +162,10 @@ def test_build_preview_keeps_only_latest_message_per_organization(db_session):
 
     # fetch_messagesは受信日時の古い順に返す契約 → 後勝ちで最新のみ残る
     messages = [
-        {"id": "msg-old", "body_text": _body(status="出席")},
-        {"id": "msg-new", "body_text": _body(status="欠席")},
+        {"id": "msg-old", "body_text": _body(status="出席"),
+         "received_at": datetime(2026, 7, 5, 9, 0, 0)},
+        {"id": "msg-new", "body_text": _body(status="欠席"),
+         "received_at": datetime(2026, 7, 10, 9, 0, 0)},
     ]
     rows = build_preview(db_session, meeting.id, messages)
 
@@ -172,7 +176,8 @@ def test_build_preview_keeps_only_latest_message_per_organization(db_session):
 
 def test_build_preview_unmatched_organization_has_no_member(db_session):
     meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
-    messages = [{"id": "msg-3", "body_text": _body(org="存在しない会社")}]
+    messages = [{"id": "msg-3", "body_text": _body(org="存在しない会社"),
+                 "received_at": datetime(2026, 7, 10, 9, 0, 0)}]
     rows = build_preview(db_session, meeting.id, messages)
 
     assert rows[0].matched_member is None
@@ -203,6 +208,7 @@ def test_fetch_messages_resolves_folder_and_filters(monkeypatch):
             assert params["$filter"] == "displayName eq '常議員会出欠'"
             return _FakeResponse(200, {"value": [{"id": "folder-1"}]})
         if url.endswith("/me/mailFolders/folder-1/messages"):
+            assert params["$filter"] == "receivedDateTime gt 2026-07-01T00:00:00Z"
             return _FakeResponse(200, {"value": [
                 {"id": "msg-1", "subject": "常議員会出欠連絡",
                  "receivedDateTime": "2026-07-15T10:00:00Z",
@@ -215,11 +221,13 @@ def test_fetch_messages_resolves_folder_and_filters(monkeypatch):
 
     monkeypatch.setattr("app.services.attendance_mail_service.requests.get", fake_get)
 
-    messages = fetch_messages({}, "常議員会出欠", "出欠連絡", exclude_ids=set())
+    messages = fetch_messages({}, "常議員会出欠", "出欠連絡", exclude_ids=set(),
+                              since=datetime(2026, 7, 1))
 
     assert len(messages) == 1
     assert messages[0]["id"] == "msg-1"
     assert messages[0]["body_text"] == "本文1"
+    assert messages[0]["received_at"] == datetime(2026, 7, 15, 10, 0, 0)
 
 
 def test_fetch_messages_excludes_already_processed(monkeypatch):
@@ -238,7 +246,8 @@ def test_fetch_messages_excludes_already_processed(monkeypatch):
 
     monkeypatch.setattr("app.services.attendance_mail_service.requests.get", fake_get)
 
-    messages = fetch_messages({}, "常議員会出欠", "", exclude_ids={"msg-1"})
+    messages = fetch_messages({}, "常議員会出欠", "", exclude_ids={"msg-1"},
+                              since=datetime(2000, 1, 1))
 
     assert messages == []
 
@@ -254,7 +263,8 @@ def test_fetch_messages_raises_when_folder_not_found(monkeypatch):
     monkeypatch.setattr("app.services.attendance_mail_service.requests.get", fake_get)
 
     with pytest.raises(ValueError, match="見つかりません"):
-        fetch_messages({}, "存在しないフォルダ", "", exclude_ids=set())
+        fetch_messages({}, "存在しないフォルダ", "", exclude_ids=set(),
+                       since=datetime(2000, 1, 1))
 
 
 from app.services.attendance_mail_service import commit_rows
@@ -266,7 +276,8 @@ def test_commit_rows_applies_selected_rows_and_records_message_id(db_session):
     member = create_member(db_session, "A-001", "○○商事", "山田太郎")
     meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
 
-    messages = [{"id": "msg-1", "body_text": _body(status="出席")}]
+    messages = [{"id": "msg-1", "body_text": _body(status="出席"),
+                 "received_at": datetime(2026, 7, 10, 9, 0, 0)}]
     rows = build_preview(db_session, meeting.id, messages)
 
     result = commit_rows(db_session, meeting.id, rows,
@@ -283,10 +294,53 @@ def test_commit_rows_applies_selected_rows_and_records_message_id(db_session):
 
 def test_commit_rows_skips_rows_without_selected_member(db_session):
     meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
-    messages = [{"id": "msg-1", "body_text": _body(org="存在しない会社")}]
+    messages = [{"id": "msg-1", "body_text": _body(org="存在しない会社"),
+                 "received_at": datetime(2026, 7, 10, 9, 0, 0)}]
     rows = build_preview(db_session, meeting.id, messages)
 
     result = commit_rows(db_session, meeting.id, rows, selected_member_by_index={})
+
+    assert result == {"applied": 0, "skipped": 1}
+    assert db_session.query(ProcessedAttendanceMail).count() == 0
+
+
+from app.services.attendance_mail_service import get_since_datetime, AttendanceMailRow
+
+
+def test_get_since_datetime_defaults_to_first_of_meeting_month_when_no_prior_import(db_session):
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    since = get_since_datetime(db_session, meeting.id)
+    assert since == datetime(2026, 7, 1)
+
+
+def test_get_since_datetime_returns_latest_processed_received_at(db_session):
+    from app.services.member_service import create_member
+    member = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    db_session.add(ProcessedAttendanceMail(
+        message_id="msg-old", meeting_id=meeting.id,
+        received_at=datetime(2026, 7, 5, 9, 0, 0)))
+    db_session.add(ProcessedAttendanceMail(
+        message_id="msg-new", meeting_id=meeting.id,
+        received_at=datetime(2026, 7, 10, 12, 0, 0)))
+    db_session.commit()
+
+    since = get_since_datetime(db_session, meeting.id)
+    assert since == datetime(2026, 7, 10, 12, 0, 0)
+
+
+def test_commit_rows_skips_rows_with_unrecognized_status(db_session):
+    from app.services.member_service import create_member
+    member = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    row = AttendanceMailRow(
+        message_id="msg-1", org_name_raw="○○商事", name_raw="山田太郎",
+        status="",  # STATUS_MAPに無い値だった場合の想定（空文字）
+        proxy_title="", proxy_name="", notes="",
+        matched_member=member, existing_status=None,
+        received_at=datetime(2026, 7, 10))
+
+    result = commit_rows(db_session, meeting.id, [row], {0: member.id})
 
     assert result == {"applied": 0, "skipped": 1}
     assert db_session.query(ProcessedAttendanceMail).count() == 0
