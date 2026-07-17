@@ -4,6 +4,7 @@ from app.services.member_service import create_member
 from app.database.models import ProcessedAttendanceMail, AttendanceRecord
 from PyQt6.QtCore import Qt, QPoint, QPointF
 from PyQt6.QtGui import QWheelEvent
+from PyQt6.QtWidgets import QMessageBox
 
 
 def test_search_populates_table_with_matched_member_preselected(
@@ -79,6 +80,10 @@ def test_apply_commits_only_selected_rows(qtbot, monkeypatch, db_session):
     dlg = AttendanceMailImportDialog(meeting_id=meeting.id, graph_config={})
     qtbot.addWidget(dlg)
     dlg._search()
+
+    monkeypatch.setattr(
+        QMessageBox, "information",
+        staticmethod(lambda *a, **k: None))
 
     dlg._apply()
 
