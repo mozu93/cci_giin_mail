@@ -132,3 +132,23 @@ def get_pg_config() -> dict:
         "password": "",
     }
     return {**defaults, **get_config().get("postgresql", {})}
+
+
+def get_attendance_mail_folder() -> str:
+    return get_config().get("attendance_mail_folder", "")
+
+
+def save_attendance_mail_folder(folder_name: str) -> None:
+    config = get_config()
+    config["attendance_mail_folder"] = folder_name
+    save_config(config)
+
+
+def get_attendance_mail_subject_filter() -> str:
+    return get_config().get("attendance_mail_subject_filter", "")
+
+
+def save_attendance_mail_subject_filter(subject_filter: str) -> None:
+    config = get_config()
+    config["attendance_mail_subject_filter"] = subject_filter
+    save_config(config)
