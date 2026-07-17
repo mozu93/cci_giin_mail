@@ -11,7 +11,8 @@ _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
 
 _SCOPES = ["https://graph.microsoft.com/Mail.Send",
            "https://graph.microsoft.com/Mail.Read"]
-_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
+_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache_v2.bin"
+_LEGACY_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
 
 
 def render_body(template: str, context: dict) -> str:
@@ -101,6 +102,10 @@ def compile_send_targets(
 
 def get_access_token(graph_config: dict) -> str:
     _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _LEGACY_CACHE_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
     persistence = build_encrypted_persistence(str(_CACHE_FILE))
     cache = PersistedTokenCache(persistence)
 
