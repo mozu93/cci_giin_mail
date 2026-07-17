@@ -1,5 +1,6 @@
 import base64
 import os
+import time
 import requests
 import msal
 from pathlib import Path
@@ -120,18 +121,36 @@ def get_access_token(graph_config: dict) -> str:
     return result["access_token"]
 
 
+_MAX_RATE_LIMIT_RETRIES = 3
+_DEFAULT_RETRY_AFTER_SECONDS = 5
+
+
 def send_mail(graph_config: dict, to_address: str, subject: str,
-              body: str, attachments: list[str] | None = None) -> None:
-    token = get_access_token(graph_config)
+              body: str, attachments: list[str] | None = None,
+              access_token: str | None = None) -> None:
+    token = access_token or get_access_token(graph_config)
     payload = build_message(to_address, subject, body, attachments or [])
-    resp = requests.post(
-        "https://graph.microsoft.com/v1.0/me/sendMail",
-        headers={"Authorization": f"Bearer {token}",
-                 "Content-Type": "application/json"},
-        json=payload,
-        timeout=30,
-    )
-    if resp.status_code not in (200, 202):
+    headers = {"Authorization": f"Bearer {token}",
+               "Content-Type": "application/json"}
+    attempt = 0
+    while True:
+        resp = requests.post(
+            "https://graph.microsoft.com/v1.0/me/sendMail",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        if resp.status_code in (200, 202):
+            return
+        if resp.status_code == 429 and attempt < _MAX_RATE_LIMIT_RETRIES:
+            try:
+                wait_seconds = int(resp.headers.get(
+                    "Retry-After", _DEFAULT_RETRY_AFTER_SECONDS))
+            except ValueError:
+                wait_seconds = _DEFAULT_RETRY_AFTER_SECONDS
+            time.sleep(wait_seconds)
+            attempt += 1
+            continue
         raise RuntimeError(
             f"送信失敗 ({resp.status_code}): {resp.text[:200]}"
         )

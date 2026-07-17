@@ -2,6 +2,13 @@ import pytest
 from app.services.email_service import render_body, build_message
 
 
+class _FakeResponse:
+    def __init__(self, status_code, text="", headers=None):
+        self.status_code = status_code
+        self.text = text
+        self.headers = headers or {}
+
+
 def test_render_body_basic():
     template = "こんにちは、{事業所名}の{氏名}様。"
     context = {"事業所名": "○○商事", "氏名": "山田 太郎"}
@@ -56,3 +63,47 @@ def test_build_message_with_attachment(tmp_path):
     assert len(attachments) == 1
     assert attachments[0]["name"] == "test.txt"
     assert attachments[0]["@odata.type"] == "#microsoft.graph.fileAttachment"
+
+
+def test_send_mail_uses_provided_access_token_without_fetching(monkeypatch):
+    from app.services import email_service
+
+    def fail_get_token(graph_config):
+        raise AssertionError("access_token指定時はget_access_tokenを呼んではいけない")
+
+    monkeypatch.setattr(email_service, "get_access_token", fail_get_token)
+    monkeypatch.setattr(email_service.requests, "post",
+                         lambda *a, **k: _FakeResponse(202))
+
+    email_service.send_mail({}, "to@example.com", "件名", "本文",
+                            access_token="provided-token")
+
+
+def test_send_mail_retries_on_429_then_succeeds(monkeypatch):
+    from app.services import email_service
+
+    responses = [_FakeResponse(429, headers={"Retry-After": "1"}), _FakeResponse(202)]
+    sleep_calls = []
+
+    monkeypatch.setattr(email_service.requests, "post",
+                         lambda *a, **k: responses.pop(0))
+    monkeypatch.setattr(email_service.time, "sleep",
+                         lambda s: sleep_calls.append(s))
+
+    email_service.send_mail({}, "to@example.com", "件名", "本文",
+                            access_token="token")
+
+    assert sleep_calls == [1]
+
+
+def test_send_mail_raises_after_max_429_retries(monkeypatch):
+    from app.services import email_service
+
+    monkeypatch.setattr(email_service.requests, "post",
+                         lambda *a, **k: _FakeResponse(
+                             429, text="rate limited", headers={"Retry-After": "1"}))
+    monkeypatch.setattr(email_service.time, "sleep", lambda s: None)
+
+    with pytest.raises(RuntimeError):
+        email_service.send_mail({}, "to@example.com", "件名", "本文",
+                                access_token="token")
