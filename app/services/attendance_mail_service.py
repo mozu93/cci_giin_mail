@@ -133,10 +133,18 @@ def build_preview(session: Session, meeting_id: int,
 
 
 def _resolve_folder_id(token: str, folder_name: str) -> str:
+    """表示名からフォルダIDを解決する。
+
+    まずトップレベルのフォルダを完全一致で探し（高速パス）、見つからなければ
+    既存フォルダのサブフォルダを幅優先で再帰的に探索する。Outlookの仕分け
+    ルールで作ったフォルダが受信トレイ等の下に作られているケースに対応する
+    （Graph APIの /me/mailFolders は既定でトップレベルしか返さないため）。
+    """
+    headers = {"Authorization": f"Bearer {token}"}
     escaped_name = folder_name.replace("'", "''")
     resp = requests.get(
         f"{_GRAPH_BASE}/me/mailFolders",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
         params={"$filter": f"displayName eq '{escaped_name}'"},
         timeout=30,
     )
@@ -144,10 +152,36 @@ def _resolve_folder_id(token: str, folder_name: str) -> str:
         raise RuntimeError(
             f"フォルダ一覧の取得に失敗しました ({resp.status_code}): {resp.text[:200]}")
     values = resp.json().get("value", [])
-    if not values:
-        raise ValueError(
-            f"フォルダ「{folder_name}」が見つかりません。Outlookのフォルダ名を確認してください。")
-    return values[0]["id"]
+    if values:
+        return values[0]["id"]
+
+    resp = requests.get(
+        f"{_GRAPH_BASE}/me/mailFolders",
+        headers=headers,
+        params={"$top": 250},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"フォルダ一覧の取得に失敗しました ({resp.status_code}): {resp.text[:200]}")
+    queue = [f["id"] for f in resp.json().get("value", [])]
+    while queue:
+        parent_id = queue.pop(0)
+        resp = requests.get(
+            f"{_GRAPH_BASE}/me/mailFolders/{parent_id}/childFolders",
+            headers=headers,
+            params={"$top": 250},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            continue
+        for child in resp.json().get("value", []):
+            if child.get("displayName") == folder_name:
+                return child["id"]
+            queue.append(child["id"])
+
+    raise ValueError(
+        f"フォルダ「{folder_name}」が見つかりません。Outlookのフォルダ名を確認してください。")
 
 
 def _parse_graph_datetime(raw: str) -> datetime:

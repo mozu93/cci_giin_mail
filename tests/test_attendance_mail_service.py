@@ -252,6 +252,41 @@ def test_fetch_messages_excludes_already_processed(monkeypatch):
     assert messages == []
 
 
+def test_fetch_messages_resolves_nested_subfolder(monkeypatch):
+    """トップレベルに無く、他フォルダの下（サブフォルダ）にある場合も見つけられること。"""
+    monkeypatch.setattr(
+        "app.services.attendance_mail_service.get_access_token",
+        lambda cfg: "dummy-token")
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        if url.endswith("/me/mailFolders") and "$filter" in (params or {}):
+            assert params["$filter"] == "displayName eq '常議員会出欠連絡'"
+            return _FakeResponse(200, {"value": []})
+        if url.endswith("/me/mailFolders"):
+            return _FakeResponse(200, {"value": [
+                {"id": "inbox-1", "displayName": "受信トレイ"},
+            ]})
+        if url.endswith("/me/mailFolders/inbox-1/childFolders"):
+            return _FakeResponse(200, {"value": [
+                {"id": "folder-1", "displayName": "常議員会出欠連絡"},
+            ]})
+        if url.endswith("/me/mailFolders/folder-1/messages"):
+            return _FakeResponse(200, {"value": [
+                {"id": "msg-1", "subject": "常議員会出欠連絡",
+                 "receivedDateTime": "2026-07-15T10:00:00Z",
+                 "body": {"content": "本文1"}},
+            ]})
+        raise AssertionError(f"unexpected url/params: {url} {params}")
+
+    monkeypatch.setattr("app.services.attendance_mail_service.requests.get", fake_get)
+
+    messages = fetch_messages({}, "常議員会出欠連絡", "", exclude_ids=set(),
+                              since=datetime(2026, 7, 1))
+
+    assert len(messages) == 1
+    assert messages[0]["id"] == "msg-1"
+
+
 def test_fetch_messages_raises_when_folder_not_found(monkeypatch):
     monkeypatch.setattr(
         "app.services.attendance_mail_service.get_access_token",
