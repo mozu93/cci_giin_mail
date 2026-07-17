@@ -177,3 +177,81 @@ def test_build_preview_unmatched_organization_has_no_member(db_session):
 
     assert rows[0].matched_member is None
     assert rows[0].existing_status is None
+
+
+import pytest
+from app.services.attendance_mail_service import fetch_messages
+
+
+class _FakeResponse:
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = str(payload)
+
+    def json(self):
+        return self._payload
+
+
+def test_fetch_messages_resolves_folder_and_filters(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.attendance_mail_service.get_access_token",
+        lambda cfg: "dummy-token")
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        if url.endswith("/me/mailFolders"):
+            assert params["$filter"] == "displayName eq '常議員会出欠'"
+            return _FakeResponse(200, {"value": [{"id": "folder-1"}]})
+        if url.endswith("/me/mailFolders/folder-1/messages"):
+            return _FakeResponse(200, {"value": [
+                {"id": "msg-1", "subject": "常議員会出欠連絡",
+                 "receivedDateTime": "2026-07-15T10:00:00Z",
+                 "body": {"content": "本文1"}},
+                {"id": "msg-2", "subject": "別件のお知らせ",
+                 "receivedDateTime": "2026-07-16T10:00:00Z",
+                 "body": {"content": "本文2"}},
+            ]})
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr("app.services.attendance_mail_service.requests.get", fake_get)
+
+    messages = fetch_messages({}, "常議員会出欠", "出欠連絡", exclude_ids=set())
+
+    assert len(messages) == 1
+    assert messages[0]["id"] == "msg-1"
+    assert messages[0]["body_text"] == "本文1"
+
+
+def test_fetch_messages_excludes_already_processed(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.attendance_mail_service.get_access_token",
+        lambda cfg: "dummy-token")
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        if url.endswith("/me/mailFolders"):
+            return _FakeResponse(200, {"value": [{"id": "folder-1"}]})
+        return _FakeResponse(200, {"value": [
+            {"id": "msg-1", "subject": "件名",
+             "receivedDateTime": "2026-07-15T10:00:00Z",
+             "body": {"content": "本文1"}},
+        ]})
+
+    monkeypatch.setattr("app.services.attendance_mail_service.requests.get", fake_get)
+
+    messages = fetch_messages({}, "常議員会出欠", "", exclude_ids={"msg-1"})
+
+    assert messages == []
+
+
+def test_fetch_messages_raises_when_folder_not_found(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.attendance_mail_service.get_access_token",
+        lambda cfg: "dummy-token")
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        return _FakeResponse(200, {"value": []})
+
+    monkeypatch.setattr("app.services.attendance_mail_service.requests.get", fake_get)
+
+    with pytest.raises(ValueError, match="見つかりません"):
+        fetch_messages({}, "存在しないフォルダ", "", exclude_ids=set())

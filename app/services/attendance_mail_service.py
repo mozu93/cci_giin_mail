@@ -1,7 +1,11 @@
 import re
+import requests
 from dataclasses import dataclass
 from sqlalchemy.orm import Session
 from app.database.models import Member, AttendanceRecord
+from app.services.email_service import get_access_token
+
+_GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 STATUS_MAP = {
     "出席": "出席",
@@ -106,3 +110,51 @@ def build_preview(session: Session, meeting_id: int,
                        .first())
             row.existing_status = existing.status if existing else None
     return rows
+
+
+def _resolve_folder_id(token: str, folder_name: str) -> str:
+    resp = requests.get(
+        f"{_GRAPH_BASE}/me/mailFolders",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"$filter": f"displayName eq '{folder_name}'"},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"フォルダ一覧の取得に失敗しました ({resp.status_code}): {resp.text[:200]}")
+    values = resp.json().get("value", [])
+    if not values:
+        raise ValueError(
+            f"フォルダ「{folder_name}」が見つかりません。Outlookのフォルダ名を確認してください。")
+    return values[0]["id"]
+
+
+def fetch_messages(graph_config: dict, folder_name: str, subject_filter: str,
+                   exclude_ids: set[str]) -> list[dict]:
+    """指定フォルダ内のメールをGraph APIで取得する（受信日時の古い順）。"""
+    token = get_access_token(graph_config)
+    folder_id = _resolve_folder_id(token, folder_name)
+    resp = requests.get(
+        f"{_GRAPH_BASE}/me/mailFolders/{folder_id}/messages",
+        headers={"Authorization": f"Bearer {token}",
+                 "Prefer": 'outlook.body-content-type="text"'},
+        params={"$top": 200, "$orderby": "receivedDateTime asc",
+                "$select": "id,subject,receivedDateTime,body"},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"メール一覧の取得に失敗しました ({resp.status_code}): {resp.text[:200]}")
+
+    messages = []
+    for item in resp.json().get("value", []):
+        if item["id"] in exclude_ids:
+            continue
+        if subject_filter and subject_filter not in item.get("subject", ""):
+            continue
+        messages.append({
+            "id": item["id"],
+            "subject": item.get("subject", ""),
+            "body_text": item.get("body", {}).get("content", ""),
+        })
+    return messages

@@ -7,7 +7,8 @@ from pathlib import Path
 _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
              "col1", "col2", "col3", "col4", "col5"]
 
-_SCOPES = ["https://graph.microsoft.com/Mail.Send"]
+_SCOPES = ["https://graph.microsoft.com/Mail.Send",
+           "https://graph.microsoft.com/Mail.Read"]
 _CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
 
 
