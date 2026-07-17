@@ -92,3 +92,88 @@ def test_match_member_returns_none_when_ambiguous(db_session):
     create_member(db_session, "A-001", "山田商事", "山田太郎")
     create_member(db_session, "A-002", "山田商事", "山田次郎")
     assert match_member(db_session, "山田商事") is None
+
+
+from datetime import date
+from app.services.attendance_mail_service import build_preview
+from app.services.meeting_service import create_meeting, upsert_attendance
+
+_BODY_TEMPLATE = """
+【出　　欠】{status}
+
+【事業所名】{org}
+
+【氏　　名】{name}
+
+【代理者名】{proxy_name}
+
+【代理役職】{proxy_title}
+
+【受任者名（委任代理人）】
+
+【備考】{notes}
+"""
+
+
+def _body(status="出席", org="○○商事", name="山田太郎",
+          proxy_name="", proxy_title="", notes=""):
+    return _BODY_TEMPLATE.format(
+        status=status, org=org, name=name,
+        proxy_name=proxy_name, proxy_title=proxy_title, notes=notes)
+
+
+def test_build_preview_matches_member_and_status(db_session):
+    create_member_org = "○○商事"
+    create_member(db_session, "A-001", create_member_org, "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+
+    messages = [{"id": "msg-1", "body_text": _body(status="出席(※代理)",
+                                                    proxy_name="別所喜三生",
+                                                    proxy_title="監査役")}]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.status == "代理"
+    assert row.proxy_name == "別所喜三生"
+    assert row.proxy_title == "監査役"
+    assert row.matched_member is not None
+    assert row.matched_member.member_number == "A-001"
+    assert row.existing_status is None
+
+
+def test_build_preview_shows_existing_status_when_already_recorded(db_session):
+    member = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    upsert_attendance(db_session, meeting.id, member.id, "出席")
+
+    messages = [{"id": "msg-2", "body_text": _body(status="欠席")}]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    assert rows[0].existing_status == "出席"
+    assert rows[0].status == "欠席"
+
+
+def test_build_preview_keeps_only_latest_message_per_organization(db_session):
+    create_member(db_session, "A-001", "○○商事", "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+
+    # fetch_messagesは受信日時の古い順に返す契約 → 後勝ちで最新のみ残る
+    messages = [
+        {"id": "msg-old", "body_text": _body(status="出席")},
+        {"id": "msg-new", "body_text": _body(status="欠席")},
+    ]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    assert len(rows) == 1
+    assert rows[0].message_id == "msg-new"
+    assert rows[0].status == "欠席"
+
+
+def test_build_preview_unmatched_organization_has_no_member(db_session):
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    messages = [{"id": "msg-3", "body_text": _body(org="存在しない会社")}]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    assert rows[0].matched_member is None
+    assert rows[0].existing_status is None

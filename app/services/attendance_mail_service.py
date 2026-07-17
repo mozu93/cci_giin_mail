@@ -1,6 +1,7 @@
 import re
+from dataclasses import dataclass
 from sqlalchemy.orm import Session
-from app.database.models import Member
+from app.database.models import Member, AttendanceRecord
 
 STATUS_MAP = {
     "出席": "出席",
@@ -55,3 +56,53 @@ def match_member(session: Session, org_name_raw: str) -> Member | None:
     if len(matches) == 1:
         return matches[0]
     return None
+
+
+@dataclass
+class AttendanceMailRow:
+    message_id: str
+    org_name_raw: str
+    name_raw: str
+    status: str
+    proxy_title: str
+    proxy_name: str
+    notes: str
+    matched_member: Member | None
+    existing_status: str | None
+
+
+def build_preview(session: Session, meeting_id: int,
+                  messages: list[dict]) -> list[AttendanceMailRow]:
+    """メールを解析・会員突合し、同一会員宛の重複は最新のみ残す。
+
+    messages は受信日時の古い順であること（fetch_messagesの契約）。
+    同じ辞書キー（正規化した事業所名）に対して後から来たものが上書きする
+    ことで、常に最新のメールだけが残る。
+    """
+    by_org: dict[str, AttendanceMailRow] = {}
+    for msg in messages:
+        fields = parse_body(msg["body_text"])
+        member = match_member(session, fields["org_name"])
+        row = AttendanceMailRow(
+            message_id=msg["id"],
+            org_name_raw=fields["org_name"],
+            name_raw=fields["name"],
+            status=STATUS_MAP.get(fields["status_raw"], ""),
+            proxy_title=fields["proxy_title"],
+            proxy_name=fields["proxy_name"],
+            notes=fields["notes"],
+            matched_member=member,
+            existing_status=None,
+        )
+        key = normalize_org_name(fields["org_name"])
+        by_org[key] = row
+
+    rows = list(by_org.values())
+    for row in rows:
+        if row.matched_member is not None:
+            existing = (session.query(AttendanceRecord)
+                       .filter_by(meeting_id=meeting_id,
+                                  member_id=row.matched_member.id)
+                       .first())
+            row.existing_status = existing.status if existing else None
+    return rows
