@@ -55,6 +55,13 @@ def test_build_message_structure():
     assert msg["message"]["subject"] == "テスト"
     assert msg["message"]["body"]["content"] == "本文テスト"
     assert msg["message"]["attachments"] == []
+    assert "from" not in msg["message"]
+
+
+def test_build_message_sets_proxy_from_address():
+    msg = build_message("to@example.com", "件名", "本文", [],
+                        from_address="info@example.com")
+    assert msg["message"]["from"]["emailAddress"]["address"] == "info@example.com"
 
 
 def test_build_message_with_attachment(tmp_path):

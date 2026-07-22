@@ -72,6 +72,20 @@ def test_get_access_token_removes_legacy_plaintext_cache(monkeypatch, tmp_path):
     assert not legacy_file.exists()
 
 
+def test_get_access_token_requests_send_shared_for_proxy_sender(monkeypatch, tmp_path):
+    cache_file = tmp_path / "cache.bin"
+    monkeypatch.setattr(email_service, "_CACHE_FILE", cache_file)
+    monkeypatch.setattr(email_service, "_LEGACY_CACHE_FILE", tmp_path / "legacy.bin")
+    _, _, _, _, _ = _patch_msal(monkeypatch, cache_file)
+    fake_app = email_service.msal.PublicClientApplication()
+
+    email_service.get_access_token({
+        "client_id": "cid", "tenant_id": "tid", "from_address": "info@example.com",
+    })
+
+    assert "https://graph.microsoft.com/Mail.Send.Shared" in fake_app.acquire_token_interactive.call_args.kwargs["scopes"]
+
+
 def test_get_access_token_survives_legacy_cleanup_failure(monkeypatch, tmp_path):
     """旧キャッシュ削除が失敗しても、認証処理自体は成功すること。"""
     cache_file = tmp_path / "cache.bin"

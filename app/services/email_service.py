@@ -11,6 +11,7 @@ _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
 
 _SCOPES = ["https://graph.microsoft.com/Mail.Send",
            "https://graph.microsoft.com/Mail.Read"]
+_SEND_SHARED_SCOPE = "https://graph.microsoft.com/Mail.Send.Shared"
 _CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache_v2.bin"
 _LEGACY_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
 
@@ -24,7 +25,7 @@ def render_body(template: str, context: dict) -> str:
 
 
 def build_message(to_address: str, subject: str, body: str,
-                  attachments: list[str]) -> dict:
+                  attachments: list[str], from_address: str = "") -> dict:
     attachment_list = []
     for path in attachments:
         if not os.path.exists(path):
@@ -36,18 +37,22 @@ def build_message(to_address: str, subject: str, body: str,
             "name":         os.path.basename(path),
             "contentBytes": content,
         })
-    return {
-        "message": {
-            "subject": subject,
-            "body": {
-                "contentType": "Text",
-                "content":     body,
-            },
-            "toRecipients": [
-                {"emailAddress": {"address": to_address}}
-            ],
-            "attachments": attachment_list,
+    message = {
+        "subject": subject,
+        "body": {
+            "contentType": "Text",
+            "content":     body,
         },
+        "toRecipients": [
+            {"emailAddress": {"address": to_address}}
+        ],
+        "attachments": attachment_list,
+    }
+    if from_address:
+        message["from"] = {"emailAddress": {"address": from_address}}
+
+    return {
+        "message": message,
         "saveToSentItems": "true",
     }
 
@@ -115,13 +120,17 @@ def get_access_token(graph_config: dict) -> str:
         token_cache=cache,
     )
 
+    scopes = list(_SCOPES)
+    if graph_config.get("from_address", "").strip():
+        scopes.append(_SEND_SHARED_SCOPE)
+
     result = None
     accounts = app.get_accounts()
     if accounts:
-        result = app.acquire_token_silent(_SCOPES, account=accounts[0])
+        result = app.acquire_token_silent(scopes, account=accounts[0])
 
     if not result:
-        result = app.acquire_token_interactive(scopes=_SCOPES)
+        result = app.acquire_token_interactive(scopes=scopes)
 
     if not result or "access_token" not in result:
         desc = result.get("error_description", str(result)) if result else "不明なエラー"
@@ -138,7 +147,8 @@ def send_mail(graph_config: dict, to_address: str, subject: str,
               body: str, attachments: list[str] | None = None,
               access_token: str | None = None) -> None:
     token = access_token or get_access_token(graph_config)
-    payload = build_message(to_address, subject, body, attachments or [])
+    payload = build_message(to_address, subject, body, attachments or [],
+                            graph_config.get("from_address", "").strip())
     headers = {"Authorization": f"Bearer {token}",
                "Content-Type": "application/json"}
     attempt = 0

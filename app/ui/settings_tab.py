@@ -24,6 +24,7 @@ from app.services.position_service import (
     get_positions, create_position, update_position, delete_position
 )
 from app.database.models import Member
+from app.utils.validators import is_valid_email
 
 
 class SettingsTab(QWidget):
@@ -66,9 +67,12 @@ class _GraphSettingsWidget(QWidget):
         self._tenant_id = QLineEdit()
         self._client_id = QLineEdit()
         self._test_address = QLineEdit()
+        self._from_address = QLineEdit()
+        self._from_address.setPlaceholderText("未設定時はサインインした担当者本人から送信")
         form.addRow("テナントID", self._tenant_id)
         form.addRow("クライアントID", self._client_id)
         form.addRow("テスト送信先", self._test_address)
+        form.addRow("代理差出人アドレス（任意）", self._from_address)
         layout.addWidget(grp)
         btn_row = QHBoxLayout()
         btn_save = QPushButton("設定を保存")
@@ -89,20 +93,30 @@ class _GraphSettingsWidget(QWidget):
         self._tenant_id.setText(cfg.get("tenant_id", ""))
         self._client_id.setText(cfg.get("client_id", ""))
         self._test_address.setText(cfg.get("test_address", ""))
+        self._from_address.setText(cfg.get("from_address", ""))
 
     def _save(self):
+        from_address = self._from_address.text().strip()
+        if from_address and not is_valid_email(from_address):
+            QMessageBox.warning(self, "入力エラー", "代理差出人アドレスの形式が正しくありません。")
+            return False
         config = get_config()
-        config["graph"] = {
+        graph = config.get("graph", {}).copy()
+        graph.update({
             "tenant_id":  self._tenant_id.text().strip(),
             "client_id":  self._client_id.text().strip(),
             "test_address": self._test_address.text().strip(),
-        }
+            "from_address": from_address,
+        })
+        config["graph"] = graph
         save_config(config)
         from app.ui.widgets.inline_status import show_inline_message
         show_inline_message(self._status_label, "設定を保存しました")
+        return True
 
     def _test_connection(self):
-        self._save()
+        if not self._save():
+            return
         try:
             from app.services.email_service import get_access_token
             get_access_token(get_config().get("graph", {}))
