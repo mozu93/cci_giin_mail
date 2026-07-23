@@ -162,12 +162,16 @@ def export_csv(session: Session, meeting_id: int, filepath: str) -> None:
             ])
 
 
-_XLSX_HEADERS = ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"]
+_XLSX_HEADERS = ["通し番号", "会議所役職", "事業所名", "所属役職", "氏名", "事前", "代理"]
+_XLSX_FONT_SIZE = 10
+_XLSX_WIDTH_RATIO = 0.65
+_XLSX_MIN_COL_WIDTH = 4.0
 
 
 def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
-    """会議の出欠一覧をA4印刷向けに整形したExcelファイルに書き出す。
-    行数が多い場合は自動的に複数ページに分かれて印刷される。"""
+    """会議の出欠一覧をA4縦向き印刷向けに整形したExcelファイルに書き出す。
+    行順は会員一覧の並び順（会議所役職順）に従う。行数が多い場合は
+    自動的に複数ページに分かれて印刷される。"""
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
@@ -188,7 +192,7 @@ def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
     header_row = 4
     ws.append(_XLSX_HEADERS)
     header_fill = PatternFill("solid", fgColor="1E40AF")
-    header_font = Font(bold=True, color="FFFFFF")
+    header_font = Font(bold=True, color="FFFFFF", size=_XLSX_FONT_SIZE)
     thin = Side(style="thin", color="CCCCCC")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
     for col in range(1, len(_XLSX_HEADERS) + 1):
@@ -198,28 +202,40 @@ def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
         c.alignment = Alignment(horizontal="center", vertical="center")
         c.border = border
 
-    for d in data:
+    for i, d in enumerate(data, start=1):
         proxy_info = " ".join(p for p in [d["proxy_title"], d["proxy_name"]] if p)
         ws.append([
-            d["member_number"], d["org_name"], d["position"], d["name"],
-            d["status"], d.get("actual_status") or "", proxy_info,
+            i, d["position"], d["org_name"], d["title"], d["name"],
+            d["status"], proxy_info,
         ])
 
+    data_font = Font(size=_XLSX_FONT_SIZE)
     for row in ws.iter_rows(min_row=header_row + 1, max_row=ws.max_row,
                             max_col=len(_XLSX_HEADERS)):
         for cell in row:
             cell.border = border
-            cell.alignment = Alignment(vertical="center")
+            cell.font = data_font
+            cell.alignment = Alignment(vertical="center", shrink_to_fit=True)
+    for row_idx in range(header_row + 1, ws.max_row + 1):
+        ws.cell(row=row_idx, column=1).alignment = Alignment(
+            horizontal="center", vertical="center", shrink_to_fit=True)
 
-    widths = [12, 26, 16, 14, 10, 10, 24]
-    for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
+    # 列幅は各列の最大文字数の65%程度に設定し、はみ出す分はセル書式の
+    # 「縮小して全体を表示」でフォントサイズを自動調整させる。
+    for col in range(1, len(_XLSX_HEADERS) + 1):
+        max_len = max(
+            (len(str(ws.cell(row=r, column=col).value or ""))
+             for r in range(header_row, ws.max_row + 1)),
+            default=0,
+        )
+        width = max(max_len * _XLSX_WIDTH_RATIO, _XLSX_MIN_COL_WIDTH)
+        ws.column_dimensions[get_column_letter(col)].width = round(width, 1)
 
     ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
 
-    # A4印刷設定：横幅は1ページに収め、行数が多い場合は縦方向に複数ページへ分割
+    # A4縦向き印刷設定：横幅は1ページに収め、行数が多い場合は縦方向に複数ページへ分割
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
