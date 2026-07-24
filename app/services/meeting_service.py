@@ -134,8 +134,8 @@ def is_meeting_past(meeting: Meeting) -> bool:
 def get_member_ids_by_status(session: Session, meeting_id: int,
                              statuses: list[str]) -> set[int]:
     """指定した会議・ステータスに該当する会員IDのセットを返す。
-    会議日より前は事前登録（status）、会議日を過ぎたら当日受付結果
-    （actual_status）で判定する。ステータス未登録の会員は「未回答」として扱う。"""
+    「未回答」は事前登録（status）、それ以外（出席・代理・委任・欠席）は
+    当日受付結果（actual_status）で判定する（会議日の前後は問わない）。"""
     meeting = session.get(Meeting, meeting_id)
     if not meeting:
         return set()
@@ -150,16 +150,20 @@ def get_member_ids_by_status(session: Session, meeting_id: int,
         for r in session.query(AttendanceRecord)
         .filter_by(meeting_id=meeting_id).all()
     }
-    if is_meeting_past(meeting):
-        return {
-            m.id for m in members
-            if (records[m.id].actual_status if m.id in records
-                and records[m.id].actual_status else "未回答") in statuses
-        }
-    return {
-        m.id for m in members
-        if (records[m.id].status if m.id in records else "未回答") in statuses
-    }
+    result_ids = set()
+    other_statuses = [s for s in statuses if s != "未回答"]
+    for m in members:
+        r = records.get(m.id)
+        if "未回答" in statuses:
+            pre_status = r.status if r else "未回答"
+            if pre_status == "未回答":
+                result_ids.add(m.id)
+                continue
+        if other_statuses:
+            actual_status = r.actual_status if r and r.actual_status else ""
+            if actual_status in other_statuses:
+                result_ids.add(m.id)
+    return result_ids
 
 
 def export_csv(session: Session, meeting_id: int, filepath: str) -> None:

@@ -572,8 +572,7 @@ class SendTab(QWidget):
         self._recipient.set_checks_by_member_ids(member_ids)
 
     def _on_attend_filter(self):
-        from app.services.meeting_service import get_member_ids_by_status, is_meeting_past
-        from app.database.models import Meeting
+        from app.services.meeting_service import get_member_ids_by_status
 
         meeting_id = self._meeting_combo.currentData()
         if not meeting_id:
@@ -581,16 +580,11 @@ class SendTab(QWidget):
             self._recipient.clear_checks()
             return
 
+        self._attend_source_label.setText(
+            "※ 未回答は「事前登録」、出席・代理・委任・欠席は「当日受付」の結果を使用します")
+
         session = get_session()
         try:
-            meeting = session.get(Meeting, meeting_id)
-            if meeting and is_meeting_past(meeting):
-                self._attend_source_label.setText(
-                    "※ 会議日を過ぎているため「当日受付」の結果を使用します")
-            else:
-                self._attend_source_label.setText(
-                    "※ 会議日前のため「事前登録」の出欠を使用します")
-
             statuses = [s for s, cb in self._status_checks.items() if cb.isChecked()]
             if not statuses:
                 self._recipient.clear_checks()
