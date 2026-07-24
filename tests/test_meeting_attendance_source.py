@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from app.database.models import Member
 from app.services.meeting_service import (
     create_meeting, upsert_attendance, update_actual_status,
@@ -7,7 +7,10 @@ from app.services.meeting_service import (
 
 
 def _add_member(session, member_number, name="テスト太郎"):
-    m = Member(member_number=member_number, organization_name="テスト会社", name=name)
+    # created_atを固定の過去日にし、会議日をまたぐ「入会日フィルタ」の
+    # 影響を受けずにステータス判定ロジックだけを検証できるようにする
+    m = Member(member_number=member_number, organization_name="テスト会社", name=name,
+              created_at=datetime(2000, 1, 1))
     session.add(m)
     session.commit()
     return m
