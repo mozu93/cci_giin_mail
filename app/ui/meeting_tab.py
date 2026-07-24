@@ -11,6 +11,13 @@ from app.ui.meeting_widgets.reception_widget import ReceptionWidget
 from app.ui.meeting_widgets.log_widget import LogWidget
 
 
+class _NoWheelComboBox(QComboBox):
+    """マウスホバー中のスクロールで意図せず選択値が変わらないようにする"""
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+
 class MeetingTab(QWidget):
     def __init__(self, staff_name: str = "", readonly: bool = False):
         super().__init__()
@@ -25,7 +32,7 @@ class MeetingTab(QWidget):
 
         hdr = QHBoxLayout()
         hdr.addWidget(QLabel("会議:"))
-        self._meeting_combo = QComboBox()
+        self._meeting_combo = _NoWheelComboBox()
         self._meeting_combo.currentIndexChanged.connect(self._on_meeting_select)
         hdr.addWidget(self._meeting_combo, 1)
         if not self._readonly:
@@ -67,12 +74,25 @@ class MeetingTab(QWidget):
             self._meeting_combo.setCurrentIndex(1)
         else:
             self._current_meeting_id = None
+            self._preentry.load(None)
+            self._reception.load(None)
 
     def _on_meeting_select(self):
         self._current_meeting_id = self._meeting_combo.currentData()
         self._preentry.load(self._current_meeting_id)
         if self._inner.currentIndex() == 1:
             self._reception.load(self._current_meeting_id)
+
+    def refresh(self):
+        """名簿管理タブ等で会員情報が更新された後にこのタブへ戻った際、
+        選択中の会議の出欠一覧に最新の会員情報（事業所名・役職・新規会員など）
+        を反映させる。"""
+        self._preentry.load(self._current_meeting_id)
+        idx = self._inner.currentIndex()
+        if idx == 1:
+            self._reception.load(self._current_meeting_id)
+        elif idx == 2:
+            self._log.load(self._current_meeting_id)
 
     def _on_inner_tab_change(self, idx: int):
         mid = self._current_meeting_id

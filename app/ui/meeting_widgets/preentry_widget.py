@@ -19,6 +19,13 @@ _PRE_HEADERS  = ["会議所役職名", "事業所名", "事業所名フリガナ
                  "ステータス", "代理役職名", "代理者氏名"]
 
 
+class _NoWheelComboBox(QComboBox):
+    """マウスホバー中のスクロールで意図せず選択値が変わらないようにする"""
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+
 class PreentryWidget(QWidget):
     def __init__(self, readonly: bool = False):
         super().__init__()
@@ -185,7 +192,7 @@ class PreentryWidget(QWidget):
                     i, 7, QTableWidgetItem(d.get("proxy_name", "")))
             else:
                 mid = d["member_id"]
-                combo = QComboBox()
+                combo = _NoWheelComboBox()
                 combo.addItems(STATUS_OPTIONS)
                 combo.setCurrentText(d["status"])
                 combo.currentTextChanged.connect(
