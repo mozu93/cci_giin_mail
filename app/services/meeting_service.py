@@ -163,7 +163,8 @@ def export_csv(session: Session, meeting_id: int, filepath: str) -> None:
 
 
 _XLSX_HEADERS = ["No.", "役職", "事業所名", "所属役職", "氏名", "事前", "代理"]
-_XLSX_FONT_SIZE = 10
+_XLSX_FONT_SIZE = 11
+_XLSX_CENTER_COLUMNS = {1, 5}  # No., 氏名
 # 列幅（ピクセル指定）。Excelの列幅（文字単位）へは (px - 5) / 7 で換算する
 # （既定フォントCalibri 11・既定列幅8.43文字=64pxを基準とした変換式）。
 _XLSX_COLUMN_WIDTHS_PX = [30, 45, 235, 129, 93, 45, 141]
@@ -222,8 +223,9 @@ def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
             cell.font = data_font
             cell.alignment = Alignment(vertical="center", shrink_to_fit=True)
     for row_idx in range(header_row + 1, ws.max_row + 1):
-        ws.cell(row=row_idx, column=1).alignment = Alignment(
-            horizontal="center", vertical="center", shrink_to_fit=True)
+        for col in _XLSX_CENTER_COLUMNS:
+            ws.cell(row=row_idx, column=col).alignment = Alignment(
+                horizontal="center", vertical="center", shrink_to_fit=True)
 
     # 列幅は指定ピクセル値で固定し、はみ出す分はセル書式の
     # 「縮小して全体を表示」でフォントサイズを自動調整させる。
