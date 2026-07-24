@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from app.database.connection import get_session
-from app.services.meeting_service import STATUS_OPTIONS, upsert_attendance, get_attendance_data, export_csv
+from app.services.meeting_service import STATUS_OPTIONS, upsert_attendance, get_attendance_data, export_csv, export_xlsx
 from app.services.settings_service import get_font_size, set_font_size
 from app.utils import to_katakana
 from app.ui.meeting_widgets import count_label
@@ -78,6 +78,8 @@ class PreentryWidget(QWidget):
         style_search_input(self._pre_search)
         btn_csv = QPushButton("CSV出力")
         btn_csv.clicked.connect(self._export_csv)
+        btn_xlsx = QPushButton("Excel出力")
+        btn_xlsx.clicked.connect(self._export_xlsx)
         btn_fd = QPushButton("A-")
         btn_fd.setFixedWidth(36)
         btn_fd.setToolTip("文字を小さくする")
@@ -89,6 +91,7 @@ class PreentryWidget(QWidget):
         btn_row.addWidget(self._pre_search, 2)
         btn_row.addStretch()
         btn_row.addWidget(btn_csv)
+        btn_row.addWidget(btn_xlsx)
         btn_row.addWidget(btn_fd)
         btn_row.addWidget(btn_fu)
         layout.addLayout(btn_row)
@@ -369,3 +372,20 @@ class PreentryWidget(QWidget):
         finally:
             session.close()
         QMessageBox.information(self, "完了", f"CSVを保存しました。\n{path}")
+
+    def _export_xlsx(self):
+        if not self._meeting_id:
+            QMessageBox.warning(self, "エラー", "会議を選択してください。")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Excel保存", "", "Excel ファイル (*.xlsx)")
+        if not path:
+            return
+        if not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+        session = get_session()
+        try:
+            export_xlsx(session, self._meeting_id, path)
+        finally:
+            session.close()
+        QMessageBox.information(self, "完了", f"Excelを保存しました。\n{path}")
