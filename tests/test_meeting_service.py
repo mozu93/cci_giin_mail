@@ -60,6 +60,16 @@ def test_export_xlsx_writes_a4_portrait_page_setup(db_session, tmp_path):
     assert ws.cell(row=data_row, column=1).font.size == 10
     assert ws.cell(row=data_row, column=1).alignment.shrink_to_fit is True
 
+    # 列幅 = その列の最大文字数(ヘッダー・データいずれか長い方) x 66%
+    expected_max_len = [
+        len("通し番号"),   # "通し番号" vs "1"
+        len("会議所役職"), # "会議所役職" vs "議員"
+        len("事業所名"),   # "事業所名" vs "□□工業"（同じ4文字）
+        len("代表取締役"), # "所属役職" vs "代表取締役"
+        len("佐藤次郎"),   # "氏名" vs "佐藤次郎"
+        len("事前"),       # "事前" vs "出席"（同じ2文字）
+        len("代理"),       # "代理" vs ""（代理者なし）
+    ]
     for c in range(1, 8):
         w = ws.column_dimensions[ws.cell(row=header_row, column=c).column_letter].width
-        assert w >= 4.0
+        assert w == round(expected_max_len[c - 1] * 0.66, 1)

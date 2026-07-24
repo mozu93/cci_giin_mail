@@ -164,8 +164,7 @@ def export_csv(session: Session, meeting_id: int, filepath: str) -> None:
 
 _XLSX_HEADERS = ["通し番号", "会議所役職", "事業所名", "所属役職", "氏名", "事前", "代理"]
 _XLSX_FONT_SIZE = 10
-_XLSX_WIDTH_RATIO = 0.65
-_XLSX_MIN_COL_WIDTH = 4.0
+_XLSX_WIDTH_RATIO = 0.66
 
 
 def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
@@ -220,7 +219,7 @@ def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
         ws.cell(row=row_idx, column=1).alignment = Alignment(
             horizontal="center", vertical="center", shrink_to_fit=True)
 
-    # 列幅は各列の最大文字数の65%程度に設定し、はみ出す分はセル書式の
+    # 列幅は各列の最大文字数の66%に設定し、はみ出す分はセル書式の
     # 「縮小して全体を表示」でフォントサイズを自動調整させる。
     for col in range(1, len(_XLSX_HEADERS) + 1):
         max_len = max(
@@ -228,7 +227,7 @@ def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
              for r in range(header_row, ws.max_row + 1)),
             default=0,
         )
-        width = max(max_len * _XLSX_WIDTH_RATIO, _XLSX_MIN_COL_WIDTH)
+        width = max_len * _XLSX_WIDTH_RATIO
         ws.column_dimensions[get_column_letter(col)].width = round(width, 1)
 
     ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
