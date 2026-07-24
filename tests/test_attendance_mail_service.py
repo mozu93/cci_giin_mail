@@ -71,6 +71,20 @@ def test_normalize_org_name_strips_stray_question_mark_from_lost_characters():
         "三菱ケミカル（株）東海事業所")
 
 
+def test_normalize_org_name_strips_yugen_gaisha_suffix_variants():
+    assert normalize_org_name("有限会社トヨタ不動産") == normalize_org_name(
+        "（有）トヨタ不動産")
+    assert normalize_org_name("㈲トヨタ不動産") == normalize_org_name(
+        "(有)トヨタ不動産")
+
+
+def test_normalize_org_name_unifies_kyuujitai_kanji_variant():
+    # 「鐵」は「鉄」の旧字体。社名の正式表記が旧字体でも、メール側が
+    # 新字体で書かれるケースがあるため統一する。
+    assert normalize_org_name("三重機械鐵工株式会社") == normalize_org_name(
+        "三重機械鉄工（株）")
+
+
 from app.services.attendance_mail_service import match_member
 from app.services.member_service import create_member
 
@@ -85,6 +99,20 @@ def test_match_member_unique_match(db_session):
 def test_match_member_normalizes_company_suffix(db_session):
     create_member(db_session, "A-001", "スーパーサンシ株式会社", "高倉護")
     m = match_member(db_session, "スーパーサンシ（株）")
+    assert m is not None
+    assert m.member_number == "A-001"
+
+
+def test_match_member_matches_yugen_gaisha_abbreviation(db_session):
+    create_member(db_session, "A-001", "（有）トヨタ不動産", "豊田太郎")
+    m = match_member(db_session, "有限会社トヨタ不動産")
+    assert m is not None
+    assert m.member_number == "A-001"
+
+
+def test_match_member_matches_kyuujitai_kanji_variant(db_session):
+    create_member(db_session, "A-001", "三重機械鐵工（株）", "三重次郎")
+    m = match_member(db_session, "三重機械鉄工株式会社")
     assert m is not None
     assert m.member_number == "A-001"
 
@@ -232,6 +260,24 @@ def test_build_preview_unmatched_organization_has_no_member(db_session):
 
     assert rows[0].matched_member is None
     assert rows[0].existing_status is None
+
+
+def test_build_preview_keeps_both_when_org_name_extraction_fails_for_multiple_mails(
+        db_session):
+    """事業所名を抽出できないメールが複数あっても、互いに上書きして
+    消えないこと（正規化キーが空文字同士で衝突し、片方が一覧から
+    見えなくなって取りこぼされるのを防ぐ回帰テスト）。"""
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    messages = [
+        {"id": "msg-broken-1", "body_text": "本文の形式が想定と異なるメール1",
+         "received_at": datetime(2026, 7, 5, 9, 0, 0)},
+        {"id": "msg-broken-2", "body_text": "本文の形式が想定と異なるメール2",
+         "received_at": datetime(2026, 7, 10, 9, 0, 0)},
+    ]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    assert len(rows) == 2
+    assert {r.message_id for r in rows} == {"msg-broken-1", "msg-broken-2"}
 
 
 import pytest
@@ -398,7 +444,13 @@ def test_get_since_datetime_defaults_to_first_of_meeting_month_when_no_prior_imp
     assert since == datetime(2026, 7, 1)
 
 
-def test_get_since_datetime_returns_latest_processed_received_at(db_session):
+def test_get_since_datetime_ignores_already_processed_mail(db_session):
+    """反映済みメールがあっても検索開始日時は開催月の1日のまま進めない。
+
+    反映されなかった（会員未選択・突合不可の）メールを、反映済みメールより
+    受信日時が前だからという理由で次回検索から取りこぼさないようにするため。
+    反映済みメールの重複表示防止はexclude_ids側の責務。
+    """
     from app.services.member_service import create_member
     member = create_member(db_session, "A-001", "○○商事", "山田太郎")
     meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
@@ -411,7 +463,7 @@ def test_get_since_datetime_returns_latest_processed_received_at(db_session):
     db_session.commit()
 
     since = get_since_datetime(db_session, meeting.id)
-    assert since == datetime(2026, 7, 10, 12, 0, 0)
+    assert since == datetime(2026, 7, 1)
 
 
 def test_commit_rows_saves_alias_so_next_import_auto_matches(db_session):

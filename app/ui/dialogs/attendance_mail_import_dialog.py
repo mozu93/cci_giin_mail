@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
     QComboBox, QMessageBox,
 )
+from PyQt6.QtGui import QColor
 from app.database.connection import get_session
 from app.services.member_service import get_members
 from app.services.attendance_mail_service import (
@@ -127,7 +128,11 @@ class AttendanceMailImportDialog(QDialog):
         for row in self._rows:
             r = self._table.rowCount()
             self._table.insertRow(r)
-            self._table.setItem(r, self._COL_ORG, QTableWidgetItem(row.org_name_raw))
+            org_text = row.org_name_raw or "（事業所名を読み取れませんでした）"
+            org_item = QTableWidgetItem(org_text)
+            if not row.org_name_raw:
+                org_item.setBackground(QColor("#FEE2E2"))
+            self._table.setItem(r, self._COL_ORG, org_item)
             self._table.setItem(r, self._COL_NAME, QTableWidgetItem(row.name_raw))
             self._table.setItem(r, self._COL_STATUS, QTableWidgetItem(row.status))
             proxy_text = (f"{row.proxy_title} {row.proxy_name}".strip()

@@ -2,7 +2,6 @@ import re
 import requests
 from dataclasses import dataclass
 from datetime import datetime
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.database.models import (
     Member, AttendanceRecord, ProcessedAttendanceMail, Meeting,
@@ -19,7 +18,16 @@ STATUS_MAP = {
     "欠席": "欠席",
 }
 
-_ORG_SUFFIXES = ["株式会社", "有限会社", "合同会社", "㈱", "（株）", "(株)"]
+_ORG_SUFFIXES = ["株式会社", "有限会社", "合同会社",
+                "㈱", "（株）", "(株)",
+                "㈲", "（有）", "(有)"]
+
+# 会員データとメール本文とで表記が揺れやすい旧字体・異体字の正規化
+# （例: 「三重機械鐵工」を会員データでは旧字体「鐵」、メールでは新字体「鉄」で
+# 書く場合があり、そのままでは突合できないため統一する）
+_CHAR_VARIANTS = {
+    "鐵": "鉄",
+}
 
 _FIELD_LABELS = {
     "status_raw":   "出欠",
@@ -58,6 +66,8 @@ def normalize_org_name(name: str) -> str:
     for suf in _ORG_SUFFIXES:
         result = result.replace(suf, "")
     result = result.replace("?", "")
+    for variant, standard in _CHAR_VARIANTS.items():
+        result = result.replace(variant, standard)
     result = re.sub(r"\s+", "", result)
     return result
 
@@ -138,16 +148,14 @@ def update_alias_member(session: Session, alias_id: int, member_id: int) -> None
 
 
 def get_since_datetime(session: Session, meeting_id: int) -> datetime:
-    """指定した会議についてこれまで取り込んだメールの最新受信日時を返す。
+    """指定した会議の出欠連絡メールを検索する開始日時（会議開催月の1日）を返す。
 
-    まだ1件も取り込んでいない場合は、会議開催月の1日を返す
-    （常議員会の出欠連絡は開催月内にしか来ない運用のため）。
+    突合できなかった・会員未選択で反映しなかったメールを次回以降の検索で
+    取りこぼさないよう、常に開催月の1日から検索する（反映済みメールの
+    重複表示はexclude_ids側で防止するため、ここでは受信日時を進めない）。
+    常議員会の出欠連絡は開催月内にしか来ない運用のため、検索範囲を
+    月初めに固定しても性能上の問題にはならない。
     """
-    latest = (session.query(func.max(ProcessedAttendanceMail.received_at))
-             .filter_by(meeting_id=meeting_id)
-             .scalar())
-    if latest is not None:
-        return latest
     meeting = session.get(Meeting, meeting_id)
     return datetime(meeting.date.year, meeting.date.month, 1)
 
@@ -172,7 +180,11 @@ def build_preview(session: Session, meeting_id: int,
 
     messages は受信日時の古い順であること（fetch_messagesの契約）。
     同じ辞書キー（正規化した事業所名）に対して後から来たものが上書きする
-    ことで、常に最新のメールだけが残る。
+    ことで、常に最新のメールだけが残る。事業所名を抽出できなかった
+    （本文の形式が想定と異なる等の）メールは、正規化キーが空文字になり
+    複数件あると互いに上書きして消えてしまうため、メッセージIDを使った
+    一意なキーにして必ず一覧に残るようにする（誰にも見えずに取りこぼす
+    ことがないようにするため）。
     """
     by_org: dict[str, AttendanceMailRow] = {}
     for msg in messages:
@@ -190,7 +202,7 @@ def build_preview(session: Session, meeting_id: int,
             existing_status=None,
             received_at=msg["received_at"],
         )
-        key = normalize_org_name(fields["org_name"])
+        key = normalize_org_name(fields["org_name"]) or f"__unresolved__{msg['id']}"
         by_org[key] = row
 
     rows = list(by_org.values())
