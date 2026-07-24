@@ -169,6 +169,10 @@ class Meeting(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     records = relationship("AttendanceRecord", back_populates="meeting",
                            cascade="all, delete-orphan")
+    logs = relationship("ReceptionLog", back_populates="meeting",
+                        cascade="all, delete-orphan")
+    processed_mails = relationship("ProcessedAttendanceMail",
+                                   cascade="all, delete-orphan")
 
 
 class ReceptionLog(Base):
@@ -180,7 +184,7 @@ class ReceptionLog(Base):
     old_status  = Column(String,  nullable=False, default="")
     new_status  = Column(String,  nullable=False)
     changed_at  = Column(DateTime, nullable=False, default=datetime.now)
-    meeting = relationship("Meeting")
+    meeting = relationship("Meeting", back_populates="logs")
     member  = relationship("Member")
 
 
