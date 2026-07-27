@@ -117,7 +117,14 @@ class AttendanceMailImportDialog(QDialog):
         finally:
             session.close()
 
-        self._status_label.setText(f"{len(self._rows)} 件のメールを読み込みました。")
+        total = len(self._rows)
+        matched = sum(1 for r in self._rows if r.matched_member is not None)
+        unresolved = sum(1 for r in self._rows if not r.org_name_raw)
+        unmatched = total - matched
+        text = f"{total} 件のメールを読み込みました（自動マッチング {matched} 件 / 要確認 {unmatched} 件）。"
+        if unresolved:
+            text += f" うち {unresolved} 件は事業所名を読み取れませんでした。"
+        self._status_label.setText(text)
 
     def _open_alias_dialog(self):
         dlg = AttendanceMailAliasDialog(parent=self)
@@ -171,7 +178,16 @@ class AttendanceMailImportDialog(QDialog):
         finally:
             session.close()
 
-        QMessageBox.information(
-            self, "取り込み完了",
-            f"反映: {result['applied']}件 / 未選択のためスキップ: {result['skipped']}件")
+        lines = [f"反映: {result['applied']} 件 / 未選択のためスキップ: {result['skipped']} 件"]
+        if result["duplicates"]:
+            distinct_count = result["applied"] - sum(
+                d["count"] - 1 for d in result["duplicates"])
+            lines.append("")
+            lines.append(
+                f"※実際の会員数は {distinct_count} 件です。"
+                "以下の会員は表記違いの複数メールが同一会員に反映されました：")
+            for d in result["duplicates"]:
+                names = "」「".join(d["org_names_raw"])
+                lines.append(f"・{d['organization_name']}（{d['count']} 件）：「{names}」")
+        QMessageBox.information(self, "取り込み完了", "\n".join(lines))
         self.accept()

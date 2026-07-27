@@ -209,8 +209,11 @@ class ProcessedAttendanceMail(Base):
     id = Column(Integer, primary_key=True)
     message_id = Column(String, unique=True, nullable=False)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=True)
     received_at = Column(DateTime, nullable=False)
     processed_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    member = relationship("Member")
 
 
 class AttendanceMailAlias(Base):

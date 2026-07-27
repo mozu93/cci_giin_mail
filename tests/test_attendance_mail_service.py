@@ -414,13 +414,69 @@ def test_commit_rows_applies_selected_rows_and_records_message_id(db_session):
     result = commit_rows(db_session, meeting.id, rows,
                          selected_member_by_index={0: member.id})
 
-    assert result == {"applied": 1, "skipped": 0}
+    assert result["applied"] == 1
+    assert result["skipped"] == 0
     record = (db_session.query(AttendanceRecord)
              .filter_by(meeting_id=meeting.id, member_id=member.id).first())
     assert record.status == "出席"
     processed = db_session.query(ProcessedAttendanceMail).all()
     assert len(processed) == 1
     assert processed[0].message_id == "msg-1"
+    assert processed[0].member_id == member.id
+
+
+def test_commit_rows_records_member_id_for_duplicate_org_name_variants(db_session):
+    """同じ会社が表記違いで複数回メールを送り、それぞれ別行として反映された
+    場合でも、ProcessedAttendanceMailに会員IDが記録され、後から「どの会員に
+    複数回反映されたか」をログから追跡できること。"""
+    from app.services.member_service import create_member
+    from app.services.attendance_mail_service import upsert_alias
+    member = create_member(db_session, "A-001", "中部電力パワーグリッド株式会社", "鈴木一郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    upsert_alias(db_session, "中部電力パワーグリッド四日市支社", member.id)
+
+    messages = [
+        {"id": "msg-1", "body_text": _body(org="中部電力パワーグリッド株式会社", status="出席"),
+         "received_at": datetime(2026, 7, 10, 9, 0, 0)},
+        {"id": "msg-2", "body_text": _body(
+            org="中部電力パワーグリッド四日市支社", status="出席"),
+         "received_at": datetime(2026, 7, 10, 10, 0, 0)},
+    ]
+    rows = build_preview(db_session, meeting.id, messages)
+    assert len(rows) == 2  # 表記違いのため別行として扱われる
+
+    result = commit_rows(
+        db_session, meeting.id, rows,
+        selected_member_by_index={0: member.id, 1: member.id})
+
+    assert result["applied"] == 2
+    assert result["skipped"] == 0
+    processed = db_session.query(ProcessedAttendanceMail).order_by(
+        ProcessedAttendanceMail.message_id).all()
+    assert len(processed) == 2
+    assert all(p.member_id == member.id for p in processed)
+
+    assert len(result["duplicates"]) == 1
+    dup = result["duplicates"][0]
+    assert dup["member_id"] == member.id
+    assert dup["organization_name"] == "中部電力パワーグリッド株式会社"
+    assert dup["count"] == 2
+    assert set(dup["org_names_raw"]) == {
+        "中部電力パワーグリッド株式会社", "中部電力パワーグリッド四日市支社"}
+
+
+def test_commit_rows_reports_no_duplicates_when_all_members_unique(db_session):
+    from app.services.member_service import create_member
+    member = create_member(db_session, "A-001", "○○商事", "山田太郎")
+    meeting = create_meeting(db_session, "常議員会", date(2026, 7, 20))
+    messages = [{"id": "msg-1", "body_text": _body(status="出席"),
+                 "received_at": datetime(2026, 7, 10, 9, 0, 0)}]
+    rows = build_preview(db_session, meeting.id, messages)
+
+    result = commit_rows(db_session, meeting.id, rows,
+                         selected_member_by_index={0: member.id})
+
+    assert result["duplicates"] == []
 
 
 def test_commit_rows_skips_rows_without_selected_member(db_session):
@@ -431,7 +487,8 @@ def test_commit_rows_skips_rows_without_selected_member(db_session):
 
     result = commit_rows(db_session, meeting.id, rows, selected_member_by_index={})
 
-    assert result == {"applied": 0, "skipped": 1}
+    assert result["applied"] == 0
+    assert result["skipped"] == 1
     assert db_session.query(ProcessedAttendanceMail).count() == 0
 
 
@@ -546,5 +603,6 @@ def test_commit_rows_skips_rows_with_unrecognized_status(db_session):
 
     result = commit_rows(db_session, meeting.id, [row], {0: member.id})
 
-    assert result == {"applied": 0, "skipped": 1}
+    assert result["applied"] == 0
+    assert result["skipped"] == 1
     assert db_session.query(ProcessedAttendanceMail).count() == 0

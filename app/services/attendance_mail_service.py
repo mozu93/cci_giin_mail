@@ -317,8 +317,13 @@ def commit_rows(session: Session, meeting_id: int, rows: list[AttendanceMailRow]
     対象メールを処理済みとして記録する。出欠区分が認識できなかった行
     （STATUS_MAPに無い値、status==""）は、会員が選択されていてもスキップする
     （空文字のステータスを業務データに書き込まないため）。
+
+    読み込んだメール件数と反映件数（実会員数）が食い違う原因を追跡できる
+    よう、同一会員に複数件のメールが反映された場合はdictの"duplicates"に
+    その内訳（会員名・元の事業所名表記・件数）を含めて返す。
     """
     applied = skipped = 0
+    org_names_by_member: dict[int, list[str]] = {}
     for i, row in enumerate(rows):
         member_id = selected_member_by_index.get(i)
         if member_id is None or not row.status:
@@ -330,8 +335,27 @@ def commit_rows(session: Session, meeting_id: int, rows: list[AttendanceMailRow]
             notes=row.notes)
         session.add(ProcessedAttendanceMail(
             message_id=row.message_id, meeting_id=meeting_id,
-            received_at=row.received_at))
+            member_id=member_id, received_at=row.received_at))
         upsert_alias(session, row.org_name_raw, member_id)
+        org_names_by_member.setdefault(member_id, []).append(row.org_name_raw)
         applied += 1
     session.commit()
-    return {"applied": applied, "skipped": skipped}
+
+    duplicates = []
+    dup_member_ids = [mid for mid, names in org_names_by_member.items() if len(names) > 1]
+    if dup_member_ids:
+        members_by_id = {
+            m.id: m for m in
+            session.query(Member).filter(Member.id.in_(dup_member_ids)).all()
+        }
+        for member_id in dup_member_ids:
+            org_names = org_names_by_member[member_id]
+            member = members_by_id.get(member_id)
+            duplicates.append({
+                "member_id": member_id,
+                "organization_name": member.organization_name if member else "",
+                "org_names_raw": org_names,
+                "count": len(org_names),
+            })
+
+    return {"applied": applied, "skipped": skipped, "duplicates": duplicates}

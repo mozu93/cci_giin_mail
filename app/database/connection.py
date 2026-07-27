@@ -97,6 +97,16 @@ def _migrate_sqlite(engine):
             ))
             conn.commit()
 
+        processed_mail_cols = {
+            row[1] for row in
+            conn.execute(text("PRAGMA table_info(processed_attendance_mails)"))
+        }
+        if "member_id" not in processed_mail_cols:
+            conn.execute(text(
+                "ALTER TABLE processed_attendance_mails ADD COLUMN member_id INTEGER"
+            ))
+            conn.commit()
+
 
 def _migrate_postgresql(engine):
     from sqlalchemy import inspect, text
@@ -122,6 +132,12 @@ def _migrate_postgresql(engine):
         attendance_cols = {col["name"] for col in insp.get_columns("attendance_records")}
         if "notes" not in attendance_cols:
             conn.execute(text("ALTER TABLE attendance_records ADD COLUMN notes TEXT DEFAULT ''"))
+
+        processed_mail_cols = {
+            col["name"] for col in insp.get_columns("processed_attendance_mails")}
+        if "member_id" not in processed_mail_cols:
+            conn.execute(text(
+                "ALTER TABLE processed_attendance_mails ADD COLUMN member_id INTEGER"))
 
 
 def get_engine(db_path: str | None = None):
