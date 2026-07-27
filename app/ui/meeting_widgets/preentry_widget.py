@@ -165,6 +165,9 @@ class PreentryWidget(QWidget):
     def _load_preentry(self):
         self._pre_table.setRowCount(0)
         if not self._meeting_id:
+            self._preentry_data = []
+            self._sort_keys.clear()
+            self._update_preentry_summary()
             return
         session = get_session()
         try:

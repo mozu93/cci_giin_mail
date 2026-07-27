@@ -167,6 +167,10 @@ class ReceptionWidget(QWidget):
 
     def _load_reception(self):
         if not self._meeting_id:
+            self._rec_data = []
+            self._update_rec_summary(
+                {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未受付": 0, "合計": 0})
+            self._rec_table.setRowCount(0)
             return
         session = get_session()
         try:
