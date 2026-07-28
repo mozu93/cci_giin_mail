@@ -52,6 +52,12 @@ class MainWindow(QMainWindow):
                 lambda: self._open_manual("admin_manual.html"))
             help_menu.addAction(act_admin_manual)
 
+        help_menu.addSeparator()
+        act_check_update = QAction("更新を確認", self)
+        act_check_update.triggered.connect(
+            lambda: self._banner.check_now(manual=True))
+        help_menu.addAction(act_check_update)
+
     def _open_manual(self, filename: str):
         import os
         import sys

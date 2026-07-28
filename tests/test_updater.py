@@ -1,6 +1,8 @@
 import pytest
 
-from app.utils.updater import _is_allowed_download_url, _parse_sha256
+from app.utils.updater import (
+    _is_allowed_download_url, _parse_sha256, check_latest_version_detailed,
+)
 
 
 def test_update_download_only_allows_expected_github_hosts():
@@ -20,3 +22,17 @@ def test_parse_sha256_accepts_standard_checksum_line():
 def test_parse_sha256_rejects_invalid_value():
     with pytest.raises(ValueError):
         _parse_sha256("not-a-checksum")
+
+
+def test_detailed_update_check_reports_network_error(monkeypatch):
+    from app.utils import updater
+
+    def fail_open(*args, **kwargs):
+        raise updater.urllib.error.URLError("blocked")
+
+    monkeypatch.setattr(updater.urllib.request, "urlopen", fail_open)
+
+    result, error = check_latest_version_detailed()
+
+    assert result is None
+    assert "接続できません" in error

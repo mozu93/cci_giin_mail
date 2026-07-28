@@ -4,25 +4,33 @@
 状態: hidden → 「ダウンロード」ボタン → プログレスバー → 「今すぐ更新」ボタン
 """
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton, QProgressBar,
+    QWidget, QHBoxLayout, QLabel, QPushButton, QProgressBar, QMessageBox,
 )
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, QTimer, pyqtSignal
 
 
 class _VersionCheckThread(QThread):
     found = pyqtSignal(str, str, str)   # (tag_name, download_url, sha256)
+    up_to_date = pyqtSignal()
+    failed = pyqtSignal(str)
 
     def run(self):
         try:
-            from app.utils.updater import check_latest_version, is_newer_version
+            from app.utils.updater import (
+                check_latest_version_detailed, is_newer_version,
+            )
             from app.version import __version__
-            result = check_latest_version()
-            if result and is_newer_version(__version__, result["tag_name"]):
+            result, error = check_latest_version_detailed()
+            if error:
+                self.failed.emit(error)
+            elif result and is_newer_version(__version__, result["tag_name"]):
                 self.found.emit(
                     result["tag_name"], result["download_url"],
                     result["expected_sha256"])
+            else:
+                self.up_to_date.emit()
         except Exception:
-            return
+            self.failed.emit("更新情報の確認中にエラーが発生しました。")
 
 
 class _DownloadThread(QThread):
@@ -54,9 +62,14 @@ class UpdateBanner(QWidget):
         self._download_url = ""
         self._expected_sha256 = ""
         self._tmp_exe_path = ""
+        self._manual_check = False
         self._init_ui()
         self.setVisible(False)
-        self._start_check()
+        self._retry_timer = QTimer(self)
+        self._retry_timer.setInterval(30 * 60 * 1000)
+        self._retry_timer.timeout.connect(self.check_now)
+        self._retry_timer.start()
+        self.check_now()
 
     def _init_ui(self):
         self.setStyleSheet(
@@ -98,9 +111,17 @@ class UpdateBanner(QWidget):
         layout.addWidget(self._progress)
         layout.addWidget(self._btn_install)
 
-    def _start_check(self):
+    def check_now(self, manual: bool = False):
+        if hasattr(self, "_check_thread") and self._check_thread.isRunning():
+            if manual:
+                QMessageBox.information(
+                    self, "更新確認", "現在、更新情報を確認しています。")
+            return
+        self._manual_check = manual
         self._check_thread = _VersionCheckThread(self)
         self._check_thread.found.connect(self._on_update_found)
+        self._check_thread.up_to_date.connect(self._on_up_to_date)
+        self._check_thread.failed.connect(self._on_check_failed)
         self._check_thread.start()
 
     def _on_update_found(self, tag: str, url: str, expected_sha256: str):
@@ -108,6 +129,22 @@ class UpdateBanner(QWidget):
         self._expected_sha256 = expected_sha256
         self._lbl.setText(f"新しいバージョン {tag} が利用可能です")
         self.setVisible(True)
+
+    def _on_up_to_date(self):
+        if self._manual_check:
+            from app.version import __version__
+            QMessageBox.information(
+                self, "更新確認", f"現在の v{__version__} が最新版です。")
+        self._manual_check = False
+
+    def _on_check_failed(self, message: str):
+        if self._manual_check:
+            QMessageBox.warning(
+                self, "更新確認に失敗しました",
+                message + "\n\n"
+                "接続先: api.github.com / github.com / "
+                "objects.githubusercontent.com")
+        self._manual_check = False
 
     def _start_download(self):
         self._btn_dl.setVisible(False)

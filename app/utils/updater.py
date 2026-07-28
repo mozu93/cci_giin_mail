@@ -36,10 +36,11 @@ def is_newer_version(current: str, latest: str) -> bool:
     return Version(latest) > Version(current)
 
 
-def check_latest_version() -> Optional[dict]:
+def check_latest_version_detailed() -> tuple[Optional[dict], str]:
     """
     GitHub API で最新リリースを取得する。
-    戻り値: {"tag_name": "v1.0.1", "download_url": "https://..."} または None（失敗時）
+    戻り値: (リリース情報, エラーメッセージ)。
+    成功時はエラーメッセージが空文字、失敗時はリリース情報が None。
     """
     try:
         req = urllib.request.Request(
@@ -52,7 +53,7 @@ def check_latest_version() -> Optional[dict]:
         tag = data.get("tag_name", "")
         assets = data.get("assets", [])
         if not tag or not assets:
-            return None
+            return None, "公開済みのリリース情報を取得できませんでした。"
         installer = next(
             (asset for asset in assets
              if asset.get("name", "").lower().startswith("ccimail_setup_")
@@ -70,21 +71,36 @@ def check_latest_version() -> Optional[dict]:
         if (not download_url or not checksum_url
                 or not _is_allowed_download_url(download_url)
                 or not _is_allowed_download_url(checksum_url)):
-            return None
+            return None, (
+                "更新ファイルまたは安全確認用ファイルが見つかりませんでした。")
         checksum_req = urllib.request.Request(
             checksum_url, headers={"User-Agent": "cci-mail-updater"})
         with urllib.request.urlopen(checksum_req, timeout=_TIMEOUT) as response:
             if not _is_allowed_download_url(response.geturl()):
-                return None
+                return None, "更新ファイルの配布先を安全に確認できませんでした。"
             expected_sha256 = _parse_sha256(
                 response.read(512).decode("ascii", errors="strict"))
         return {
             "tag_name": tag,
             "download_url": download_url,
             "expected_sha256": expected_sha256,
-        }
+        }, ""
+    except urllib.error.HTTPError as exc:
+        return None, f"更新サーバーから応答エラーが返されました（HTTP {exc.code}）。"
+    except urllib.error.URLError:
+        return None, (
+            "更新サーバーへ接続できませんでした。"
+            "インターネット接続または社内ネットワークの制限を確認してください。")
+    except TimeoutError:
+        return None, "更新サーバーへの接続がタイムアウトしました。"
     except Exception:
-        return None
+        return None, "更新情報の確認中にエラーが発生しました。"
+
+
+def check_latest_version() -> Optional[dict]:
+    """従来互換の更新確認。失敗時は None を返す。"""
+    result, _error = check_latest_version_detailed()
+    return result
 
 
 def download_new_exe(url: str, expected_sha256: str,
