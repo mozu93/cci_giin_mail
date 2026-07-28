@@ -91,6 +91,7 @@ class _GraphSettingsWidget(QWidget):
         layout.addWidget(self._status_label)
         layout.addStretch()
         self._load()
+        self._test_mode.toggled.connect(self._save_test_mode_immediately)
 
     def _load(self):
         cfg = get_config().get("graph", {})
@@ -144,6 +145,29 @@ class _GraphSettingsWidget(QWidget):
         from app.ui.widgets.inline_status import show_inline_message
         show_inline_message(self._status_label, "設定を保存しました")
         return True
+
+    def _save_test_mode_immediately(self, enabled: bool):
+        """テストモードの見た目と実際の送信設定が食い違わないよう即時保存する。"""
+        test_address = self._test_address.text().strip()
+        if enabled and (not test_address or not is_valid_email(test_address)):
+            self._test_mode.blockSignals(True)
+            self._test_mode.setChecked(False)
+            self._test_mode.blockSignals(False)
+            QMessageBox.warning(
+                self, "入力エラー",
+                "テストモードを有効にするには、正しいテスト送信先を設定してください。")
+            return
+
+        config = get_config()
+        graph = config.get("graph", {}).copy()
+        graph["test_address"] = test_address
+        graph["test_mode"] = enabled
+        config["graph"] = graph
+        save_config(config)
+        from app.ui.widgets.inline_status import show_inline_message
+        show_inline_message(
+            self._status_label,
+            "テストモードを有効にしました" if enabled else "テストモードを解除しました")
 
     def _test_connection(self):
         if not self._save():
