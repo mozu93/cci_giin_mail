@@ -280,7 +280,7 @@ def fetch_messages(graph_config: dict, folder_name: str, subject_filter: str,
                    exclude_ids: set[str], since: datetime) -> list[dict]:
     """指定フォルダ内で since より後に受信したメールをGraph APIで取得する
     （受信日時の古い順）。"""
-    token = get_access_token(graph_config)
+    token = get_access_token(graph_config, purpose="attendance_read")
     folder_id = _resolve_folder_id(token, folder_name)
     since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     resp = requests.get(

@@ -54,6 +54,7 @@ def test_search_leaves_unmatched_row_unselected(qtbot, monkeypatch, db_session):
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
     dlg = AttendanceMailImportDialog(meeting_id=meeting.id, graph_config={})
     qtbot.addWidget(dlg)
+    dlg._folder_input.setText("常議員会出欠")
     dlg._search()
 
     combo = dlg._table.cellWidget(0, dlg._COL_MEMBER)
@@ -88,6 +89,7 @@ def test_search_status_label_breaks_down_matched_and_unresolved_counts(
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
     dlg = AttendanceMailImportDialog(meeting_id=meeting.id, graph_config={})
     qtbot.addWidget(dlg)
+    dlg._folder_input.setText("常議員会出欠")
     dlg._search()
 
     assert dlg._table.rowCount() == 3
@@ -124,6 +126,7 @@ def test_apply_completion_message_flags_duplicate_member_matches(
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
     dlg = AttendanceMailImportDialog(meeting_id=meeting.id, graph_config={})
     qtbot.addWidget(dlg)
+    dlg._folder_input.setText("常議員会出欠")
     dlg._search()
     assert dlg._table.rowCount() == 2
 
@@ -170,6 +173,7 @@ def test_apply_commits_only_selected_rows(qtbot, monkeypatch, db_session):
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
     dlg = AttendanceMailImportDialog(meeting_id=meeting.id, graph_config={})
     qtbot.addWidget(dlg)
+    dlg._folder_input.setText("常議員会出欠")
     dlg._search()
 
     monkeypatch.setattr(
@@ -204,6 +208,7 @@ def test_no_wheel_combo_ignores_wheel_event(qtbot, monkeypatch, db_session):
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
     dlg = AttendanceMailImportDialog(meeting_id=meeting.id, graph_config={})
     qtbot.addWidget(dlg)
+    dlg._folder_input.setText("常議員会出欠")
     dlg._search()
 
     combo = dlg._table.cellWidget(0, dlg._COL_MEMBER)
@@ -243,6 +248,7 @@ def test_search_survives_session_close_before_table_refresh(qtbot, monkeypatch, 
     from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
     dlg = AttendanceMailImportDialog(meeting_id=meeting_id, graph_config={})
     qtbot.addWidget(dlg)
+    dlg._folder_input.setText("常議員会出欠")
 
     dlg._search()  # get_session() called inside _search returns a FRESH session each
                     # time (matching production get_session() semantics), which _search

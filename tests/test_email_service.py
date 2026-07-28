@@ -1,6 +1,6 @@
 import pytest
 from app.services.email_service import (
-    render_body, build_message, total_attachment_size
+    render_body, build_message, total_attachment_size, sanitize_graph_error
 )
 
 
@@ -151,3 +151,11 @@ def test_total_attachment_size_ignores_missing_files(tmp_path):
     f1.write_bytes(b"x" * 50)
     missing = str(tmp_path / "missing.txt")
     assert total_attachment_size([str(f1), missing]) == 50
+
+
+def test_graph_error_does_not_expose_response_body():
+    result = sanitize_graph_error(
+        403, '{"error":{"message":"user@example.jp secret diagnostic"}}')
+    assert "user@example.jp" not in result
+    assert "secret diagnostic" not in result
+    assert "403" in result

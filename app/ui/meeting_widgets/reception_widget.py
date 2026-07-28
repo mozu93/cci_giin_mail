@@ -2,11 +2,16 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QLabel, QLineEdit, QComboBox, QApplication, QSizePolicy,
+    QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QPixmap, QFont
 from app.database.connection import get_session
-from app.services.meeting_service import get_attendance_data, get_reception_summary, update_actual_status
+from app.services.meeting_service import (
+    get_attendance_data, get_reception_summary, update_actual_status,
+    export_reception_xlsx, format_minutes_attendee_text,
+    build_attendance_export_filename,
+)
 from app.services.reception_log_service import create_log
 from app.services.settings_service import get_font_size, set_font_size
 from app.utils import to_katakana
@@ -65,7 +70,8 @@ class ReceptionWidget(QWidget):
         layout = QVBoxLayout(self)
 
         count_grp = QGroupBox("当日受付集計（3秒ごと自動更新）")
-        count_layout = QHBoxLayout(count_grp)
+        count_layout = QVBoxLayout(count_grp)
+        count_row = QHBoxLayout()
         self._lbl_attend   = count_label("出席: 0",   "#16A34A")
         self._lbl_proxy    = count_label("代理: 0",   "#2563EB")
         self._lbl_delegate = count_label("委任: 0",   "#CA8A04")
@@ -74,8 +80,16 @@ class ReceptionWidget(QWidget):
         self._lbl_total    = count_label("合計: 0",   "#1E40AF", bold=True)
         for lbl in [self._lbl_attend, self._lbl_proxy, self._lbl_delegate,
                     self._lbl_absent, self._lbl_pending, self._lbl_total]:
-            count_layout.addWidget(lbl)
-        count_layout.addStretch()
+            count_row.addWidget(lbl)
+        count_row.addStretch()
+        count_layout.addLayout(count_row)
+        self._lbl_voting = QLabel(
+            "議決権数: 0 ＝ 当日出席者数（出席 0 ＋ 代理 0）＋ 委任 0 － 監事の出席者数 0")
+        voting_font = self._lbl_voting.font()
+        voting_font.setBold(True)
+        self._lbl_voting.setFont(voting_font)
+        self._lbl_voting.setStyleSheet("color: #7C3AED; padding: 4px;")
+        count_layout.addWidget(self._lbl_voting)
         layout.addWidget(count_grp)
 
         search_row = QHBoxLayout()
@@ -105,7 +119,22 @@ class ReceptionWidget(QWidget):
         btn_font_up.clicked.connect(lambda: self._adjust_rec_font(1))
         search_row.addWidget(btn_font_down)
         search_row.addWidget(btn_font_up)
+        btn_excel = QPushButton("当日受付をExcel出力")
+        btn_excel.clicked.connect(self._export_reception_xlsx)
+        search_row.addWidget(btn_excel)
         layout.addLayout(search_row)
+
+        minutes_row = QHBoxLayout()
+        minutes_row.addWidget(QLabel("議事録用氏名:"))
+        self._minutes_text = QLineEdit()
+        self._minutes_text.setReadOnly(True)
+        self._minutes_text.setPlaceholderText(
+            "当日受付で出席・代理・委任を入力すると、ここに1行で表示されます")
+        minutes_row.addWidget(self._minutes_text, 1)
+        btn_copy = QPushButton("テキストをコピー")
+        btn_copy.clicked.connect(self._copy_minutes_text)
+        minutes_row.addWidget(btn_copy)
+        layout.addLayout(minutes_row)
 
         body_row = QHBoxLayout()
         body_row.setSpacing(6)
@@ -169,7 +198,9 @@ class ReceptionWidget(QWidget):
         if not self._meeting_id:
             self._rec_data = []
             self._update_rec_summary(
-                {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未受付": 0, "合計": 0})
+                {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未受付": 0,
+                 "合計": 0, "監事出席": 0, "議決権数": 0})
+            self._minutes_text.clear()
             self._rec_table.setRowCount(0)
             return
         session = get_session()
@@ -185,6 +216,7 @@ class ReceptionWidget(QWidget):
             session.close()
 
         self._update_rec_summary(summary)
+        self._minutes_text.setText(format_minutes_attendee_text(self._rec_data))
 
         scrollbar = self._rec_table.verticalScrollBar()
         scroll_pos = scrollbar.value()
@@ -242,6 +274,7 @@ class ReceptionWidget(QWidget):
             session.close()
 
         self._update_rec_summary(summary)
+        self._minutes_text.setText(format_minutes_attendee_text(new_data))
 
         if len(new_data) != self._rec_table.rowCount():
             self._rec_data = new_data
@@ -282,6 +315,45 @@ class ReceptionWidget(QWidget):
         self._lbl_absent.setText(f"欠席: {summary['欠席']}")
         self._lbl_pending.setText(f"未受付: {summary['未受付']}")
         self._lbl_total.setText(f"合計: {summary['合計']}")
+        self._lbl_voting.setText(
+            f"議決権数: {summary['議決権数']} ＝ "
+            f"当日出席者数（出席 {summary['出席']} ＋ 代理 {summary['代理']}）"
+            f"＋ 委任 {summary['委任']} － 監事の出席者数 {summary['監事出席']}")
+
+    def _export_reception_xlsx(self):
+        if not self._meeting_id:
+            QMessageBox.warning(self, "エラー", "会議を選択してください。")
+            return
+        session = get_session()
+        try:
+            from app.database.models import Meeting
+            meeting = session.get(Meeting, self._meeting_id)
+            default_name = build_attendance_export_filename(
+                meeting.name if meeting else "会議", "当日")
+        finally:
+            session.close()
+        path, _ = QFileDialog.getSaveFileName(
+            self, "当日受付Excel保存", default_name, "Excel ファイル (*.xlsx)")
+        if not path:
+            return
+        if not path.lower().endswith(".xlsx"):
+            path += ".xlsx"
+        session = get_session()
+        try:
+            export_reception_xlsx(session, self._meeting_id, path)
+        finally:
+            session.close()
+        QMessageBox.information(self, "完了", f"当日受付データを保存しました。\n{path}")
+
+    def _copy_minutes_text(self):
+        text = self._minutes_text.text()
+        if not text:
+            QMessageBox.information(
+                self, "議事録用氏名", "出席・代理・委任の受付データがありません。")
+            return
+        QApplication.clipboard().setText(text)
+        QMessageBox.information(
+            self, "議事録用氏名", "改行なしのテキストをコピーしました。")
 
     def _save_actual_status(self, member_id: int, actual_status: str):
         if not self._meeting_id:
@@ -295,8 +367,15 @@ class ReceptionWidget(QWidget):
             if self._staff_name:
                 create_log(session, self._meeting_id, member_id,
                            self._staff_name, old, actual_status)
+            summary = get_reception_summary(session, self._meeting_id)
         finally:
             session.close()
+        for item in self._rec_data:
+            if item["member_id"] == member_id:
+                item["actual_status"] = actual_status
+                break
+        self._update_rec_summary(summary)
+        self._minutes_text.setText(format_minutes_attendee_text(self._rec_data))
         self._export_html_silent()
 
     def _export_html_silent(self):

@@ -24,7 +24,7 @@ from app.services.email_service import (
     total_attachment_size, ATTACHMENT_SIZE_LIMIT_BYTES,
 )
 from app.services.send_job_service import create_job, start_job, finish_job, add_log
-from app.utils.app_config import get_graph_config
+from app.utils.app_config import get_config, save_config, get_graph_config
 from app.ui.recipient_panel import RecipientPanel
 
 
@@ -50,6 +50,16 @@ def _split_oversized_targets(targets: list[dict]) -> tuple[list[dict], list[dict
         else:
             ok.append(t)
     return ok, oversized
+
+
+def _duplicate_recipient_groups(targets: list[dict]) -> list[list[dict]]:
+    """同じメールアドレスへ複数回送信されるターゲットを返す。"""
+    grouped: dict[str, list[dict]] = {}
+    for target in targets:
+        address = target.get("to_address", "").strip()
+        if address:
+            grouped.setdefault(address.casefold(), []).append(target)
+    return [items for items in grouped.values() if len(items) > 1]
 
 
 _CONSECUTIVE_ERROR_LIMIT = 5
@@ -858,15 +868,49 @@ class SendTab(QWidget):
                                 "設定タブでテスト送信先アドレスを設定してください。")
             return
         t = targets[0]
+        job_id = None
+        session = get_session()
+        try:
+            staff = get_staff_by_name(session, self._staff_name)
+            staff_id = staff.id if staff else None
+            job = create_job(
+                session,
+                f"【テスト送信】{t['subject']}",
+                self._template_combo.currentData(),
+                staff_id,
+            )
+            start_job(session, job.id)
+            job_id = job.id
+        finally:
+            session.close()
         try:
             send_test_mail(graph_config, t["subject"], t["body"],
                            t.get("attachments", []))
+            session = get_session()
+            try:
+                add_log(
+                    session, job_id, t.get("member_id"),
+                    graph_config["test_address"], f"【テスト】{t['subject']}",
+                    "success")
+                finish_job(session, job_id)
+            finally:
+                session.close()
             QMessageBox.information(
                 self, "テスト送信完了",
                 f"テストメールを送信しました。\n"
                 f"送信先: {graph_config['test_address']}（設定タブのテスト送信先）\n\n"
                 f"※ 選択した宛先（{t['org_name']}）の差し込み内容で送信しています。")
         except Exception as e:
+            if job_id is not None:
+                session = get_session()
+                try:
+                    add_log(
+                        session, job_id, t.get("member_id"),
+                        graph_config.get("test_address", ""),
+                        f"【テスト】{t['subject']}", "error", str(e))
+                    finish_job(session, job_id)
+                finally:
+                    session.close()
             QMessageBox.critical(self, "エラー", str(e))
 
     def _execute_send(self):
@@ -900,6 +944,37 @@ class SendTab(QWidget):
                                 "設定タブでMicrosoft 365設定を行ってください。")
             return
 
+        duplicates = _duplicate_recipient_groups(targets)
+        if duplicates:
+            details = []
+            for group in duplicates[:10]:
+                address = group[0]["to_address"].strip()
+                organizations = "、".join(t["org_name"] for t in group)
+                details.append(f"・{address}: {organizations}")
+            if len(duplicates) > 10:
+                details.append(f"ほか {len(duplicates) - 10}件")
+            QMessageBox.warning(
+                self, "重複宛先",
+                "同じメールアドレスが複数の送信対象に含まれています。\n"
+                "誤って同じメールを複数回送らないよう、宛先を見直してください。\n\n"
+                + "\n".join(details))
+            return
+
+        try:
+            access_token, account_username = get_access_token(
+                graph_config, return_account=True)
+        except Exception as e:
+            QMessageBox.critical(self, "認証エラー", str(e))
+            return
+
+        if account_username and graph_config.get("account_username") != account_username:
+            config = get_config()
+            graph = config.get("graph", {}).copy()
+            graph["account_username"] = account_username
+            config["graph"] = graph
+            save_config(config)
+            graph_config = graph
+
         tmpl_name = self._template_combo.currentText()
         has_attach = any(t["attachments"] for t in targets)
         no_email_count = sum(1 for t in targets if not t["to_address"])
@@ -907,6 +982,8 @@ class SendTab(QWidget):
             f"以下の内容で送信します。よろしいですか？\n\n"
             f"　ジョブ名　　: {job_name}\n"
             f"　操作者　　　: {self._staff_name}\n"
+            f"　認証アカウント: {account_username or '取得不可'}\n"
+            f"　代理差出人　: {graph_config.get('from_address') or '認証アカウント本人'}\n"
             f"　テンプレート: {tmpl_name}\n"
             f"　送信件数　　: {len(targets)} 件"
             + (f"（メール無し {no_email_count} 件はスキップ）" if no_email_count else "") + "\n"
@@ -918,12 +995,6 @@ class SendTab(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
-            return
-
-        try:
-            access_token = get_access_token(graph_config)
-        except Exception as e:
-            QMessageBox.critical(self, "認証エラー", str(e))
             return
 
         session = get_session()

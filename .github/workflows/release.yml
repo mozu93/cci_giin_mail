@@ -22,7 +22,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pyinstaller
+        run: pip install -r requirements.txt -r requirements-dev.txt pyinstaller
+
+      - name: Run tests
+        run: python -m pytest -q
 
       - name: Get version
         id: ver
@@ -48,11 +51,21 @@ jobs:
         shell: pwsh
         run: iscc "/DAppVersion=${{ steps.ver.outputs.VERSION }}" installer\setup.iss
 
+      - name: Create installer checksum
+        shell: pwsh
+        run: |
+          $installer = "installer_output/CCIMail_Setup_${{ steps.ver.outputs.VERSION }}.exe"
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLower()
+          "$hash  $(Split-Path -Leaf $installer)" |
+            Set-Content -Encoding ascii -LiteralPath "$installer.sha256"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "商工会議所メール配信システム v${{ steps.ver.outputs.VERSION }}"
           body_path: RELEASE_NOTES.md
-          files: installer_output/CCIMail_Setup_${{ steps.ver.outputs.VERSION }}.exe
+          files: |
+            installer_output/CCIMail_Setup_${{ steps.ver.outputs.VERSION }}.exe
+            installer_output/CCIMail_Setup_${{ steps.ver.outputs.VERSION }}.exe.sha256
           draft: false
           prerelease: false

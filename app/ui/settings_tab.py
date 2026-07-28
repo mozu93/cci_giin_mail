@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QGroupBox, QTableWidget, QTableWidgetItem,
     QCheckBox, QMessageBox, QHeaderView, QLabel, QRadioButton, QButtonGroup,
-    QFileDialog, QInputDialog, QTextEdit,
+    QFileDialog, QInputDialog, QTextEdit, QComboBox,
 )
 from PyQt6.QtCore import Qt
 from app.utils.app_config import get_config, save_config, get_db_type, get_pg_config, get_html_export_path, save_html_export_path
@@ -68,11 +68,13 @@ class _GraphSettingsWidget(QWidget):
         self._client_id = QLineEdit()
         self._test_address = QLineEdit()
         self._from_address = QLineEdit()
+        self._account_combo = QComboBox()
         self._from_address.setPlaceholderText("未設定時はサインインした担当者本人から送信")
         form.addRow("テナントID", self._tenant_id)
         form.addRow("クライアントID", self._client_id)
         form.addRow("テスト送信先", self._test_address)
         form.addRow("代理差出人アドレス（任意）", self._from_address)
+        form.addRow("認証アカウント", self._account_combo)
         layout.addWidget(grp)
         btn_row = QHBoxLayout()
         btn_save = QPushButton("設定を保存")
@@ -94,9 +96,28 @@ class _GraphSettingsWidget(QWidget):
         self._client_id.setText(cfg.get("client_id", ""))
         self._test_address.setText(cfg.get("test_address", ""))
         self._from_address.setText(cfg.get("from_address", ""))
+        saved_account = cfg.get("account_username", "")
+        accounts = []
+        if cfg.get("tenant_id") and cfg.get("client_id"):
+            try:
+                from app.services.email_service import get_cached_account_usernames
+                accounts = get_cached_account_usernames(cfg)
+            except Exception:
+                accounts = []
+        if saved_account and saved_account not in accounts:
+            accounts.insert(0, saved_account)
+        self._account_combo.addItem("未確認", "")
+        for account in accounts:
+            self._account_combo.addItem(account, account)
+        index = self._account_combo.findData(saved_account)
+        self._account_combo.setCurrentIndex(max(index, 0))
 
     def _save(self):
         from_address = self._from_address.text().strip()
+        test_address = self._test_address.text().strip()
+        if test_address and not is_valid_email(test_address):
+            QMessageBox.warning(self, "入力エラー", "テスト送信先の形式が正しくありません。")
+            return False
         if from_address and not is_valid_email(from_address):
             QMessageBox.warning(self, "入力エラー", "代理差出人アドレスの形式が正しくありません。")
             return False
@@ -105,8 +126,9 @@ class _GraphSettingsWidget(QWidget):
         graph.update({
             "tenant_id":  self._tenant_id.text().strip(),
             "client_id":  self._client_id.text().strip(),
-            "test_address": self._test_address.text().strip(),
+            "test_address": test_address,
             "from_address": from_address,
+            "account_username": self._account_combo.currentData() or "",
         })
         config["graph"] = graph
         save_config(config)
@@ -119,8 +141,20 @@ class _GraphSettingsWidget(QWidget):
             return
         try:
             from app.services.email_service import get_access_token
-            get_access_token(get_config().get("graph", {}))
-            QMessageBox.information(self, "成功", "Microsoft 365への接続に成功しました。")
+            config = get_config()
+            graph = config.get("graph", {}).copy()
+            _, username = get_access_token(graph, return_account=True)
+            graph["account_username"] = username
+            config["graph"] = graph
+            save_config(config)
+            if username and self._account_combo.findData(username) < 0:
+                self._account_combo.addItem(username, username)
+            if username:
+                self._account_combo.setCurrentIndex(
+                    self._account_combo.findData(username))
+            QMessageBox.information(
+                self, "成功",
+                f"Microsoft 365への接続に成功しました。\n認証アカウント: {username or '取得不可'}")
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
 

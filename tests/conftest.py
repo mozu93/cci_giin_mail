@@ -5,6 +5,20 @@ from sqlalchemy.orm import sessionmaker
 from app.database.models import Base
 
 
+@pytest.fixture(autouse=True)
+def isolate_user_data(tmp_path, monkeypatch):
+    """テストが利用者の実設定や認証キャッシュへ触れないよう隔離する。"""
+    appdata = tmp_path / "appdata"
+    appdata.mkdir()
+    monkeypatch.setenv("APPDATA", str(appdata))
+
+    from app.services import email_service
+    monkeypatch.setattr(
+        email_service, "_CACHE_FILE", tmp_path / "m365_token_cache_v2.bin")
+    monkeypatch.setattr(
+        email_service, "_LEGACY_CACHE_FILE", tmp_path / "m365_token_cache.bin")
+
+
 def _enable_fk(dbapi_conn, connection_record):
     dbapi_conn.execute("PRAGMA foreign_keys=ON")
 

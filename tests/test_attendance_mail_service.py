@@ -297,7 +297,7 @@ class _FakeResponse:
 def test_fetch_messages_resolves_folder_and_filters(monkeypatch):
     monkeypatch.setattr(
         "app.services.attendance_mail_service.get_access_token",
-        lambda cfg: "dummy-token")
+        lambda cfg, **kwargs: "dummy-token")
 
     def fake_get(url, headers=None, params=None, timeout=None):
         if url.endswith("/me/mailFolders"):
@@ -329,7 +329,7 @@ def test_fetch_messages_resolves_folder_and_filters(monkeypatch):
 def test_fetch_messages_excludes_already_processed(monkeypatch):
     monkeypatch.setattr(
         "app.services.attendance_mail_service.get_access_token",
-        lambda cfg: "dummy-token")
+        lambda cfg, **kwargs: "dummy-token")
 
     def fake_get(url, headers=None, params=None, timeout=None):
         if url.endswith("/me/mailFolders"):
@@ -352,7 +352,7 @@ def test_fetch_messages_resolves_nested_subfolder(monkeypatch):
     """トップレベルに無く、他フォルダの下（サブフォルダ）にある場合も見つけられること。"""
     monkeypatch.setattr(
         "app.services.attendance_mail_service.get_access_token",
-        lambda cfg: "dummy-token")
+        lambda cfg, **kwargs: "dummy-token")
 
     def fake_get(url, headers=None, params=None, timeout=None):
         if url.endswith("/me/mailFolders") and "$filter" in (params or {}):
@@ -386,7 +386,7 @@ def test_fetch_messages_resolves_nested_subfolder(monkeypatch):
 def test_fetch_messages_raises_when_folder_not_found(monkeypatch):
     monkeypatch.setattr(
         "app.services.attendance_mail_service.get_access_token",
-        lambda cfg: "dummy-token")
+        lambda cfg, **kwargs: "dummy-token")
 
     def fake_get(url, headers=None, params=None, timeout=None):
         return _FakeResponse(200, {"value": []})

@@ -2,16 +2,31 @@
 import os
 import sys
 import json
+import hashlib
 import tempfile
 import subprocess
 import urllib.request
 import urllib.error
+from urllib.parse import urlparse
 from typing import Optional
 
 from packaging.version import Version
 
 GITHUB_API_URL = "https://api.github.com/repos/mozu93/cci_giin_mail/releases/latest"
 _TIMEOUT = 8
+_ALLOWED_DOWNLOAD_HOSTS = {"github.com", "objects.githubusercontent.com"}
+
+
+def _is_allowed_download_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.scheme == "https" and parsed.hostname in _ALLOWED_DOWNLOAD_HOSTS
+
+
+def _parse_sha256(value: str) -> str:
+    digest = value.strip().split()[0].lower() if value.strip() else ""
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise ValueError("SHA-256チェックサムの形式が不正です。")
+    return digest
 
 
 def is_newer_version(current: str, latest: str) -> bool:
@@ -38,37 +53,83 @@ def check_latest_version() -> Optional[dict]:
         assets = data.get("assets", [])
         if not tag or not assets:
             return None
-        download_url = assets[0].get("browser_download_url", "")
-        if not download_url:
+        installer = next(
+            (asset for asset in assets
+             if asset.get("name", "").lower().startswith("ccimail_setup_")
+             and asset.get("name", "").lower().endswith(".exe")),
+            None,
+        )
+        checksum = next(
+            (asset for asset in assets
+             if installer and asset.get("name", "").lower()
+             == (installer.get("name", "") + ".sha256").lower()),
+            None,
+        )
+        download_url = installer.get("browser_download_url", "") if installer else ""
+        checksum_url = checksum.get("browser_download_url", "") if checksum else ""
+        if (not download_url or not checksum_url
+                or not _is_allowed_download_url(download_url)
+                or not _is_allowed_download_url(checksum_url)):
             return None
-        return {"tag_name": tag, "download_url": download_url}
+        checksum_req = urllib.request.Request(
+            checksum_url, headers={"User-Agent": "cci-mail-updater"})
+        with urllib.request.urlopen(checksum_req, timeout=_TIMEOUT) as response:
+            if not _is_allowed_download_url(response.geturl()):
+                return None
+            expected_sha256 = _parse_sha256(
+                response.read(512).decode("ascii", errors="strict"))
+        return {
+            "tag_name": tag,
+            "download_url": download_url,
+            "expected_sha256": expected_sha256,
+        }
     except Exception:
         return None
 
 
-def download_new_exe(url: str, progress_callback=None) -> Optional[str]:
+def download_new_exe(url: str, expected_sha256: str,
+                     progress_callback=None) -> Optional[str]:
     """
     新しいインストーラー exe を %TEMP% にダウンロードする。
     progress_callback(received_bytes, total_bytes) を呼び出す（total が不明な場合は -1）。
     成功時はダウンロード先パスを返す。失敗時は None。
     """
+    if not _is_allowed_download_url(url):
+        return None
+    try:
+        expected_sha256 = _parse_sha256(expected_sha256)
+    except ValueError:
+        return None
+    tmp_path = None
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "cci-mail-updater"})
         with urllib.request.urlopen(req, timeout=60) as resp:
+            if not _is_allowed_download_url(resp.geturl()):
+                return None
             total = int(resp.headers.get("Content-Length", -1))
             fd, tmp_path = tempfile.mkstemp(suffix=".exe", prefix="cci_mail_new_")
             received = 0
+            digest = hashlib.sha256()
             with os.fdopen(fd, "wb") as f:
                 while True:
                     chunk = resp.read(65536)
                     if not chunk:
                         break
                     f.write(chunk)
+                    digest.update(chunk)
                     received += len(chunk)
                     if progress_callback:
                         progress_callback(received, total)
+        if digest.hexdigest() != expected_sha256:
+            os.unlink(tmp_path)
+            return None
         return tmp_path
     except Exception:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
         return None
 
 

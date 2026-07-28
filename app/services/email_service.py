@@ -9,11 +9,33 @@ from msal_extensions import build_encrypted_persistence, PersistedTokenCache
 _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
              "col1", "col2", "col3", "col4", "col5"]
 
-_SCOPES = ["https://graph.microsoft.com/Mail.Send",
-           "https://graph.microsoft.com/Mail.Read"]
+_SEND_SCOPES = ["https://graph.microsoft.com/Mail.Send"]
+_READ_SCOPES = ["https://graph.microsoft.com/Mail.Read"]
 _SEND_SHARED_SCOPE = "https://graph.microsoft.com/Mail.Send.Shared"
 _CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache_v2.bin"
 _LEGACY_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
+
+
+def _public_client(graph_config: dict):
+    if not graph_config.get("client_id") or not graph_config.get("tenant_id"):
+        raise ValueError("テナントIDとクライアントIDを設定してください。")
+    _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    persistence = build_encrypted_persistence(str(_CACHE_FILE))
+    cache = PersistedTokenCache(persistence)
+    return msal.PublicClientApplication(
+        client_id=graph_config["client_id"],
+        authority=f"https://login.microsoftonline.com/{graph_config['tenant_id']}",
+        token_cache=cache,
+    )
+
+
+def get_cached_account_usernames(graph_config: dict) -> list[str]:
+    app = _public_client(graph_config)
+    return sorted({
+        account.get("username", "")
+        for account in app.get_accounts()
+        if account.get("username")
+    })
 
 
 def render_body(template: str, context: dict) -> str:
@@ -105,29 +127,39 @@ def compile_send_targets(
     return targets
 
 
-def get_access_token(graph_config: dict) -> str:
-    _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+def get_access_token(graph_config: dict, purpose: str = "send",
+                     return_account: bool = False) -> str | tuple[str, str]:
     try:
         _LEGACY_CACHE_FILE.unlink(missing_ok=True)
     except OSError:
         pass
-    persistence = build_encrypted_persistence(str(_CACHE_FILE))
-    cache = PersistedTokenCache(persistence)
+    app = _public_client(graph_config)
 
-    app = msal.PublicClientApplication(
-        client_id=graph_config["client_id"],
-        authority=f"https://login.microsoftonline.com/{graph_config['tenant_id']}",
-        token_cache=cache,
-    )
-
-    scopes = list(_SCOPES)
-    if graph_config.get("from_address", "").strip():
+    if purpose == "send":
+        scopes = list(_SEND_SCOPES)
+    elif purpose == "attendance_read":
+        scopes = list(_READ_SCOPES)
+    else:
+        raise ValueError(f"不明な認証用途です: {purpose}")
+    if purpose == "send" and graph_config.get("from_address", "").strip():
         scopes.append(_SEND_SHARED_SCOPE)
 
     result = None
     accounts = app.get_accounts()
-    if accounts:
-        result = app.acquire_token_silent(scopes, account=accounts[0])
+    selected_username = graph_config.get("account_username", "").strip().casefold()
+    selected = next(
+        (account for account in accounts
+         if account.get("username", "").casefold() == selected_username),
+        None,
+    )
+    if not selected and len(accounts) == 1:
+        selected = accounts[0]
+    if not selected and len(accounts) > 1:
+        raise RuntimeError(
+            "複数のMicrosoft 365アカウントが保存されています。"
+            "設定画面で送信に使用するアカウントを確認してください。")
+    if selected:
+        result = app.acquire_token_silent(scopes, account=selected)
 
     if not result:
         result = app.acquire_token_interactive(scopes=scopes)
@@ -136,7 +168,26 @@ def get_access_token(graph_config: dict) -> str:
         desc = result.get("error_description", str(result)) if result else "不明なエラー"
         raise RuntimeError(f"Microsoft 365 認証に失敗しました: {desc}")
 
+    username = (
+        result.get("id_token_claims", {}).get("preferred_username")
+        or (selected or {}).get("username")
+        or ""
+    )
+    if return_account:
+        return result["access_token"], username
     return result["access_token"]
+
+
+def sanitize_graph_error(status_code: int, response_text: str = "") -> str:
+    """履歴に個人情報を含むGraphレスポンス本文を保存しない。"""
+    messages = {
+        400: "送信内容をMicrosoft Graphが受け付けませんでした",
+        401: "Microsoft 365の認証が無効です",
+        403: "メール送信権限がありません",
+        404: "送信先リソースが見つかりません",
+        429: "Microsoft 365の送信制限に達しました",
+    }
+    return f"送信失敗 ({status_code}): {messages.get(status_code, 'Microsoft Graphでエラーが発生しました')}"
 
 
 _MAX_RATE_LIMIT_RETRIES = 3
@@ -170,9 +221,7 @@ def send_mail(graph_config: dict, to_address: str, subject: str,
             time.sleep(wait_seconds)
             attempt += 1
             continue
-        raise RuntimeError(
-            f"送信失敗 ({resp.status_code}): {resp.text[:200]}"
-        )
+        raise RuntimeError(sanitize_graph_error(resp.status_code, resp.text))
 
 
 def send_test_mail(graph_config: dict, subject: str, body: str,

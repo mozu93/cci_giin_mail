@@ -1,4 +1,4 @@
-from app.ui.send_tab import _split_oversized_targets
+from app.ui.send_tab import _split_oversized_targets, _duplicate_recipient_groups
 from app.services.email_service import ATTACHMENT_SIZE_LIMIT_BYTES
 
 
@@ -22,3 +22,14 @@ def test_split_oversized_targets_empty_attachments_is_ok():
     ok, oversized = _split_oversized_targets(targets)
     assert len(ok) == 1
     assert oversized == []
+
+
+def test_duplicate_recipient_groups_is_case_insensitive():
+    targets = [
+        {"to_address": "Info@Example.jp", "org_name": "A社"},
+        {"to_address": " info@example.jp ", "org_name": "B社"},
+        {"to_address": "other@example.jp", "org_name": "C社"},
+    ]
+    groups = _duplicate_recipient_groups(targets)
+    assert len(groups) == 1
+    assert [item["org_name"] for item in groups[0]] == ["A社", "B社"]

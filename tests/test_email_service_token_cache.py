@@ -1,5 +1,6 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 from pathlib import Path
+import pytest
 from app.services import email_service
 
 
@@ -103,3 +104,41 @@ def test_get_access_token_survives_legacy_cleanup_failure(monkeypatch, tmp_path)
     token = email_service.get_access_token({"client_id": "cid", "tenant_id": "tid"})
 
     assert token == "abc123"
+
+
+def test_get_access_token_rejects_ambiguous_cached_accounts(monkeypatch, tmp_path):
+    fake_app = Mock()
+    fake_app.get_accounts.return_value = [
+        {"username": "one@example.jp"},
+        {"username": "two@example.jp"},
+    ]
+    monkeypatch.setattr(email_service.msal, "PublicClientApplication",
+                        lambda *args, **kwargs: fake_app)
+    monkeypatch.setattr(email_service, "build_encrypted_persistence", Mock())
+    monkeypatch.setattr(email_service, "PersistedTokenCache", Mock())
+
+    with pytest.raises(RuntimeError, match="複数"):
+        email_service.get_access_token({"client_id": "cid", "tenant_id": "tid"})
+
+
+def test_get_access_token_uses_selected_cached_account(monkeypatch, tmp_path):
+    fake_app = Mock()
+    accounts = [
+        {"username": "one@example.jp"},
+        {"username": "two@example.jp"},
+    ]
+    fake_app.get_accounts.return_value = accounts
+    fake_app.acquire_token_silent.return_value = {"access_token": "token"}
+    monkeypatch.setattr(email_service.msal, "PublicClientApplication",
+                        lambda *args, **kwargs: fake_app)
+    monkeypatch.setattr(email_service, "build_encrypted_persistence", Mock())
+    monkeypatch.setattr(email_service, "PersistedTokenCache", Mock())
+
+    token, username = email_service.get_access_token(
+        {"client_id": "cid", "tenant_id": "tid",
+         "account_username": "TWO@example.jp"},
+        return_account=True)
+
+    assert token == "token"
+    assert username == "two@example.jp"
+    assert fake_app.acquire_token_silent.call_args.kwargs["account"] == accounts[1]

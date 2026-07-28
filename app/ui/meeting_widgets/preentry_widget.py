@@ -6,7 +6,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from app.database.connection import get_session
-from app.services.meeting_service import STATUS_OPTIONS, upsert_attendance, get_attendance_data, export_csv, export_xlsx
+from app.services.meeting_service import (
+    STATUS_OPTIONS, upsert_attendance, get_attendance_data, export_csv, export_xlsx,
+    build_attendance_export_filename,
+)
 from app.services.settings_service import get_font_size, set_font_size
 from app.utils import to_katakana
 from app.ui.meeting_widgets import count_label
@@ -387,8 +390,16 @@ class PreentryWidget(QWidget):
         if not self._meeting_id:
             QMessageBox.warning(self, "エラー", "会議を選択してください。")
             return
+        session = get_session()
+        try:
+            from app.database.models import Meeting
+            meeting = session.get(Meeting, self._meeting_id)
+            default_name = build_attendance_export_filename(
+                meeting.name if meeting else "会議", "事前")
+        finally:
+            session.close()
         path, _ = QFileDialog.getSaveFileName(
-            self, "Excel保存", "", "Excel ファイル (*.xlsx)")
+            self, "Excel保存", default_name, "Excel ファイル (*.xlsx)")
         if not path:
             return
         if not path.lower().endswith(".xlsx"):
