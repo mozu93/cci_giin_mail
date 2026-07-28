@@ -1,6 +1,7 @@
 import pytest
 from app.services.email_service import (
-    render_body, build_message, total_attachment_size, sanitize_graph_error
+    render_body, build_message, total_attachment_size, sanitize_graph_error,
+    parse_recipient_addresses, apply_test_mode,
 )
 
 
@@ -62,6 +63,56 @@ def test_build_message_sets_proxy_from_address():
     msg = build_message("to@example.com", "件名", "本文", [],
                         from_address="info@example.com")
     assert msg["message"]["from"]["emailAddress"]["address"] == "info@example.com"
+
+
+def test_parse_recipient_addresses_accepts_common_separators():
+    assert parse_recipient_addresses(
+        "a@example.com, b@example.com;c@example.com\nd@example.com"
+    ) == [
+        "a@example.com", "b@example.com", "c@example.com", "d@example.com"
+    ]
+
+
+def test_build_message_sets_cc_and_bcc_recipients():
+    msg = build_message(
+        "to@example.com", "件名", "本文", [],
+        cc_addresses=["cc1@example.com", "cc2@example.com"],
+        bcc_addresses=["bcc@example.com"],
+    )
+    message = msg["message"]
+    assert [
+        item["emailAddress"]["address"] for item in message["ccRecipients"]
+    ] == ["cc1@example.com", "cc2@example.com"]
+    assert [
+        item["emailAddress"]["address"] for item in message["bccRecipients"]
+    ] == ["bcc@example.com"]
+
+
+def test_apply_test_mode_reroutes_all_recipients_and_preserves_originals():
+    targets = [{
+        "to_address": "real@example.com",
+        "cc_addresses": ["cc@example.com"],
+        "bcc_addresses": ["bcc@example.com"],
+        "subject": "会議案内",
+        "body": "本文",
+    }]
+
+    converted = apply_test_mode(targets, "tester@example.com")
+
+    assert converted[0]["to_address"] == "tester@example.com"
+    assert converted[0]["cc_addresses"] == []
+    assert converted[0]["bcc_addresses"] == []
+    assert converted[0]["subject"] == "【テストモード】会議案内"
+    assert "本来のTo: real@example.com" in converted[0]["body"]
+    assert "本来のCC: cc@example.com" in converted[0]["body"]
+    assert "本来のBCC: bcc@example.com" in converted[0]["body"]
+    assert targets[0]["to_address"] == "real@example.com"
+    assert targets[0]["cc_addresses"] == ["cc@example.com"]
+
+
+def test_apply_test_mode_requires_test_address():
+    with pytest.raises(ValueError, match="テスト送信先"):
+        apply_test_mode([{"to_address": "real@example.com"}], "")
 
 
 def test_build_message_with_attachment(tmp_path):

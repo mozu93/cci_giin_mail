@@ -22,14 +22,21 @@ from app.services.staff_service import get_staff_by_name
 from app.services.email_service import (
     compile_send_targets, send_mail, send_test_mail, get_access_token,
     total_attachment_size, ATTACHMENT_SIZE_LIMIT_BYTES,
+    apply_test_mode, parse_recipient_addresses,
 )
 from app.services.send_job_service import create_job, start_job, finish_job, add_log
 from app.utils.app_config import get_config, save_config, get_graph_config
 from app.ui.recipient_panel import RecipientPanel
+from app.utils.validators import is_valid_email
 
 
 _BASE_PLACEHOLDERS = ["{事業所名}", "{役職名}", "{氏名}", "{会議所役職名}"]
 _MERGE_PLACEHOLDERS = ["{col1}", "{col2}", "{col3}", "{col4}", "{col5}"]
+
+
+class _NoWheelComboBox(QComboBox):
+    def wheelEvent(self, event):
+        event.ignore()
 
 
 def _dev_tools_enabled() -> bool:
@@ -111,9 +118,14 @@ class _SendWorker(QThread):
                     self.progress.emit(i, total, f"スキップ: {t['org_name']}")
                     continue
                 try:
+                    mail_options = {"access_token": self._access_token}
+                    if t.get("cc_addresses"):
+                        mail_options["cc_addresses"] = t["cc_addresses"]
+                    if t.get("bcc_addresses"):
+                        mail_options["bcc_addresses"] = t["bcc_addresses"]
                     send_mail(self._graph_config, to_addr, t["subject"],
                               t["body"], t.get("attachments", []),
-                              access_token=self._access_token)
+                              **mail_options)
                     add_log(session, self._job_id, t.get("member_id"),
                             to_addr, t["subject"], "success")
                     success += 1
@@ -254,7 +266,7 @@ class SendTab(QWidget):
         ap.setContentsMargins(0, 0, 0, 0)
         mrow = QHBoxLayout()
         mrow.addWidget(QLabel("会議:"))
-        self._meeting_combo = QComboBox()
+        self._meeting_combo = _NoWheelComboBox()
         self._meeting_combo.currentIndexChanged.connect(self._on_attend_filter)
         mrow.addWidget(self._meeting_combo, 1)
         ap.addLayout(mrow)
@@ -282,9 +294,9 @@ class SendTab(QWidget):
         outer = QVBoxLayout(grp)
 
         f = QFormLayout()
-        self._template_combo = QComboBox()
+        self._template_combo = _NoWheelComboBox()
         self._template_combo.currentIndexChanged.connect(self._on_template_select)
-        self._sig_combo = QComboBox()
+        self._sig_combo = _NoWheelComboBox()
         self._subject_edit = QLineEdit()
         self._body_edit = QTextEdit()
         self._body_edit.setMinimumHeight(200)
@@ -412,7 +424,16 @@ class SendTab(QWidget):
         self._job_name = QLineEdit()
         self._job_name.setPlaceholderText("例：2026年6月 総会案内")
         f.addRow("ジョブ名", self._job_name)
+        self._cc_edit = QLineEdit()
+        self._cc_edit.setPlaceholderText("任意。複数はカンマ、セミコロン、改行で区切る")
+        self._bcc_edit = QLineEdit()
+        self._bcc_edit.setPlaceholderText("任意。複数はカンマ、セミコロン、改行で区切る")
+        f.addRow("CC", self._cc_edit)
+        f.addRow("BCC", self._bcc_edit)
         layout.addLayout(f)
+        self._test_mode_label = QLabel("")
+        self._test_mode_label.setWordWrap(True)
+        layout.addWidget(self._test_mode_label)
 
         btn_row = QHBoxLayout()
         self._btn_test = QPushButton("テスト送信（1通）")
@@ -455,6 +476,14 @@ class SendTab(QWidget):
         graph_config = get_graph_config()
         addr = graph_config.get("test_address")
         self._btn_test.setText(f"{addr} にテスト送信" if addr else "テスト送信（未設定）")
+        if graph_config.get("test_mode"):
+            self._test_mode_label.setText(
+                f"【テストモード】本番宛先へは送信せず、すべて {addr or '未設定'} へ送ります。")
+            self._test_mode_label.setStyleSheet(
+                "background: #FEF3C7; color: #92400E; padding: 6px; font-weight: bold;")
+        else:
+            self._test_mode_label.clear()
+            self._test_mode_label.setStyleSheet("")
 
     def _rebuild_check_row(self, row: QHBoxLayout, checks: dict, items: list,
                           on_change) -> None:
@@ -531,6 +560,8 @@ class SendTab(QWidget):
         self._clear_indiv_folder()
         self._recipient._search.clear()
         self._job_name.clear()
+        self._cc_edit.clear()
+        self._bcc_edit.clear()
         self._progress.setVisible(False)
         self._progress_label.setText("")
 
@@ -836,7 +867,17 @@ class SendTab(QWidget):
                 continue
             checked_rows.append({"member": m, "to_address": to_addr})
 
-        return compile_send_targets(
+        cc_addresses = parse_recipient_addresses(self._cc_edit.text())
+        bcc_addresses = parse_recipient_addresses(self._bcc_edit.text())
+        invalid = [
+            address for address in cc_addresses + bcc_addresses
+            if not is_valid_email(address)
+        ]
+        if invalid:
+            raise ValueError(
+                "CC/BCCのメールアドレス形式が正しくありません: "
+                + "、".join(invalid))
+        targets = compile_send_targets(
             checked_rows=checked_rows,
             subject_tpl=subject_tpl,
             body_tpl=body_tpl,
@@ -846,17 +887,37 @@ class SendTab(QWidget):
             common_attachments=common_attachments,
             attach_map=attach_map,
         )
+        if isinstance(targets, list):
+            for target in targets:
+                target["cc_addresses"] = list(cc_addresses)
+                target["bcc_addresses"] = list(bcc_addresses)
+        return targets
 
     def _show_send_preview(self):
-        targets = self._build_targets()
+        try:
+            targets = self._build_targets()
+        except ValueError as e:
+            QMessageBox.warning(self, "入力エラー", str(e))
+            return
         if not targets:
             QMessageBox.warning(self, "宛先未選択", "宛先を1件以上選択してください。")
             return
+        graph_config = get_graph_config()
+        if graph_config.get("test_mode"):
+            try:
+                targets = apply_test_mode(targets, graph_config.get("test_address", ""))
+            except ValueError as e:
+                QMessageBox.warning(self, "設定エラー", str(e))
+                return
         from app.ui.dialogs.send_preview_dialog import SendPreviewDialog
         SendPreviewDialog(targets, parent=self).exec()
 
     def _test_send(self):
-        targets = self._build_targets()
+        try:
+            targets = self._build_targets()
+        except ValueError as e:
+            QMessageBox.warning(self, "入力エラー", str(e))
+            return
         if not targets:
             QMessageBox.warning(self, "宛先未選択",
                                 "テスト送信には差し込み内容を確認するための宛先を1件以上選択してください。\n"
@@ -914,7 +975,11 @@ class SendTab(QWidget):
             QMessageBox.critical(self, "エラー", str(e))
 
     def _execute_send(self):
-        targets = self._build_targets()
+        try:
+            targets = self._build_targets()
+        except ValueError as e:
+            QMessageBox.warning(self, "入力エラー", str(e))
+            return
         if not targets:
             QMessageBox.warning(self, "エラー", "宛先を選択してください。")
             return
@@ -960,6 +1025,15 @@ class SendTab(QWidget):
                 + "\n".join(details))
             return
 
+        test_mode = bool(graph_config.get("test_mode"))
+        if test_mode:
+            try:
+                targets = apply_test_mode(
+                    targets, graph_config.get("test_address", ""))
+            except ValueError as e:
+                QMessageBox.warning(self, "設定エラー", str(e))
+                return
+
         try:
             access_token, account_username = get_access_token(
                 graph_config, return_account=True)
@@ -984,6 +1058,9 @@ class SendTab(QWidget):
             f"　操作者　　　: {self._staff_name}\n"
             f"　認証アカウント: {account_username or '取得不可'}\n"
             f"　代理差出人　: {graph_config.get('from_address') or '認証アカウント本人'}\n"
+            f"　CC　　　　　: {self._cc_edit.text().strip() or 'なし'}\n"
+            f"　BCC　　　　 : {self._bcc_edit.text().strip() or 'なし'}\n"
+            f"　送信モード　: {'テストモード（全件をテスト送信先へ振替）' if test_mode else '通常送信'}\n"
             f"　テンプレート: {tmpl_name}\n"
             f"　送信件数　　: {len(targets)} 件"
             + (f"（メール無し {no_email_count} 件はスキップ）" if no_email_count else "") + "\n"

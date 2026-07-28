@@ -68,12 +68,14 @@ class _GraphSettingsWidget(QWidget):
         self._client_id = QLineEdit()
         self._test_address = QLineEdit()
         self._from_address = QLineEdit()
+        self._test_mode = QCheckBox("テストモード（本番宛先へ送らず、すべてテスト送信先へ送る）")
         self._account_combo = QComboBox()
         self._from_address.setPlaceholderText("未設定時はサインインした担当者本人から送信")
         form.addRow("テナントID", self._tenant_id)
         form.addRow("クライアントID", self._client_id)
         form.addRow("テスト送信先", self._test_address)
         form.addRow("代理差出人アドレス（任意）", self._from_address)
+        form.addRow("", self._test_mode)
         form.addRow("認証アカウント", self._account_combo)
         layout.addWidget(grp)
         btn_row = QHBoxLayout()
@@ -96,6 +98,7 @@ class _GraphSettingsWidget(QWidget):
         self._client_id.setText(cfg.get("client_id", ""))
         self._test_address.setText(cfg.get("test_address", ""))
         self._from_address.setText(cfg.get("from_address", ""))
+        self._test_mode.setChecked(bool(cfg.get("test_mode", False)))
         saved_account = cfg.get("account_username", "")
         accounts = []
         if cfg.get("tenant_id") and cfg.get("client_id"):
@@ -118,6 +121,11 @@ class _GraphSettingsWidget(QWidget):
         if test_address and not is_valid_email(test_address):
             QMessageBox.warning(self, "入力エラー", "テスト送信先の形式が正しくありません。")
             return False
+        if self._test_mode.isChecked() and not test_address:
+            QMessageBox.warning(
+                self, "入力エラー",
+                "テストモードを有効にするにはテスト送信先を設定してください。")
+            return False
         if from_address and not is_valid_email(from_address):
             QMessageBox.warning(self, "入力エラー", "代理差出人アドレスの形式が正しくありません。")
             return False
@@ -128,6 +136,7 @@ class _GraphSettingsWidget(QWidget):
             "client_id":  self._client_id.text().strip(),
             "test_address": test_address,
             "from_address": from_address,
+            "test_mode": self._test_mode.isChecked(),
             "account_username": self._account_combo.currentData() or "",
         })
         config["graph"] = graph

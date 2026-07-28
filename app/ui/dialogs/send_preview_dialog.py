@@ -53,7 +53,13 @@ class SendPreviewDialog(QDialog):
         self._to_label.setReadOnly(True)
         self._subject_edit = QLineEdit()
         self._subject_edit.setReadOnly(True)
+        self._cc_label = QLineEdit()
+        self._cc_label.setReadOnly(True)
+        self._bcc_label = QLineEdit()
+        self._bcc_label.setReadOnly(True)
         form.addRow("宛先", self._to_label)
+        form.addRow("CC", self._cc_label)
+        form.addRow("BCC", self._bcc_label)
         form.addRow("件名", self._subject_edit)
         right_layout.addLayout(form)
 
@@ -78,5 +84,7 @@ class SendPreviewDialog(QDialog):
         t = self._targets[row]
         addr = t.get("to_address") or "（メールアドレス無し）"
         self._to_label.setText(f"{t['org_name']}　{t.get('name', '')}　＜{addr}＞")
+        self._cc_label.setText(", ".join(t.get("cc_addresses", [])) or "（なし）")
+        self._bcc_label.setText(", ".join(t.get("bcc_addresses", [])) or "（なし）")
         self._subject_edit.setText(t.get("subject", ""))
         self._body_edit.setPlainText(t.get("body", ""))

@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import time
 import requests
 import msal
@@ -46,8 +47,17 @@ def render_body(template: str, context: dict) -> str:
     return template
 
 
+def parse_recipient_addresses(value: str) -> list[str]:
+    return [
+        address.strip() for address in re.split(r"[,;\n]", value or "")
+        if address.strip()
+    ]
+
+
 def build_message(to_address: str, subject: str, body: str,
-                  attachments: list[str], from_address: str = "") -> dict:
+                  attachments: list[str], from_address: str = "",
+                  cc_addresses: list[str] | None = None,
+                  bcc_addresses: list[str] | None = None) -> dict:
     attachment_list = []
     for path in attachments:
         if not os.path.exists(path):
@@ -67,6 +77,14 @@ def build_message(to_address: str, subject: str, body: str,
         },
         "toRecipients": [
             {"emailAddress": {"address": to_address}}
+        ],
+        "ccRecipients": [
+            {"emailAddress": {"address": address}}
+            for address in (cc_addresses or [])
+        ],
+        "bccRecipients": [
+            {"emailAddress": {"address": address}}
+            for address in (bcc_addresses or [])
         ],
         "attachments": attachment_list,
     }
@@ -125,6 +143,36 @@ def compile_send_targets(
             "attachments": list(common_attachments) + attach_map.get(m.member_number, []),
         })
     return targets
+
+
+def apply_test_mode(targets: list[dict], test_address: str) -> list[dict]:
+    """本来の宛先を明記しつつ、全メールを安全なテスト送信先へ振り替える。"""
+    if not test_address.strip():
+        raise ValueError("テストモードにはテスト送信先の設定が必要です。")
+    converted = []
+    for target in targets:
+        original_to = target.get("to_address", "")
+        original_cc = list(target.get("cc_addresses", []))
+        original_bcc = list(target.get("bcc_addresses", []))
+        notice = (
+            "【テストモードで送信しています】\n"
+            f"本来のTo: {original_to or 'なし'}\n"
+            f"本来のCC: {', '.join(original_cc) or 'なし'}\n"
+            f"本来のBCC: {', '.join(original_bcc) or 'なし'}\n"
+            "────────────────────\n\n"
+        )
+        converted.append({
+            **target,
+            "original_to_address": original_to,
+            "original_cc_addresses": original_cc,
+            "original_bcc_addresses": original_bcc,
+            "to_address": test_address.strip(),
+            "cc_addresses": [],
+            "bcc_addresses": [],
+            "subject": f"【テストモード】{target.get('subject', '')}",
+            "body": notice + target.get("body", ""),
+        })
+    return converted
 
 
 def get_access_token(graph_config: dict, purpose: str = "send",
@@ -196,10 +244,14 @@ _DEFAULT_RETRY_AFTER_SECONDS = 5
 
 def send_mail(graph_config: dict, to_address: str, subject: str,
               body: str, attachments: list[str] | None = None,
+              cc_addresses: list[str] | None = None,
+              bcc_addresses: list[str] | None = None,
               access_token: str | None = None) -> None:
     token = access_token or get_access_token(graph_config)
-    payload = build_message(to_address, subject, body, attachments or [],
-                            graph_config.get("from_address", "").strip())
+    payload = build_message(
+        to_address, subject, body, attachments or [],
+        graph_config.get("from_address", "").strip(),
+        cc_addresses=cc_addresses, bcc_addresses=bcc_addresses)
     headers = {"Authorization": f"Bearer {token}",
                "Content-Type": "application/json"}
     attempt = 0
