@@ -3,6 +3,20 @@ class _FakeSession:
         pass
 
 
+class _Member:
+    id = 1
+    member_number = "A-001"
+    organization_name = "テスト商事"
+    organization_kana = "テストショウジ"
+    name = "テスト太郎"
+    name_kana = "テストタロウ"
+    title = ""
+    position = None
+    position_id = None
+    committee_id = None
+    email_addresses = []
+
+
 def _patch_common(monkeypatch):
     monkeypatch.setattr("app.ui.send_tab.get_session", lambda: _FakeSession())
     monkeypatch.setattr("app.ui.send_tab.get_positions", lambda s: [])
@@ -65,3 +79,18 @@ def test_clear_all_resets_to_list_mode(qtbot, monkeypatch):
     tab._rb_by_pos.setChecked(True)
     tab._clear_all()
     assert tab._rb_by_list.isChecked() is True
+
+
+def test_refresh_preserves_manual_recipient_selection(qtbot, monkeypatch):
+    _patch_common(monkeypatch)
+    monkeypatch.setattr("app.ui.send_tab.get_members", lambda s: [_Member()])
+    from app.ui.send_tab import SendTab
+    tab = SendTab(staff_name="担当者A")
+    qtbot.addWidget(tab)
+
+    tab._recipient.set_checks_by_member_ids({1})
+    tab._recipient._search.setText("テスト")
+    tab.refresh()
+
+    assert [member.id for member in tab._recipient.get_selected_members()] == [1]
+    assert tab._recipient._table.isRowHidden(0) is False

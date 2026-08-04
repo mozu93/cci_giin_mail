@@ -54,7 +54,7 @@ class MemberTab(QWidget):
         # ツールバー 1行目：検索・フィルター
         row1 = QHBoxLayout()
         self._search = QLineEdit()
-        self._search.setPlaceholderText("キーワード検索（事業所名・氏名・会員番号）")
+        self._search.setPlaceholderText("キーワード検索（事業所名・氏名・会員番号・フリガナ）")
         self._search.textChanged.connect(self._load)
         from app.ui.widgets.search_style import style_search_input
         style_search_input(self._search)
@@ -208,6 +208,10 @@ class MemberTab(QWidget):
             session.close()
 
     def _load(self):
+        selected_member_id = None
+        row = self._table.currentRow()
+        if row >= 0 and self._table.item(row, 0):
+            selected_member_id = self._table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         self._load_positions()
         active_only = not self._show_inactive.isChecked()
         session = get_session()
@@ -294,6 +298,13 @@ class MemberTab(QWidget):
                 and not self._show_inactive.isChecked()
             )
             self._empty_hint.setVisible(no_filter and len(members) == 0)
+
+            if selected_member_id is not None:
+                for row in range(self._table.rowCount()):
+                    item = self._table.item(row, 0)
+                    if item and item.data(Qt.ItemDataRole.UserRole) == selected_member_id:
+                        self._table.selectRow(row)
+                        break
         finally:
             session.close()
         self._table.setSortingEnabled(True)

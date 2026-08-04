@@ -195,6 +195,11 @@ class ReceptionWidget(QWidget):
     # ─── データ操作 ────────────────────────────────────────
 
     def _load_reception(self):
+        selected_member_id = None
+        current_row = self._rec_table.currentRow()
+        if current_row >= 0 and self._rec_table.item(current_row, 0):
+            selected_member_id = self._rec_table.item(
+                current_row, 0).data(Qt.ItemDataRole.UserRole)
         if not self._meeting_id:
             self._rec_data = []
             self._update_rec_summary(
@@ -262,6 +267,12 @@ class ReceptionWidget(QWidget):
         self._rec_table.setUpdatesEnabled(True)
         scrollbar.setValue(scroll_pos)
         self._filter_reception()
+        if selected_member_id is not None:
+            for row in range(self._rec_table.rowCount()):
+                item = self._rec_table.item(row, 0)
+                if item and item.data(Qt.ItemDataRole.UserRole) == selected_member_id:
+                    self._rec_table.selectRow(row)
+                    break
 
     def _refresh_reception(self):
         if not self._meeting_id:

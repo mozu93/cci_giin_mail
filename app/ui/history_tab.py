@@ -67,6 +67,10 @@ class HistoryTab(QWidget):
         layout.addWidget(splitter)
 
     def _load_jobs(self):
+        selected_job_id = None
+        row = self._job_table.currentRow()
+        if row >= 0 and self._job_table.item(row, 0):
+            selected_job_id = self._job_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         session = get_session()
         try:
             self._jobs = get_jobs(session)
@@ -90,6 +94,12 @@ class HistoryTab(QWidget):
         self._job_table.setSortingEnabled(True)
 
         self._log_table.setRowCount(0)
+        if selected_job_id is not None:
+            for row in range(self._job_table.rowCount()):
+                item = self._job_table.item(row, 0)
+                if item and item.data(Qt.ItemDataRole.UserRole) == selected_job_id:
+                    self._job_table.selectRow(row)
+                    break
 
     def _on_job_select(self):
         row = self._job_table.currentRow()

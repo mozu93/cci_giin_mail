@@ -715,6 +715,7 @@ class _PositionWidget(QWidget):
         self._load()
 
     def _load(self):
+        selected_id = self._selected_id()
         session = get_session()
         try:
             self._positions = get_positions(session)
@@ -726,6 +727,11 @@ class _PositionWidget(QWidget):
             self._table.insertRow(row)
             self._table.setItem(row, 0, QTableWidgetItem(p.name))
             self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, p.id)
+        if selected_id is not None:
+            for row in range(self._table.rowCount()):
+                if self._table.item(row, 0).data(Qt.ItemDataRole.UserRole) == selected_id:
+                    self._table.selectRow(row)
+                    break
 
     def _on_select(self):
         row = self._table.currentRow()
@@ -855,6 +861,7 @@ class _CommitteeWidget(QWidget):
         self._load()
 
     def _load(self):
+        selected_id = self._selected_id()
         session = get_session()
         try:
             self._committees = get_committees(session)
@@ -866,6 +873,11 @@ class _CommitteeWidget(QWidget):
             self._table.insertRow(row)
             self._table.setItem(row, 0, QTableWidgetItem(c.name))
             self._table.item(row, 0).setData(Qt.ItemDataRole.UserRole, c.id)
+        if selected_id is not None:
+            for row in range(self._table.rowCount()):
+                if self._table.item(row, 0).data(Qt.ItemDataRole.UserRole) == selected_id:
+                    self._table.selectRow(row)
+                    break
 
     def _on_select(self):
         row = self._table.currentRow()

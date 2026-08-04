@@ -501,36 +501,69 @@ class SendTab(QWidget):
         row.addStretch()
 
     def _load_combos(self):
+        # タブ移動時の再読込で、作業中の宛先指定や選択を失わないよう保持する。
+        selected_recipient_ids = {m.id for m in self._recipient.get_selected_members()}
+        selected_position_ids = {
+            pid for pid, cb in self._pos_checks.items() if cb.isChecked()
+        }
+        selected_committee_ids = {
+            cid for cid, cb in self._committee_checks.items() if cb.isChecked()
+        }
+        selected_template_id = self._template_combo.currentData()
+        selected_signature_id = self._sig_combo.currentData()
+        recipient_keyword = self._recipient._search.text()
+
         session = get_session()
         try:
             self._rebuild_check_row(self._pos_row, self._pos_checks,
                                     get_positions(session), self._on_pos_select)
             self._rebuild_check_row(self._committee_row, self._committee_checks,
                                     get_committees(session), self._on_committee_select)
+            for pid in selected_position_ids:
+                if pid in self._pos_checks:
+                    self._pos_checks[pid].blockSignals(True)
+                    self._pos_checks[pid].setChecked(True)
+                    self._pos_checks[pid].blockSignals(False)
+            for cid in selected_committee_ids:
+                if cid in self._committee_checks:
+                    self._committee_checks[cid].blockSignals(True)
+                    self._committee_checks[cid].setChecked(True)
+                    self._committee_checks[cid].blockSignals(False)
 
             self._members = get_members(session)
             self._recipient.load_members(self._members)
+            self._recipient.set_checks_by_member_ids(selected_recipient_ids)
+            self._recipient.filter(recipient_keyword)
 
             self._template_combo.blockSignals(True)
             self._template_combo.clear()
             self._template_combo.addItem("（選択してください）", None)
             for t in get_templates(session):
                 self._template_combo.addItem(t.name, t.id)
+            template_index = self._template_combo.findData(selected_template_id)
+            if template_index >= 0:
+                self._template_combo.setCurrentIndex(template_index)
             self._template_combo.blockSignals(False)
 
             staff = get_staff_by_name(session, self._staff_name) if self._staff_name else None
             staff_id = staff.id if staff else None
             self._signatures = get_signatures(session, staff_id) if staff_id else []
+            self._sig_combo.blockSignals(True)
             self._sig_combo.clear()
             self._sig_combo.addItem("（なし）", None)
             for s in self._signatures:
                 self._sig_combo.addItem(s.name, s.id)
-            default_sig = get_default_signature(session, staff_id) if staff_id else None
-            if default_sig:
-                for i in range(self._sig_combo.count()):
-                    if self._sig_combo.itemData(i) == default_sig.id:
-                        self._sig_combo.setCurrentIndex(i)
-                        break
+            signature_index = self._sig_combo.findData(selected_signature_id)
+            if signature_index >= 0:
+                self._sig_combo.setCurrentIndex(signature_index)
+            else:
+                default_sig = get_default_signature(session, staff_id) if staff_id else None
+                if default_sig:
+                    for i in range(self._sig_combo.count()):
+                        if self._sig_combo.itemData(i) == default_sig.id:
+                            self._sig_combo.setCurrentIndex(i)
+                            break
+            self._sig_combo.blockSignals(False)
         finally:
             session.close()
 

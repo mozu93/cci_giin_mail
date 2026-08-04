@@ -4,6 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, contains_eager, selectinload
 from sqlalchemy.exc import IntegrityError
 from app.database.models import Member, EmailAddress, MemberHistory, Position
+from app.utils import to_katakana
 
 
 def member_to_snapshot(member: Member) -> str:
@@ -88,19 +89,30 @@ def get_members(session: Session, position_id: int | None = None,
         q = q.filter(Member.is_active == True)
     if position_id is not None:
         q = q.filter(Member.position_id == position_id)
-    if keyword:
-        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        like = f"%{escaped}%"
-        q = q.filter(
-            Member.organization_name.like(like, escape="\\") |
-            Member.name.like(like, escape="\\") |
-            Member.member_number.like(like, escape="\\")
-        )
-    return q.order_by(
+    members = q.order_by(
         Position.sort_order.asc().nullslast(),
         Member.display_order.asc().nullslast(),
         Member.organization_kana.asc(),
     ).all()
+    if not keyword:
+        return members
+
+    # フリガナは入力元によって半角/全角・ひらがな/カタカナが混在し得るため、
+    # DB固有の正規化関数には頼らず比較前に統一する。
+    normalized_keyword = to_katakana(keyword).casefold()
+    return [
+        member for member in members
+        if any(
+            normalized_keyword in to_katakana(value or "").casefold()
+            for value in (
+                member.organization_name,
+                member.name,
+                member.member_number,
+                member.organization_kana,
+                member.name_kana,
+            )
+        )
+    ]
 
 
 def set_email_addresses(session: Session, member_id: int,

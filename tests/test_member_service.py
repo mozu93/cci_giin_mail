@@ -114,6 +114,23 @@ def test_get_members_keyword_search(db_session):
     assert results[0].name == "山田 太郎"
 
 
+@pytest.mark.parametrize("keyword", ["ヤマダ", "やまだ", "ﾔﾏﾀﾞ"])
+def test_get_members_keyword_search_matches_kana_variants(db_session, keyword):
+    create_member(
+        db_session, "A-001", "○○商事", "山田 太郎",
+        organization_kana="\uff8f\uff92\uff76\uff9e\uff72\uff7c\uff6e\uff73\uff7c\uff9e",
+        name_kana="ヤマダ タロウ",
+    )
+    create_member(
+        db_session, "A-002", "△△産業", "鈴木 花子",
+        name_kana="\uff7d\uff7d\uff77 \uff8a\uff85\uff7a",
+    )
+
+    results = get_members(db_session, keyword=keyword)
+
+    assert [member.member_number for member in results] == ["A-001"]
+
+
 def test_member_to_snapshot_includes_emails(db_session):
     m = create_member(db_session, "A-001", "○○商事", "山田 太郎")
     set_email_addresses(db_session, m.id, [
