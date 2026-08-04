@@ -14,7 +14,11 @@ from packaging.version import Version
 
 GITHUB_API_URL = "https://api.github.com/repos/mozu93/cci_giin_mail/releases/latest"
 _TIMEOUT = 8
-_ALLOWED_DOWNLOAD_HOSTS = {"github.com", "objects.githubusercontent.com"}
+_ALLOWED_DOWNLOAD_HOSTS = {
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+}
 
 
 def _is_allowed_download_url(url: str) -> bool:
