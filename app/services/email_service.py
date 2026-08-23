@@ -4,6 +4,9 @@ import re
 import time
 import requests
 import msal
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+from urllib.parse import quote
 from pathlib import Path
 from msal_extensions import build_encrypted_persistence, PersistedTokenCache
 
@@ -13,6 +16,7 @@ _ALL_KEYS = ["事業所名", "役職名", "氏名", "会議所役職名",
 _SEND_SCOPES = ["https://graph.microsoft.com/Mail.Send"]
 _READ_SCOPES = ["https://graph.microsoft.com/Mail.Read"]
 _SEND_SHARED_SCOPE = "https://graph.microsoft.com/Mail.Send.Shared"
+_TRACE_SCOPE = ["https://graph.microsoft.com/.default"]
 _CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache_v2.bin"
 _LEGACY_CACHE_FILE = Path.home() / ".cci-mail" / "m365_token_cache.bin"
 
@@ -283,3 +287,96 @@ def send_test_mail(graph_config: dict, subject: str, body: str,
         raise ValueError("テスト送信先アドレスが設定されていません。")
     send_mail(graph_config, test_address, f"【テスト】{subject}", body,
               attachments or [])
+
+
+def get_trace_access_token(graph_config: dict) -> str:
+    """メッセージ追跡API用のアプリケーション権限トークンを取得する。"""
+    client_secret = graph_config.get("trace_client_secret", "").strip()
+    if not client_secret:
+        raise ValueError(
+            "配信状況の確認には、設定画面でメッセージ追跡用の"
+            "クライアントシークレットを設定してください。")
+    tenant_id = graph_config.get("tenant_id", "").strip()
+    client_id = graph_config.get("client_id", "").strip()
+    if not tenant_id or not client_id:
+        raise ValueError("テナントIDとクライアントIDを設定してください。")
+    app = msal.ConfidentialClientApplication(
+        client_id=client_id,
+        client_credential=client_secret,
+        authority=f"https://login.microsoftonline.com/{tenant_id}",
+    )
+    result = app.acquire_token_for_client(scopes=_TRACE_SCOPE)
+    if not result or "access_token" not in result:
+        desc = result.get("error_description", str(result)) if result else "不明なエラー"
+        raise RuntimeError(f"配信状況確認の認証に失敗しました: {desc}")
+    return result["access_token"]
+
+
+def get_delivery_trace(graph_config: dict, to_address: str,
+                       subject: str, sent_at: datetime | None) -> dict:
+    """Exchange Onlineのメッセージ追跡結果を1宛先分取得する。
+
+    sendMailの受付結果とは別に、Exchange Online内部での配信状態を返す。
+    状態がまだ生成されていない場合は ``pending`` とする。
+    """
+    if not sent_at:
+        return {"status": "unknown", "message": "送信日時がありません。"}
+    sender = (graph_config.get("trace_sender_address", "") or
+              graph_config.get("from_address", "") or
+              graph_config.get("account_username", "")).strip()
+    if not sender:
+        return {"status": "unknown", "message": "送信元アドレスを特定できません。"}
+
+    token = get_trace_access_token(graph_config)
+    # sent_atは既存DBでは日本時間のローカル時刻（タイムゾーンなし）で保存されている。
+    # Message Trace APIはUTCを返すため、日本時間として解釈してからUTCへ変換する。
+    local_zone = ZoneInfo("Asia/Tokyo")
+    sent_at_utc = sent_at.replace(tzinfo=local_zone).astimezone(timezone.utc)
+    start = sent_at_utc - timedelta(hours=2)
+    end = sent_at_utc + timedelta(days=3)
+    odata_filter = (
+        f"recipientAddress eq '{to_address.replace(chr(39), chr(39) * 2)}' "
+        f"and senderAddress eq '{sender.replace(chr(39), chr(39) * 2)}' "
+        f"and receivedDateTime ge {start.isoformat().replace('+00:00', 'Z')} "
+        f"and receivedDateTime le {end.isoformat().replace('+00:00', 'Z')}"
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(
+        "https://graph.microsoft.com/v1.0/admin/exchange/tracing/messageTraces",
+        headers=headers,
+        params={"$filter": odata_filter, "$top": "50"},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(sanitize_graph_error(resp.status_code, resp.text))
+    values = resp.json().get("value", [])
+    # 同じ宛先・時刻に複数候補がある場合は件名一致を優先する。
+    subject_matches = [item for item in values if item.get("subject") == subject]
+    item = (subject_matches or values)
+    if not item:
+        return {"status": "pending", "message": "追跡情報がまだ反映されていません。"}
+    trace = sorted(item, key=lambda value: value.get("receivedDateTime", ""), reverse=True)[0]
+    status = str(trace.get("status", "unknown")).lower()
+    message = {
+        "delivered": "Microsoft 365で配信済みです。",
+        "failed": "Microsoft 365で配信に失敗しました。",
+        "pending": "Microsoft 365で処理中です。",
+        "quarantined": "隔離されています。",
+        "filteredasspam": "スパムとして処理されました。",
+    }.get(status, f"Microsoft 365の状態: {status}")
+    if status == "failed":
+        trace_id = trace.get("id")
+        if trace_id:
+            detail_url = (
+                "https://graph.microsoft.com/v1.0/admin/exchange/tracing/"
+                f"messageTraces/{quote(str(trace_id), safe='')}"
+                f"/getDetailsByRecipient(recipientAddress='{quote(to_address, safe='@._-')}')"
+            )
+            detail_resp = requests.get(detail_url, headers=headers, timeout=30)
+            if detail_resp.status_code == 200:
+                details = detail_resp.json().get("value", [])
+                descriptions = [d.get("description", "") for d in details
+                                if d.get("description")]
+                if descriptions:
+                    message += "\n" + descriptions[-1]
+    return {"status": status, "message": message}

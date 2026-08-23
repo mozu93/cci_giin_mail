@@ -1157,8 +1157,28 @@ class SendTab(QWidget):
         self._btn_cancel.setVisible(False)
         self._btn_cancel.setEnabled(True)
         self._progress.setVisible(False)
-        QMessageBox.information(
-            self, "送信完了",
-            f"送信完了\n\n成功: {success} 件\nエラー: {error} 件\nスキップ: {skip} 件\n\n"
-            "「送信履歴」タブで詳細を確認できます。"
+        summary = (
+            f"送信完了\n\n成功: {success} 件\nエラー: {error} 件\n"
+            f"スキップ: {skip} 件\n\n"
         )
+        if error:
+            # エラーがある場合は情報ダイアログではなく警告として表示し、
+            # 送信の一部（または全部）が失敗したことを見落とさないようにする。
+            if success:
+                title = "送信完了（一部エラー）"
+                message = summary + (
+                    "一部の宛先への送信に失敗しました。\n"
+                    "「送信履歴」タブで失敗した宛先と原因を確認してください。"
+                )
+            else:
+                title = "送信失敗"
+                message = summary + (
+                    "送信できたメールはありません。\n"
+                    "「送信履歴」タブで失敗した宛先と原因を確認し、設定や接続を見直してください。"
+                )
+            QMessageBox.warning(self, title, message)
+        else:
+            QMessageBox.information(
+                self, "送信完了",
+                summary + "「送信履歴」タブで詳細を確認できます。"
+            )

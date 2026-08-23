@@ -107,6 +107,25 @@ def _migrate_sqlite(engine):
             ))
             conn.commit()
 
+        send_log_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(send_logs)"))
+        }
+        if "delivery_status" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN delivery_status TEXT DEFAULT ''"
+            ))
+            conn.commit()
+        if "delivery_message" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN delivery_message TEXT DEFAULT ''"
+            ))
+            conn.commit()
+        if "delivery_checked_at" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN delivery_checked_at DATETIME"
+            ))
+            conn.commit()
+
 
 def _migrate_postgresql(engine):
     from sqlalchemy import inspect, text
@@ -138,6 +157,17 @@ def _migrate_postgresql(engine):
         if "member_id" not in processed_mail_cols:
             conn.execute(text(
                 "ALTER TABLE processed_attendance_mails ADD COLUMN member_id INTEGER"))
+
+        send_log_cols = {col["name"] for col in insp.get_columns("send_logs")}
+        if "delivery_status" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN delivery_status VARCHAR DEFAULT ''"))
+        if "delivery_message" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN delivery_message TEXT DEFAULT ''"))
+        if "delivery_checked_at" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN delivery_checked_at TIMESTAMP"))
 
 
 def get_engine(db_path: str | None = None):

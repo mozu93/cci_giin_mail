@@ -2,11 +2,14 @@ import csv
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QPushButton, QLabel, QFileDialog, QMessageBox
+    QPushButton, QLabel, QFileDialog, QMessageBox, QApplication
 )
 from PyQt6.QtCore import Qt
 from app.database.connection import get_session
-from app.services.send_job_service import get_jobs, get_job_logs
+from app.services.send_job_service import (
+    get_jobs, get_job_logs, update_delivery_status,
+)
+from app.utils.app_config import get_graph_config
 
 
 class HistoryTab(QWidget):
@@ -27,9 +30,12 @@ class HistoryTab(QWidget):
         toolbar = QHBoxLayout()
         btn_refresh = QPushButton("更新")
         btn_refresh.clicked.connect(self._load_jobs)
+        btn_trace = QPushButton("配信状況を更新")
+        btn_trace.clicked.connect(self._refresh_delivery_status)
         btn_export = QPushButton("CSV出力")
         btn_export.clicked.connect(self._export_csv)
         toolbar.addWidget(btn_refresh)
+        toolbar.addWidget(btn_trace)
         toolbar.addStretch()
         toolbar.addWidget(btn_export)
         layout.addLayout(toolbar)
@@ -39,12 +45,18 @@ class HistoryTab(QWidget):
         # 上段: ジョブ一覧
         job_widget = QWidget()
         job_layout = QVBoxLayout(job_widget)
-        job_layout.addWidget(QLabel("送信ジョブ一覧"))
+        job_layout.addWidget(QLabel(
+            "送信ジョブ一覧（上段はMicrosoft 365への送信受付結果）"))
         self._job_table = QTableWidget(0, 6)
         self._job_table.setHorizontalHeaderLabels(
-            ["送信日時", "操作者", "ジョブ名", "件数", "成功", "エラー"])
-        self._job_table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch)
+            ["送信日時", "操作者", "ジョブ名", "件数", "受付成功", "送信時エラー"])
+        job_header = self._job_table.horizontalHeader()
+        # ジョブ名が横幅を占有しすぎないよう固定し、件数・結果列へ余白を配分する。
+        for column, width in ((0, 150), (1, 100), (2, 350)):
+            job_header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+            self._job_table.setColumnWidth(column, width)
+        for column in (3, 4, 5):
+            job_header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
         self._job_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._job_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._job_table.selectionModel().selectionChanged.connect(self._on_job_select)
@@ -54,12 +66,16 @@ class HistoryTab(QWidget):
         # 下段: 明細
         log_widget = QWidget()
         log_layout = QVBoxLayout(log_widget)
-        log_layout.addWidget(QLabel("送信明細"))
+        log_layout.addWidget(QLabel(
+            "送信明細（下段は相手先への配信結果。配信失敗はここで確認できます）"))
         self._log_table = QTableWidget(0, 5)
         self._log_table.setHorizontalHeaderLabels(
             ["事業所名", "送信先アドレス", "件名", "結果", "エラー内容"])
-        self._log_table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch)
+        log_header = self._log_table.horizontalHeader()
+        for column, width in ((0, 160), (1, 240), (3, 130), (4, 350)):
+            log_header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+            self._log_table.setColumnWidth(column, width)
+        log_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self._log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         log_layout.addWidget(self._log_table)
         splitter.addWidget(log_widget)
@@ -121,10 +137,55 @@ class HistoryTab(QWidget):
             self._log_table.setItem(r, 0, QTableWidgetItem(org_name))
             self._log_table.setItem(r, 1, QTableWidgetItem(log.to_address))
             self._log_table.setItem(r, 2, QTableWidgetItem(log.subject))
-            status_label = {"success": "成功", "error": "エラー", "skip": "スキップ"}.get(
-                log.status, log.status)
+            delivery_label = {
+                "delivered": "配信済み", "pending": "確認待ち", "failed": "配信失敗",
+                "quarantined": "隔離", "filteredasspam": "スパム処理",
+            }.get(log.delivery_status or "", "")
+            status_label = delivery_label or {
+                "success": "送信受付済み", "error": "送信エラー", "skip": "スキップ"
+            }.get(log.status, log.status)
             self._log_table.setItem(r, 3, QTableWidgetItem(status_label))
-            self._log_table.setItem(r, 4, QTableWidgetItem(log.error_message or ""))
+            detail = log.delivery_message if delivery_label else log.error_message
+            self._log_table.setItem(r, 4, QTableWidgetItem(detail or ""))
+
+    def _refresh_delivery_status(self):
+        row = self._job_table.currentRow()
+        if row < 0 or row >= len(self._jobs):
+            QMessageBox.information(self, "情報", "配信状況を確認するジョブを選択してください。")
+            return
+        if not self._logs:
+            QMessageBox.information(self, "情報", "送信明細がありません。")
+            return
+        graph_config = get_graph_config()
+        try:
+            from app.services.email_service import get_delivery_trace
+            session = get_session()
+            checked = failed = pending = 0
+            try:
+                for log in self._logs:
+                    if log.status != "success":
+                        continue
+                    QApplication.processEvents()
+                    result = get_delivery_trace(
+                        graph_config, log.to_address, log.subject, log.sent_at)
+                    update_delivery_status(
+                        session, log.id, result["status"], result.get("message", ""))
+                    checked += 1
+                    if result["status"] == "failed":
+                        failed += 1
+                    elif result["status"] == "pending":
+                        pending += 1
+            finally:
+                session.close()
+        except Exception as e:
+            QMessageBox.critical(self, "配信状況の確認エラー", str(e))
+            return
+        self._load_jobs()
+        QMessageBox.information(
+            self, "配信状況を更新しました",
+            f"確認: {checked} 件\n配信失敗: {failed} 件\n確認待ち: {pending} 件\n\n"
+            "失敗理由は送信明細で確認できます。"
+        )
 
     def _export_csv(self):
         row = self._job_table.currentRow()
@@ -142,14 +203,15 @@ class HistoryTab(QWidget):
             with open(path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
                 writer.writerow(["事業所名", "送信先アドレス", "件名", "結果",
-                                  "エラー内容", "送信日時"])
+                                 "エラー内容", "配信状況", "配信状況詳細", "送信日時"])
                 for log in self._logs:
                     org_name = log.member.organization_name if log.member else ""
                     sent_at = log.sent_at.strftime("%Y/%m/%d %H:%M") if log.sent_at else ""
-                    status_label = {"success": "成功", "error": "エラー",
+                    status_label = {"success": "送信受付済み", "error": "送信エラー",
                                     "skip": "スキップ"}.get(log.status, log.status)
                     writer.writerow([org_name, log.to_address, log.subject,
-                                     status_label, log.error_message or "", sent_at])
+                                     status_label, log.error_message or "",
+                                     log.delivery_status or "", log.delivery_message or "", sent_at])
             QMessageBox.information(self, "完了", f"CSVを保存しました。\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))

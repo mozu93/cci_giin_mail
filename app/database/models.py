@@ -155,6 +155,10 @@ class SendLog(Base):
     status = Column(String, nullable=False)  # success / error / skip
     error_message = Column(Text, default="")
     sent_at = Column(DateTime, nullable=True)
+    # Exchange Onlineのメッセージ追跡結果（送信受付結果とは別の非同期状態）
+    delivery_status = Column(String, nullable=True, default="")
+    delivery_message = Column(Text, default="")
+    delivery_checked_at = Column(DateTime, nullable=True)
 
     job = relationship("SendJob", back_populates="logs")
     member = relationship("Member")

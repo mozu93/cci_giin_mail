@@ -50,6 +50,19 @@ def add_log(session: Session, job_id: int, member_id: int | None,
     return log
 
 
+def update_delivery_status(session: Session, log_id: int, status: str,
+                           message: str = "") -> SendLog | None:
+    """Exchange Online追跡結果を送信ログへ保存する。"""
+    log = session.get(SendLog, log_id)
+    if log is None:
+        return None
+    log.delivery_status = status
+    log.delivery_message = message
+    log.delivery_checked_at = datetime.now()
+    session.commit()
+    return log
+
+
 def get_jobs(session: Session) -> list[SendJob]:
     return (session.query(SendJob)
             .options(joinedload(SendJob.staff))

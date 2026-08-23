@@ -66,6 +66,9 @@ class _GraphSettingsWidget(QWidget):
         form = QFormLayout(grp)
         self._tenant_id = QLineEdit()
         self._client_id = QLineEdit()
+        self._trace_client_secret = QLineEdit()
+        self._trace_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self._trace_client_secret.setPlaceholderText("配信状況確認用（未設定可）")
         self._test_address = QLineEdit()
         self._from_address = QLineEdit()
         self._test_mode = QCheckBox("テストモード（本番宛先へ送らず、すべてテスト送信先へ送る）")
@@ -73,6 +76,7 @@ class _GraphSettingsWidget(QWidget):
         self._from_address.setPlaceholderText("未設定時はサインインした担当者本人から送信")
         form.addRow("テナントID", self._tenant_id)
         form.addRow("クライアントID", self._client_id)
+        form.addRow("追跡用クライアントシークレット", self._trace_client_secret)
         form.addRow("テスト送信先", self._test_address)
         form.addRow("代理差出人アドレス（任意）", self._from_address)
         form.addRow("", self._test_mode)
@@ -97,6 +101,7 @@ class _GraphSettingsWidget(QWidget):
         cfg = get_config().get("graph", {})
         self._tenant_id.setText(cfg.get("tenant_id", ""))
         self._client_id.setText(cfg.get("client_id", ""))
+        self._trace_client_secret.setText(cfg.get("trace_client_secret", ""))
         self._test_address.setText(cfg.get("test_address", ""))
         self._from_address.setText(cfg.get("from_address", ""))
         self._test_mode.setChecked(bool(cfg.get("test_mode", False)))
@@ -135,6 +140,7 @@ class _GraphSettingsWidget(QWidget):
         graph.update({
             "tenant_id":  self._tenant_id.text().strip(),
             "client_id":  self._client_id.text().strip(),
+            "trace_client_secret": self._trace_client_secret.text().strip(),
             "test_address": test_address,
             "from_address": from_address,
             "test_mode": self._test_mode.isChecked(),
