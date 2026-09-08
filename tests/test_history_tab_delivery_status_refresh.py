@@ -30,6 +30,7 @@ def test_refresh_delivery_status_updates_ui_and_db(qtbot, monkeypatch, db_sessio
         return {"status": "delivered", "message": "Microsoft 365で配信済みです。"}
 
     monkeypatch.setattr("app.services.email_service.get_delivery_trace", fake_get_delivery_trace)
+    monkeypatch.setattr("PyQt6.QtWidgets.QMessageBox.information", lambda *args, **kwargs: 0)
 
     from app.ui.history_tab import HistoryTab
     tab = HistoryTab()
@@ -41,8 +42,8 @@ def test_refresh_delivery_status_updates_ui_and_db(qtbot, monkeypatch, db_sessio
     tab._refresh_delivery_status()
 
     assert len(calls) == 1, f"get_delivery_trace が期待通り呼ばれること: {calls}"
-    assert tab._log_table.item(0, 3).text() == "配信済み"
-    assert tab._log_table.item(0, 4).text() == "Microsoft 365で配信済みです。"
+    assert tab._log_table.item(0, 5).text() == "配信済み"
+    assert tab._log_table.item(0, 6).text() == "Microsoft 365で配信済みです。"
 
     check_session = SessionLocal()
     from app.database.models import SendLog
