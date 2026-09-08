@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from app.database.models import EmailTemplate, Staff, SendJob, SendLog
 from app.services.send_job_service import (
     create_job, start_job, finish_job, add_log,
-    get_jobs, get_job_logs, delete_old_jobs
+    get_jobs, get_job_logs, delete_old_jobs, decode_recipient_addresses,
 )
 
 
@@ -43,6 +43,20 @@ def test_add_log_and_get(db_session):
     assert len(logs) == 2
     errors = [l for l in logs if l.status == "error"]
     assert errors[0].error_message == "タイムアウト"
+
+
+def test_add_log_preserves_all_recipients(db_session):
+    tmpl, staff = _setup(db_session)
+    job = create_job(db_session, "宛先履歴", tmpl.id, staff.id)
+    log = add_log(
+        db_session, job.id, None, "to@example.com", "件名", "success",
+        cc_addresses=["cc1@example.com", "cc2@example.com"],
+        bcc_addresses=["bcc@example.com"],
+    )
+
+    assert decode_recipient_addresses(log.cc_addresses) == [
+        "cc1@example.com", "cc2@example.com"]
+    assert decode_recipient_addresses(log.bcc_addresses) == ["bcc@example.com"]
 
 
 def test_finish_job_updates_counts(db_session):

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session, joinedload, load_only
 from app.database.models import SendJob, SendLog, Member
@@ -35,11 +36,14 @@ def finish_job(session: Session, job_id: int) -> None:
 
 def add_log(session: Session, job_id: int, member_id: int | None,
             to_address: str, subject: str, status: str,
-            error_message: str = "") -> SendLog:
+            error_message: str = "", cc_addresses: list[str] | None = None,
+            bcc_addresses: list[str] | None = None) -> SendLog:
     log = SendLog(
         job_id=job_id,
         member_id=member_id,
         to_address=to_address,
+        cc_addresses=json.dumps(cc_addresses or [], ensure_ascii=False),
+        bcc_addresses=json.dumps(bcc_addresses or [], ensure_ascii=False),
         subject=subject,
         status=status,
         error_message=error_message,
@@ -61,6 +65,15 @@ def update_delivery_status(session: Session, log_id: int, status: str,
     log.delivery_checked_at = datetime.now()
     session.commit()
     return log
+def decode_recipient_addresses(value: str | None) -> list[str]:
+    """履歴に保存した宛先JSONを表示用のリストへ戻す。"""
+    if not value:
+        return []
+    try:
+        decoded = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return decoded if isinstance(decoded, list) else []
 
 
 def get_jobs(session: Session) -> list[SendJob]:

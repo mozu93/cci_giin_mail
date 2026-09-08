@@ -13,7 +13,8 @@ def test_send_mail_receives_worker_access_token(monkeypatch):
                        access_token=None):
         received["access_token"] = access_token
 
-    def fake_add_log(session, job_id, member_id, to_addr, subject, status, error=None):
+    def fake_add_log(session, job_id, member_id, to_addr, subject, status,
+                     error=None, **kwargs):
         pass
 
     monkeypatch.setattr("app.ui.send_tab.send_mail", fake_send_mail)

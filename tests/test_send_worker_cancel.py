@@ -11,7 +11,8 @@ def test_cancel_stops_before_remaining_targets(monkeypatch):
         if len(sent) == 1:
             worker.request_cancel()
 
-    def fake_add_log(session, job_id, member_id, to_addr, subject, status, error=None):
+    def fake_add_log(session, job_id, member_id, to_addr, subject, status,
+                     error=None, **kwargs):
         pass
 
     monkeypatch.setattr("app.ui.send_tab.send_mail", fake_send_mail)
@@ -39,7 +40,8 @@ def test_cancel_logs_remaining_targets_as_skip(monkeypatch):
         if len(logged) == 1:
             worker.request_cancel()
 
-    def fake_add_log(session, job_id, member_id, to_addr, subject, status, error=None):
+    def fake_add_log(session, job_id, member_id, to_addr, subject, status,
+                     error=None, **kwargs):
         logged.append((to_addr, status))
 
     monkeypatch.setattr("app.ui.send_tab.send_mail", fake_send_mail)

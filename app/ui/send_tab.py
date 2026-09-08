@@ -2,7 +2,7 @@ import os
 import glob
 import time
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
+    QWidget, QDialog, QVBoxLayout, QHBoxLayout, QScrollArea,
     QGroupBox, QFormLayout, QComboBox, QLabel,
     QPushButton, QCheckBox, QLineEdit, QTextEdit,
     QProgressBar, QFileDialog, QMessageBox, QInputDialog,
@@ -69,6 +69,102 @@ def _duplicate_recipient_groups(targets: list[dict]) -> list[list[dict]]:
     return [items for items in grouped.values() if len(items) > 1]
 
 
+def _recipient_conflicts(targets: list[dict]) -> list[str]:
+    """1通のTo/CC/BCC内にある重複宛先を、人が確認できる文言で返す。"""
+    conflicts = []
+    for target in targets:
+        seen: dict[str, str] = {}
+        recipients = [
+            ("To", [target.get("to_address", "")]),
+            ("CC", target.get("cc_addresses", [])),
+            ("BCC", target.get("bcc_addresses", [])),
+        ]
+        for role, addresses in recipients:
+            for address in addresses:
+                normalized = address.strip().casefold()
+                if not normalized:
+                    continue
+                if normalized in seen:
+                    conflicts.append(
+                        f"{target.get('org_name', '')}: {address.strip()} "
+                        f"（{seen[normalized]}と{role}で重複）")
+                else:
+                    seen[normalized] = role
+    return conflicts
+
+
+def _cross_company_recipient_conflicts(members: list) -> list[str]:
+    """名簿アドレスが複数企業に登録されている場合、その組み合わせを返す。"""
+    owners: dict[str, tuple[int, str, str]] = {}
+    conflicts = []
+    reported: set[tuple[str, int, int]] = set()
+    for member in members:
+        for email in member.email_addresses:
+            address = email.address.strip()
+            normalized = address.casefold()
+            if not normalized:
+                continue
+            previous = owners.get(normalized)
+            if previous and previous[0] != member.id:
+                key = (normalized, previous[0], member.id)
+                if key not in reported:
+                    conflicts.append(
+                        f"{address}: {previous[1]} と {member.organization_name}")
+                    reported.add(key)
+            else:
+                owners[normalized] = (
+                    member.id, member.organization_name, address)
+    return conflicts
+
+
+def _validate_company_attachment_rule(rule: str) -> None:
+    """会社別ファイルが必ず会員番号から始まる安全なルールか検証する。"""
+    if not rule.startswith("{会員番号}_"):
+        raise ValueError(
+            "会社別添付のファイル名ルールは「{会員番号}_」で始めてください。")
+    if "/" in rule or "\\" in rule or ".." in rule:
+        raise ValueError(
+            "会社別添付のファイル名ルールにフォルダ指定や「..」は使用できません。")
+
+
+def _validate_company_attachment_files(
+        attach_rows: list[dict], folder: str, selected_numbers: set[str]) -> None:
+    """会社別添付が選択フォルダ内かつ該当会員番号のファイルか再検証する。"""
+    if not attach_rows:
+        return
+    if not folder:
+        raise ValueError("会社別添付のフォルダ情報がありません。再設定してください。")
+
+    root = os.path.normcase(os.path.realpath(folder))
+    problems = []
+    for row in attach_rows:
+        member_number = str(row.get("member_number", ""))
+        if member_number not in selected_numbers:
+            continue
+        if "/" in member_number or "\\" in member_number or ".." in member_number:
+            problems.append(f"会員番号がファイル名に使用できません: {member_number}")
+            continue
+        expected_prefix = f"{member_number}_".casefold()
+        for filepath in row.get("filepaths", []):
+            resolved = os.path.normcase(os.path.realpath(filepath))
+            try:
+                inside_folder = os.path.commonpath([root, resolved]) == root
+            except ValueError:
+                inside_folder = False
+            filename_matches = os.path.basename(filepath).casefold().startswith(
+                expected_prefix)
+            if not inside_folder or not filename_matches:
+                problems.append(
+                    f"{member_number}: {os.path.basename(filepath) or filepath}")
+    if problems:
+        details = "、".join(problems[:10])
+        if len(problems) > 10:
+            details += f" ほか{len(problems) - 10}件"
+        raise ValueError(
+            "別企業のファイルが添付される可能性があるため送信できません。"
+            f"会社別添付を再設定してください: {details}")
+
+
 _CONSECUTIVE_ERROR_LIMIT = 5
 
 
@@ -76,7 +172,9 @@ def _log_skipped_remaining(session, job_id, targets, start_index) -> int:
     """targets[start_index:] を送信ログにskipとして記録する。戻り値: 記録した件数"""
     for t in targets[start_index:]:
         add_log(session, job_id, t.get("member_id"), t.get("to_address", ""),
-                t.get("subject", ""), "skip")
+                t.get("subject", ""), "skip",
+                cc_addresses=t.get("cc_addresses", []),
+                bcc_addresses=t.get("bcc_addresses", []))
     return len(targets) - start_index
 
 
@@ -113,7 +211,9 @@ class _SendWorker(QThread):
                 to_addr = t["to_address"]
                 if not to_addr:
                     add_log(session, self._job_id, t.get("member_id"),
-                            "", t["subject"], "skip")
+                            "", t["subject"], "skip",
+                            cc_addresses=t.get("cc_addresses", []),
+                            bcc_addresses=t.get("bcc_addresses", []))
                     skip += 1
                     self.progress.emit(i, total, f"スキップ: {t['org_name']}")
                     continue
@@ -127,13 +227,17 @@ class _SendWorker(QThread):
                               t["body"], t.get("attachments", []),
                               **mail_options)
                     add_log(session, self._job_id, t.get("member_id"),
-                            to_addr, t["subject"], "success")
+                            to_addr, t["subject"], "success",
+                            cc_addresses=t.get("cc_addresses", []),
+                            bcc_addresses=t.get("bcc_addresses", []))
                     success += 1
                     consecutive_errors = 0
                     self.progress.emit(i, total, f"送信済: {t['org_name']}")
                 except Exception as e:
                     add_log(session, self._job_id, t.get("member_id"),
-                            to_addr, t["subject"], "error", str(e))
+                            to_addr, t["subject"], "error", str(e),
+                            cc_addresses=t.get("cc_addresses", []),
+                            bcc_addresses=t.get("bcc_addresses", []))
                     error += 1
                     consecutive_errors += 1
                     self.progress.emit(i, total, f"エラー: {t['org_name']} — {e}")
@@ -390,9 +494,10 @@ class SendTab(QWidget):
         rule_row.addWidget(QLabel("ファイル名:"))
         self._rule_edit = QLineEdit("{会員番号}_*.pdf")
         self._rule_edit.setToolTip(
-            "{会員番号} の直後にアンダースコアを挟んだ命名を推奨します。\n"
+            "誤添付防止のため、{会員番号}_ で始まるルールが必須です。\n"
             "例: A001_請求書.pdf、A001_確認書_○○商事.pdf\n"
-            "* は任意の文字列にマッチします（ワイルドカード）。")
+            "* は任意の文字列にマッチします（ワイルドカード）。\n"
+            "フォルダ指定や .. は使用できません。")
         rule_row.addWidget(self._rule_edit)
         btn_match = QPushButton("添付ファイルを確認・設定")
         btn_match.clicked.connect(self._check_matching)
@@ -425,11 +530,12 @@ class SendTab(QWidget):
         self._job_name.setPlaceholderText("例：2026年6月 総会案内")
         f.addRow("ジョブ名", self._job_name)
         self._cc_edit = QLineEdit()
-        self._cc_edit.setPlaceholderText("任意。複数はカンマ、セミコロン、改行で区切る")
+        self._cc_edit.setPlaceholderText(
+            "事務局アドレス（全企業へのメールに追加）。複数はカンマ等で区切る")
         self._bcc_edit = QLineEdit()
         self._bcc_edit.setPlaceholderText("任意。複数はカンマ、セミコロン、改行で区切る")
-        f.addRow("CC", self._cc_edit)
-        f.addRow("BCC", self._bcc_edit)
+        f.addRow("事務局CC（全社共通）", self._cc_edit)
+        f.addRow("BCC（全社共通）", self._bcc_edit)
         layout.addLayout(f)
         self._test_mode_label = QLabel("")
         self._test_mode_label.setWordWrap(True)
@@ -824,6 +930,20 @@ class SendTab(QWidget):
             QMessageBox.warning(self, "エラー", "宛先を先に選択してください。")
             return
         rule = self._rule_edit.text().strip()
+        try:
+            _validate_company_attachment_rule(rule)
+            unsafe_numbers = [
+                m.member_number for m in members
+                if "/" in m.member_number or "\\" in m.member_number
+                or ".." in m.member_number
+            ]
+            if unsafe_numbers:
+                raise ValueError(
+                    "会社別添付に使用できない会員番号があります: "
+                    + "、".join(unsafe_numbers))
+        except ValueError as e:
+            QMessageBox.warning(self, "入力エラー", str(e))
+            return
         attach_list = []
         for m in members:
             to_addr = m.email_addresses[0].address if m.email_addresses else ""
@@ -874,31 +994,39 @@ class SendTab(QWidget):
             if sig:
                 sig_body = "\n\n" + sig.body
 
+        selected_members = self._recipient.get_selected_members()
         use_attach = self._chk_use_attach.isChecked()
+        if use_attach and self._attach_list:
+            _validate_company_attachment_rule(self._rule_edit.text().strip())
+            _validate_company_attachment_files(
+                self._attach_list,
+                self._individual_folder,
+                {m.member_number for m in selected_members},
+            )
         attach_map: dict[str, list[str]] = {
             r["member_number"]: r["filepaths"]
             for r in self._attach_list if r["found"]
         } if use_attach else {}
         common_attachments = self._common_attachments if use_attach else []
-        member_cache = {m.id: m for m in self._members}
-        table = self._recipient.table
-        no_email_text = self._recipient.no_email_text
+        # 同一企業に複数のアドレスが登録されている場合は、登録順1番目を
+        # To、2番目以降をCCにして1通にまとめる。
+        company_conflicts = _cross_company_recipient_conflicts(selected_members)
+        if company_conflicts:
+            details = "、".join(company_conflicts[:10])
+            if len(company_conflicts) > 10:
+                details += f" ほか{len(company_conflicts) - 10}件"
+            raise ValueError(
+                "同じメールアドレスが複数企業に登録されているため送信できません。"
+                f"名簿を確認してください: {details}")
 
         checked_rows = []
-        for row in range(table.rowCount()):
-            cb = table.cellWidget(row, 0)
-            if not (cb and cb.isChecked()):
-                continue
-            item = table.item(row, 3)
-            mid = item.data(Qt.ItemDataRole.UserRole) if item else None
-            addr_item = table.item(row, 6)
-            to_addr = addr_item.text() if addr_item else ""
-            if to_addr == no_email_text:
-                to_addr = ""
-            m = member_cache.get(mid) if mid else None
-            if not m:
-                continue
-            checked_rows.append({"member": m, "to_address": to_addr})
+        for m in selected_members:
+            addresses = [email.address for email in m.email_addresses]
+            checked_rows.append({
+                "member": m,
+                "to_address": addresses[0] if addresses else "",
+                "cc_addresses": addresses[1:],
+            })
 
         cc_addresses = parse_recipient_addresses(self._cc_edit.text())
         bcc_addresses = parse_recipient_addresses(self._bcc_edit.text())
@@ -922,7 +1050,9 @@ class SendTab(QWidget):
         )
         if isinstance(targets, list):
             for target in targets:
-                target["cc_addresses"] = list(cc_addresses)
+                # 企業ごとのCC（メール2以降）に、画面で指定した共通CCを追加する。
+                target["cc_addresses"] = (
+                    target.get("cc_addresses", []) + list(cc_addresses))
                 target["bcc_addresses"] = list(bcc_addresses)
         return targets
 
@@ -1058,6 +1188,18 @@ class SendTab(QWidget):
                 + "\n".join(details))
             return
 
+        conflicts = _recipient_conflicts(targets)
+        if conflicts:
+            details = "\n".join(f"・{item}" for item in conflicts[:20])
+            if len(conflicts) > 20:
+                details += f"\nほか {len(conflicts) - 20}件"
+            QMessageBox.warning(
+                self, "宛先の重複",
+                "同じメール内のTo／CC／BCCに重複があります。\n"
+                "宛先の登録または事務局CC／BCCを見直してください。\n\n"
+                + details)
+            return
+
         test_mode = bool(graph_config.get("test_mode"))
         if test_mode:
             try:
@@ -1085,26 +1227,21 @@ class SendTab(QWidget):
         tmpl_name = self._template_combo.currentText()
         has_attach = any(t["attachments"] for t in targets)
         no_email_count = sum(1 for t in targets if not t["to_address"])
-        msg = (
-            f"以下の内容で送信します。よろしいですか？\n\n"
+        summary = (
             f"　ジョブ名　　: {job_name}\n"
             f"　操作者　　　: {self._staff_name}\n"
             f"　認証アカウント: {account_username or '取得不可'}\n"
             f"　代理差出人　: {graph_config.get('from_address') or '認証アカウント本人'}\n"
-            f"　CC　　　　　: {self._cc_edit.text().strip() or 'なし'}\n"
-            f"　BCC　　　　 : {self._bcc_edit.text().strip() or 'なし'}\n"
+            f"　事務局CC　　: {self._cc_edit.text().strip() or 'なし'}\n"
+            f"　共通BCC　　 : {self._bcc_edit.text().strip() or 'なし'}\n"
             f"　送信モード　: {'テストモード（全件をテスト送信先へ振替）' if test_mode else '通常送信'}\n"
             f"　テンプレート: {tmpl_name}\n"
             f"　送信件数　　: {len(targets)} 件"
             + (f"（メール無し {no_email_count} 件はスキップ）" if no_email_count else "") + "\n"
-            f"　添付ファイル: {'あり' if has_attach else 'なし'}\n\n"
-            "送信後は取り消せません。"
+            f"　添付ファイル: {'あり' if has_attach else 'なし'}"
         )
-        ret = QMessageBox.question(
-            self, "送信確認", msg,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No)
-        if ret != QMessageBox.StandardButton.Yes:
+        from app.ui.dialogs.send_confirm_dialog import SendConfirmDialog
+        if SendConfirmDialog(summary, targets, parent=self).exec() != QDialog.DialogCode.Accepted:
             return
 
         session = get_session()

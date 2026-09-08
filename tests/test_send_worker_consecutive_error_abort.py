@@ -13,7 +13,8 @@ def test_aborts_after_consecutive_error_limit(monkeypatch):
 
     logged = []
 
-    def fake_add_log(session, job_id, member_id, to_addr, subject, status, error=None):
+    def fake_add_log(session, job_id, member_id, to_addr, subject, status,
+                     error=None, **kwargs):
         logged.append((to_addr, status))
 
     monkeypatch.setattr("app.ui.send_tab.send_mail", fake_send_mail)

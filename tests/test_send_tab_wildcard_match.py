@@ -1,5 +1,6 @@
 # tests/test_send_tab_wildcard_match.py
 import os
+import pytest
 from PyQt6.QtWidgets import QDialog
 
 
@@ -82,6 +83,7 @@ def test_build_targets_passes_all_matched_files(qtbot, monkeypatch):
         "filepaths": ["/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"],
         "found": True,
     }]
+    tab._individual_folder = "/tmp"
     tab._chk_use_attach.setChecked(True)
 
     result = tab._build_targets()
@@ -105,6 +107,7 @@ def test_build_targets_excludes_attachments_when_checkbox_unchecked(qtbot, monke
         "filepaths": ["/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"],
         "found": True,
     }]
+    tab._individual_folder = "/tmp"
 
     # 「添付ファイルを使用する」チェックボックスは初期状態でオフ
     assert tab._chk_use_attach.isChecked() is False
@@ -118,3 +121,48 @@ def test_build_targets_excludes_attachments_when_checkbox_unchecked(qtbot, monke
     tab._chk_use_attach.setChecked(True)
     result2 = tab._build_targets()
     assert result2["A001"] == ["/tmp/A001_請求書.pdf", "/tmp/A001_確認書_org1.pdf"]
+
+
+def test_build_targets_uses_first_company_address_as_to_and_rest_as_cc(
+        qtbot, monkeypatch):
+    member = _Member(1, "A001", "org1")
+    member.email_addresses = [
+        _Email("representative@example.com"),
+        _Email("manager@example.com"),
+        _Email("accounting@example.com"),
+    ]
+    _patch_common(monkeypatch)
+    monkeypatch.setattr("app.ui.send_tab.get_members", lambda s: [member])
+
+    from app.ui.send_tab import SendTab
+    tab = SendTab(staff_name="担当者A")
+    qtbot.addWidget(tab)
+    tab._recipient.set_checks_by_member_ids({1})
+    tab._cc_edit.setText("common@example.com")
+
+    targets = tab._build_targets()
+
+    assert len(targets) == 1
+    assert targets[0]["to_address"] == "representative@example.com"
+    assert targets[0]["cc_addresses"] == [
+        "manager@example.com", "accounting@example.com", "common@example.com"]
+
+
+def test_build_targets_blocks_address_shared_by_different_companies(
+        qtbot, monkeypatch):
+    member_a = _Member(1, "A001", "A社")
+    member_a.email_addresses = [
+        _Email("a@example.com"), _Email("shared@example.com")]
+    member_b = _Member(2, "B002", "B社")
+    member_b.email_addresses = [_Email("SHARED@example.com")]
+    members = [member_a, member_b]
+    _patch_common(monkeypatch)
+    monkeypatch.setattr("app.ui.send_tab.get_members", lambda s: members)
+
+    from app.ui.send_tab import SendTab
+    tab = SendTab(staff_name="担当者A")
+    qtbot.addWidget(tab)
+    tab._recipient.set_checks_by_member_ids({1, 2})
+
+    with pytest.raises(ValueError, match="複数企業"):
+        tab._build_targets()

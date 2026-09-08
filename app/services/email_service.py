@@ -120,7 +120,8 @@ def compile_send_targets(
 ) -> list[dict]:
     """チェック済み行リスト → 送信ターゲット dict リスト（純変換）。
 
-    checked_rows の各要素: {"member": Member, "to_address": str}
+    checked_rows の各要素: {"member": Member, "to_address": str,
+    "cc_addresses": list[str]}
     to_address が空文字の場合はメール無しとして扱う（送信時スキップ対象）。
     """
     targets = []
@@ -142,6 +143,7 @@ def compile_send_targets(
             "org_name":    m.organization_name,
             "name":        m.name,
             "to_address":  to_addr,
+            "cc_addresses": list(row.get("cc_addresses", [])),
             "subject":     render_body(subject_tpl, context),
             "body":        render_body(body_tpl + sig_body, context),
             "attachments": list(common_attachments) + attach_map.get(m.member_number, []),

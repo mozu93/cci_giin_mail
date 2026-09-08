@@ -13,7 +13,9 @@ def test_history_tab_job_select_does_not_crash(qtbot, monkeypatch, db_sessionmak
     setup_session.add_all([tmpl, staff, member])
     setup_session.flush()
     job = create_job(setup_session, "テストジョブ", tmpl.id, staff.id)
-    add_log(setup_session, job.id, member.id, "a@example.com", "件名", "success")
+    add_log(
+        setup_session, job.id, member.id, "a@example.com", "件名", "success",
+        cc_addresses=["cc@example.com"], bcc_addresses=["bcc@example.com"])
     setup_session.commit()
     setup_session.close()
 
@@ -30,3 +32,6 @@ def test_history_tab_job_select_does_not_crash(qtbot, monkeypatch, db_sessionmak
 
     assert tab._log_table.rowCount() == 1
     assert tab._log_table.item(0, 0).text() == "○○商事"
+    assert tab._log_table.item(0, 1).text() == "a@example.com"
+    assert tab._log_table.item(0, 2).text() == "cc@example.com"
+    assert tab._log_table.item(0, 3).text() == "bcc@example.com"

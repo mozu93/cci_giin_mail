@@ -77,6 +77,29 @@ def test_sig_body_appended():
     assert result[0]["body"] == "本文\n\n--\n署名テスト"
 
 
+def test_company_secondary_addresses_are_included_as_cc():
+    member = _make_member()
+    rows = [{
+        "member": member,
+        "to_address": "representative@example.com",
+        "cc_addresses": ["manager@example.com", "accounting@example.com"],
+    }]
+    result = compile_send_targets(
+        checked_rows=rows,
+        subject_tpl="件名",
+        body_tpl="本文",
+        sig_body="",
+        merge_data={},
+        col_labels={},
+        common_attachments=[],
+        attach_map={},
+    )
+
+    assert result[0]["to_address"] == "representative@example.com"
+    assert result[0]["cc_addresses"] == [
+        "manager@example.com", "accounting@example.com"]
+
+
 # ─── 差し込みデータ ──────────────────────────────────────────
 
 

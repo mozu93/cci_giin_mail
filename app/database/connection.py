@@ -125,6 +125,16 @@ def _migrate_sqlite(engine):
                 "ALTER TABLE send_logs ADD COLUMN delivery_checked_at DATETIME"
             ))
             conn.commit()
+        if "cc_addresses" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN cc_addresses TEXT NOT NULL DEFAULT '[]'"
+            ))
+            conn.commit()
+        if "bcc_addresses" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN bcc_addresses TEXT NOT NULL DEFAULT '[]'"
+            ))
+            conn.commit()
 
 
 def _migrate_postgresql(engine):
@@ -168,6 +178,12 @@ def _migrate_postgresql(engine):
         if "delivery_checked_at" not in send_log_cols:
             conn.execute(text(
                 "ALTER TABLE send_logs ADD COLUMN delivery_checked_at TIMESTAMP"))
+        if "cc_addresses" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN cc_addresses TEXT NOT NULL DEFAULT '[]'"))
+        if "bcc_addresses" not in send_log_cols:
+            conn.execute(text(
+                "ALTER TABLE send_logs ADD COLUMN bcc_addresses TEXT NOT NULL DEFAULT '[]'"))
 
 
 def get_engine(db_path: str | None = None):

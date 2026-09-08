@@ -123,7 +123,7 @@ class RecipientPanel(QWidget):
         hdr = QHBoxLayout()
         hdr.addWidget(QLabel("<b>送信先一覧</b>"))
         hdr.addStretch()
-        self._count_label = QLabel("0社 0件選択")
+        self._count_label = QLabel("0社選択")
         hdr.addWidget(self._count_label)
         layout.addLayout(hdr)
 
@@ -162,7 +162,7 @@ class RecipientPanel(QWidget):
         self._table = QTableWidget(0, 9)
         self._table.setHorizontalHeaderLabels(
             ["送信", "会員番号", "会議所役職名", "事業所名", "役職名", "氏名",
-             "メールアドレス", "事業所名フリガナ", "氏名フリガナ"])
+             "メールアドレス（To／CC）", "事業所名フリガナ", "氏名フリガナ"])
         h = self._table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         for col in range(1, 7):
@@ -173,7 +173,7 @@ class RecipientPanel(QWidget):
         self._table.setColumnWidth(3, 200)
         self._table.setColumnWidth(4, 90)
         self._table.setColumnWidth(5, 90)
-        self._table.setColumnWidth(6, 200)
+        self._table.setColumnWidth(6, 360)
         self._table.setColumnHidden(7, True)
         self._table.setColumnHidden(8, True)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -200,32 +200,34 @@ class RecipientPanel(QWidget):
         org_kana = _kana(member.organization_kana or "")
         name_kana = _kana(member.name_kana or "")
 
-        emails = member.email_addresses if member.email_addresses else [None]
-        for email in emails:
-            row = self._table.rowCount()
-            self._table.insertRow(row)
-            cb = QCheckBox()
-            cb.setChecked(checked)
-            cb.stateChanged.connect(self._update_count)
-            self._table.setCellWidget(row, 0, cb)
-            self._table.setItem(row, 1, QTableWidgetItem(member.member_number))
-            self._table.setItem(row, 2, QTableWidgetItem(pos_name))
-            org_item = QTableWidgetItem(member.organization_name)
-            org_item.setData(Qt.ItemDataRole.UserRole, member.id)
-            self._table.setItem(row, 3, org_item)
-            self._table.setItem(row, 4, QTableWidgetItem(member.title or ""))
-            name_item = QTableWidgetItem(member.name)
-            self._table.setItem(row, 5, name_item)
-            if email:
-                self._table.setItem(row, 6, QTableWidgetItem(email.address))
-            else:
-                addr_item = QTableWidgetItem(_NO_EMAIL_TEXT)
-                addr_item.setForeground(_ORANGE)
-                org_item.setForeground(_ORANGE)
-                name_item.setForeground(_ORANGE)
-                self._table.setItem(row, 6, addr_item)
-            self._table.setItem(row, 7, QTableWidgetItem(org_kana))
-            self._table.setItem(row, 8, QTableWidgetItem(name_kana))
+        row = self._table.rowCount()
+        self._table.insertRow(row)
+        cb = QCheckBox()
+        cb.setChecked(checked)
+        cb.stateChanged.connect(self._update_count)
+        self._table.setCellWidget(row, 0, cb)
+        self._table.setItem(row, 1, QTableWidgetItem(member.member_number))
+        self._table.setItem(row, 2, QTableWidgetItem(pos_name))
+        org_item = QTableWidgetItem(member.organization_name)
+        org_item.setData(Qt.ItemDataRole.UserRole, member.id)
+        self._table.setItem(row, 3, org_item)
+        self._table.setItem(row, 4, QTableWidgetItem(member.title or ""))
+        name_item = QTableWidgetItem(member.name)
+        self._table.setItem(row, 5, name_item)
+        if member.email_addresses:
+            addresses = [email.address for email in member.email_addresses]
+            address_text = f"To: {addresses[0]}"
+            if len(addresses) > 1:
+                address_text += f" / CC: {', '.join(addresses[1:])}"
+            self._table.setItem(row, 6, QTableWidgetItem(address_text))
+        else:
+            addr_item = QTableWidgetItem(_NO_EMAIL_TEXT)
+            addr_item.setForeground(_ORANGE)
+            org_item.setForeground(_ORANGE)
+            name_item.setForeground(_ORANGE)
+            self._table.setItem(row, 6, addr_item)
+        self._table.setItem(row, 7, QTableWidgetItem(org_kana))
+        self._table.setItem(row, 8, QTableWidgetItem(name_kana))
 
     def _update_count(self):
         checked = no_email = 0
@@ -241,7 +243,7 @@ class RecipientPanel(QWidget):
                 item = self._table.item(row, 6)
                 if item and item.text() == _NO_EMAIL_TEXT:
                     no_email += 1
-        self._count_label.setText(f"{len(checked_member_ids)}社 {checked}件選択")
+        self._count_label.setText(f"{len(checked_member_ids)}社選択")
         if no_email:
             self._no_email_label.setText(
                 f"⚠ メール無し {no_email}件が含まれています（送信時スキップ）")

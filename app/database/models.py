@@ -151,6 +151,8 @@ class SendLog(Base):
     job_id = Column(Integer, ForeignKey("send_jobs.id"), nullable=False)
     member_id = Column(Integer, ForeignKey("members.id"), nullable=True)
     to_address = Column(String, nullable=False)
+    cc_addresses = Column(Text, nullable=False, default="[]")
+    bcc_addresses = Column(Text, nullable=False, default="[]")
     subject = Column(String, nullable=False)
     status = Column(String, nullable=False)  # success / error / skip
     error_message = Column(Text, default="")

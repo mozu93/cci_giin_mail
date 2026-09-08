@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from app.database.connection import get_session
 from app.services.send_job_service import (
-    get_jobs, get_job_logs, update_delivery_status,
+    get_jobs, get_job_logs, update_delivery_status, decode_recipient_addresses,
 )
 from app.utils.app_config import get_graph_config
 
@@ -68,14 +68,14 @@ class HistoryTab(QWidget):
         log_layout = QVBoxLayout(log_widget)
         log_layout.addWidget(QLabel(
             "送信明細（下段は相手先への配信結果。配信失敗はここで確認できます）"))
-        self._log_table = QTableWidget(0, 5)
+        self._log_table = QTableWidget(0, 7)
         self._log_table.setHorizontalHeaderLabels(
-            ["事業所名", "送信先アドレス", "件名", "結果", "エラー内容"])
+            ["事業所名", "To", "CC", "BCC", "件名", "結果", "エラー内容"])
         log_header = self._log_table.horizontalHeader()
-        for column, width in ((0, 160), (1, 240), (3, 130), (4, 350)):
+        for column, width in ((0, 160), (1, 240), (2, 220), (3, 180), (5, 130), (6, 350)):
             log_header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
             self._log_table.setColumnWidth(column, width)
-        log_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        log_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self._log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         log_layout.addWidget(self._log_table)
         splitter.addWidget(log_widget)
@@ -136,7 +136,11 @@ class HistoryTab(QWidget):
             org_name = log.member.organization_name if log.member else ""
             self._log_table.setItem(r, 0, QTableWidgetItem(org_name))
             self._log_table.setItem(r, 1, QTableWidgetItem(log.to_address))
-            self._log_table.setItem(r, 2, QTableWidgetItem(log.subject))
+            self._log_table.setItem(r, 2, QTableWidgetItem(
+                ", ".join(decode_recipient_addresses(log.cc_addresses))))
+            self._log_table.setItem(r, 3, QTableWidgetItem(
+                ", ".join(decode_recipient_addresses(log.bcc_addresses))))
+            self._log_table.setItem(r, 4, QTableWidgetItem(log.subject))
             delivery_label = {
                 "delivered": "配信済み", "pending": "確認待ち", "failed": "配信失敗",
                 "quarantined": "隔離", "filteredasspam": "スパム処理",
@@ -144,9 +148,9 @@ class HistoryTab(QWidget):
             status_label = delivery_label or {
                 "success": "送信受付済み", "error": "送信エラー", "skip": "スキップ"
             }.get(log.status, log.status)
-            self._log_table.setItem(r, 3, QTableWidgetItem(status_label))
+            self._log_table.setItem(r, 5, QTableWidgetItem(status_label))
             detail = log.delivery_message if delivery_label else log.error_message
-            self._log_table.setItem(r, 4, QTableWidgetItem(detail or ""))
+            self._log_table.setItem(r, 6, QTableWidgetItem(detail or ""))
 
     def _refresh_delivery_status(self):
         row = self._job_table.currentRow()
@@ -202,16 +206,23 @@ class HistoryTab(QWidget):
         try:
             with open(path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["事業所名", "送信先アドレス", "件名", "結果",
-                                 "エラー内容", "配信状況", "配信状況詳細", "送信日時"])
+                writer.writerow(["事業所名", "To", "CC", "BCC", "件名", "結果",
+                                  "エラー内容", "配信状況", "配信状況詳細", "送信日時"])
                 for log in self._logs:
                     org_name = log.member.organization_name if log.member else ""
                     sent_at = log.sent_at.strftime("%Y/%m/%d %H:%M") if log.sent_at else ""
                     status_label = {"success": "送信受付済み", "error": "送信エラー",
                                     "skip": "スキップ"}.get(log.status, log.status)
-                    writer.writerow([org_name, log.to_address, log.subject,
-                                     status_label, log.error_message or "",
-                                     log.delivery_status or "", log.delivery_message or "", sent_at])
+                    writer.writerow([
+                        org_name,
+                        log.to_address,
+                        ", ".join(decode_recipient_addresses(log.cc_addresses)),
+                        ", ".join(decode_recipient_addresses(log.bcc_addresses)),
+                        log.subject,
+                        status_label,
+                        log.error_message or "",
+                        log.delivery_status or "", log.delivery_message or "", sent_at,
+                    ])
             QMessageBox.information(self, "完了", f"CSVを保存しました。\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "エラー", str(e))
