@@ -15,6 +15,7 @@ def test_body_edit_has_expand_button(qtbot, monkeypatch):
     qtbot.addWidget(tab)
 
     assert tab._body_edit.maximumHeight() >= 240
+    assert not tab._body_edit.acceptRichText()
     assert hasattr(tab, "_btn_expand_body")
 
 
@@ -35,6 +36,7 @@ def test_expand_body_edit_accept(qtbot, monkeypatch):
         # Find the internal QTextEdit in the dialog
         editor = self.findChild(QTextEdit)
         if editor:
+            assert not editor.acceptRichText()
             # Simulate user editing: replace text
             editor.setPlainText("Modified text from dialog")
         # Return truthy value (1 = accepted)

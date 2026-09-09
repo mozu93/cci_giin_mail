@@ -403,6 +403,9 @@ class SendTab(QWidget):
         self._sig_combo = _NoWheelComboBox()
         self._subject_edit = QLineEdit()
         self._body_edit = QTextEdit()
+        # メール本文はプレーンテキストとして送信する。WordやOutlook等から
+        # 貼り付けたHTMLの段落・空白書式が編集操作を妨げないようにする。
+        self._body_edit.setAcceptRichText(False)
         self._body_edit.setMinimumHeight(200)
         self._body_edit.setMaximumHeight(280)
         self._btn_expand_body = QPushButton("本文を拡大して編集")
@@ -805,6 +808,7 @@ class SendTab(QWidget):
         dlg.resize(700, 600)
         layout = _QVBoxLayout(dlg)
         editor = QTextEdit()
+        editor.setAcceptRichText(False)
         editor.setPlainText(self._body_edit.toPlainText())
         layout.addWidget(editor)
         btn_row = QHBoxLayout()
