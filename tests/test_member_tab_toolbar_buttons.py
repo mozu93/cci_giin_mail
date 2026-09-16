@@ -63,6 +63,8 @@ class _Member:
         self.title = ""
         self.position = None
         self.committee = None
+        self.committee_id = None
+        self.committee_role = None
         self.email_addresses = []
         self.is_active = True
         self.updated_at = None

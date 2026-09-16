@@ -13,6 +13,8 @@ def test_member_tab_shows_committee_column(qtbot, monkeypatch):
             self.title = ""
             self.position = None
             self.committee = _Committee()
+            self.committee_id = 1
+            self.committee_role = None
             self.email_addresses = []
             self.is_active = True
             self.updated_at = None
@@ -43,6 +45,8 @@ def test_member_tab_shows_committee_column(qtbot, monkeypatch):
     tab = MemberTab()
     qtbot.addWidget(tab)
 
-    assert tab._table.columnCount() == 11
+    assert tab._table.columnCount() == 12
     assert tab._table.horizontalHeaderItem(3).text() == "委員会"
     assert tab._table.item(0, 3).text() == "総務・運営委員会"
+    assert tab._table.horizontalHeaderItem(4).text() == "委員会役職"
+    assert tab._table.item(0, 4).text() == "委員"

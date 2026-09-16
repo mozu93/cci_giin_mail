@@ -661,7 +661,21 @@ class _DataWidget(QWidget):
 class _PositionCommitteeWidget(QWidget):
     def __init__(self):
         super().__init__()
-        layout = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+
+        history_grp = QGroupBox("一括変更モード")
+        history_layout = QVBoxLayout(history_grp)
+        self._bulk_edit_mode = QCheckBox(
+            "一括変更モードにする（変更履歴には残しますが「最近の更新」には表示しません）")
+        self._bulk_edit_mode.toggled.connect(self._save_bulk_edit_mode_immediately)
+        history_layout.addWidget(self._bulk_edit_mode)
+        history_layout.addWidget(QLabel(
+            "※ 委員会役職の一括登録など大量の変更を行う前にオンにすると、名簿管理タブの\n"
+            "　 「最近の更新」に一括分が並んで代表者変更などが埋もれるのを防げます。\n"
+            "　 変更履歴（会員ごと）には通常どおり記録されます。作業後はオフに戻してください。"))
+        outer.addWidget(history_grp)
+
+        layout = QHBoxLayout()
         pos_grp = QGroupBox("役職")
         pos_layout = QVBoxLayout(pos_grp)
         self._position_widget = _PositionWidget()
@@ -672,6 +686,17 @@ class _PositionCommitteeWidget(QWidget):
         committee_layout.addWidget(self._committee_widget)
         layout.addWidget(pos_grp)
         layout.addWidget(committee_grp)
+        outer.addLayout(layout)
+
+        # 初期表示のsetCheckedで保存処理が走らないよう、シグナルを止めて反映する
+        from app.utils.app_config import is_bulk_edit_mode
+        self._bulk_edit_mode.blockSignals(True)
+        self._bulk_edit_mode.setChecked(is_bulk_edit_mode())
+        self._bulk_edit_mode.blockSignals(False)
+
+    def _save_bulk_edit_mode_immediately(self, enabled: bool):
+        from app.utils.app_config import set_bulk_edit_mode
+        set_bulk_edit_mode(enabled)
 
     def refresh(self):
         self._position_widget._load()

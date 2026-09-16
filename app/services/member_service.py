@@ -7,11 +7,56 @@ from app.database.models import Member, EmailAddress, MemberHistory, Position
 from app.utils import to_katakana
 
 
+COMMITTEE_ROLE_LIMITS = {"委員長": 1, "副委員長": 2}
+
+
+def validate_committee_role(session: Session, committee_id: int | None,
+                            committee_role: str | None,
+                            exclude_member_id: int | None = None) -> None:
+    """委員会内役職の人数上限（委員長1名・副委員長2名）を超えないか確認する。"""
+    limit = COMMITTEE_ROLE_LIMITS.get(committee_role or "")
+    if not committee_id or not limit:
+        return
+    q = session.query(Member).filter(
+        Member.committee_id == committee_id,
+        Member.committee_role == committee_role,
+        Member.is_active == True,
+    )
+    if exclude_member_id is not None:
+        q = q.filter(Member.id != exclude_member_id)
+    if q.count() >= limit:
+        raise ValueError(
+            f"この委員会の「{committee_role}」はすでに{limit}名登録されています。")
+
+
+_COMMITTEE_ROLE_TIER = {"担当副会頭": 0, "委員長": 1, "副委員長": 2}
+
+
+def committee_role_display(member: Member) -> str:
+    """委員会役職の表示名を返す。委員会に所属していて役職未設定の場合は「委員」とする。"""
+    if member.committee_role:
+        return member.committee_role
+    return "委員" if member.committee_id else ""
+
+
+def sort_members_by_committee_role(members: list[Member]) -> list[Member]:
+    """担当副会頭→委員長→副委員長→委員の順に並べ、各グループ内は
+    会議所役職順（会頭→副会頭→常議員→監事→議員）、同役職内は
+    事業所名フリガナ順とする。"""
+    def key(m: Member):
+        tier = _COMMITTEE_ROLE_TIER.get(m.committee_role or "", 3)
+        pos_order = m.position.sort_order if m.position else 10**9
+        disp_order = m.display_order if m.display_order is not None else 10**9
+        return (tier, pos_order, disp_order, m.organization_kana or "")
+    return sorted(members, key=key)
+
+
 def member_to_snapshot(member: Member) -> str:
     data = {
         "member_number":     member.member_number,
         "position_name":     member.position.name if member.position else "",
         "committee_name":    member.committee.name if member.committee else "",
+        "committee_role":    member.committee_role or "",
         "organization_name": member.organization_name,
         "organization_kana": member.organization_kana,
         "title":             member.title,
@@ -57,15 +102,18 @@ def create_member(session: Session, member_number: str,
 def record_member_history(session: Session, member_id: int,
                           changed_by: str, change_reason: str,
                           commit: bool = True) -> None:
-    """現在のメンバー状態（メールアドレス含む）をスナップショットとして履歴に記録する。"""
+    """現在のメンバー状態（メールアドレス含む）をスナップショットとして履歴に記録する。
+    一括変更モード中の記録は「最近の更新」一覧から除外される。"""
     member = session.get(Member, member_id)
     if member is None:
         return
+    from app.utils.app_config import is_bulk_edit_mode
     session.add(MemberHistory(
         member_id=member_id,
         changed_by=changed_by or "システム",
         change_reason=change_reason,
         snapshot=member_to_snapshot(member),
+        exclude_from_recent=is_bulk_edit_mode(),
     ))
     if commit:
         session.commit()
@@ -78,6 +126,7 @@ def get_member(session: Session, member_id: int) -> Member | None:
 
 
 def get_members(session: Session, position_id: int | None = None,
+                committee_id: int | None = None,
                 keyword: str | None = None,
                 active_only: bool = True) -> list[Member]:
     q = (session.query(Member)
@@ -89,6 +138,8 @@ def get_members(session: Session, position_id: int | None = None,
         q = q.filter(Member.is_active == True)
     if position_id is not None:
         q = q.filter(Member.position_id == position_id)
+    if committee_id is not None:
+        q = q.filter(Member.committee_id == committee_id)
     members = q.order_by(
         Position.sort_order.asc().nullslast(),
         Member.display_order.asc().nullslast(),
@@ -141,12 +192,13 @@ def update_member(session: Session, member_id: int,
     if member is None:
         raise ValueError(f"会員ID {member_id} が見つかりません")
     # 変更前のスナップショット（メールアドレス含む）を記録
-    snapshot = member_to_snapshot(member)
+    from app.utils.app_config import is_bulk_edit_mode
     session.add(MemberHistory(
         member_id=member_id,
         changed_by=changed_by,
         change_reason=change_reason,
-        snapshot=snapshot,
+        snapshot=member_to_snapshot(member),
+        exclude_from_recent=is_bulk_edit_mode(),
     ))
     for key, value in kwargs.items():
         setattr(member, key, value)
@@ -161,6 +213,7 @@ def update_member(session: Session, member_id: int,
 def delete_member(session: Session, member_id: int,
                   changed_by: str = "") -> None:
     """退任処理: is_active=Falseに変更し、履歴を保持する"""
+    from app.utils.app_config import is_bulk_edit_mode
     member = session.get(Member, member_id)
     if member:
         session.add(MemberHistory(
@@ -168,6 +221,7 @@ def delete_member(session: Session, member_id: int,
             changed_by=changed_by or "システム",
             change_reason="議員退任",
             snapshot=member_to_snapshot(member),
+            exclude_from_recent=is_bulk_edit_mode(),
         ))
         member.is_active = False
         member.updated_at = datetime.now()
@@ -179,6 +233,110 @@ def get_member_history(session: Session, member_id: int) -> list[MemberHistory]:
             .filter_by(member_id=member_id)
             .order_by(MemberHistory.changed_at.desc())
             .all())
+
+
+_HISTORY_FIELD_LABELS = {
+    "member_number":     "会員番号",
+    "position_name":     "会議所役職",
+    "committee_name":    "委員会",
+    "committee_role":    "委員会役職",
+    "organization_name": "事業所名",
+    "organization_kana": "事業所名フリガナ",
+    "title":             "役職名",
+    "name":              "氏名",
+    "name_kana":         "氏名フリガナ",
+    "notes":             "備考",
+    "is_active":         "議員状態",
+}
+
+
+def format_history_value(key: str, value) -> str:
+    if key == "is_active":
+        return "在任中" if value else "議員退任"
+    if value is None or value == "":
+        return "（なし）"
+    return str(value)
+
+
+def diff_snapshots(before: dict, after: dict) -> list[dict]:
+    """2つのスナップショット（member_to_snapshotのJSONをparseしたdict）を比較し、
+    値が変わった項目だけを [{"field": 表示名, "old": 変更前, "new": 変更後}] で返す。"""
+    diffs = []
+    for key, label in _HISTORY_FIELD_LABELS.items():
+        old_val = format_history_value(key, before.get(key))
+        new_val = format_history_value(key, after.get(key))
+        if old_val != new_val:
+            diffs.append({"field": label, "old": old_val, "new": new_val})
+
+    emails_before = before.get("email_addresses", [])
+    emails_after = after.get("email_addresses", [])
+    for i in range(max(len(emails_before), len(emails_after))):
+        eb = emails_before[i] if i < len(emails_before) else {}
+        ea = emails_after[i] if i < len(emails_after) else {}
+
+        def _mail(e):
+            addr = e.get("address", "")
+            label = e.get("label", "")
+            return f"{addr}（{label}）" if addr else "（なし）"
+        old_val, new_val = _mail(eb), _mail(ea)
+        if old_val != new_val:
+            diffs.append({"field": f"メール{i + 1}", "old": old_val, "new": new_val})
+    return diffs
+
+
+def get_recent_changes(session: Session, limit: int = 30) -> list[dict]:
+    """全会員の変更履歴を横断し、直近の変更内容を新しい順で返す。
+    1件＝1回の保存操作（変更のなかった保存は含まない）で、各件に
+    変更された項目ごとの変更前後の値のリストを含む。"""
+    all_history = (
+        session.query(MemberHistory)
+        .order_by(MemberHistory.changed_at.desc())
+        .all()
+    )
+    by_member: dict[int, list[MemberHistory]] = {}
+    for h in all_history:
+        by_member.setdefault(h.member_id, []).append(h)
+
+    events = []
+    for member_id, history in by_member.items():
+        member = session.get(Member, member_id)
+        current_snapshot = (
+            json.loads(member_to_snapshot(member)) if member else None)
+        for i, h in enumerate(history):
+            try:
+                snap_before = json.loads(h.snapshot) if h.snapshot else {}
+            except Exception:
+                snap_before = {}
+            if i > 0:
+                try:
+                    snap_after = json.loads(history[i - 1].snapshot) if history[i - 1].snapshot else {}
+                except Exception:
+                    snap_after = {}
+            elif current_snapshot is not None:
+                snap_after = current_snapshot
+            else:
+                continue
+
+            # 一括変更モード中の記録は差分の連続性を保つため計算には使うが、
+            # 一覧には出さない（重要な変更が一括登録で埋もれないようにする）。
+            if h.exclude_from_recent:
+                continue
+
+            changes = diff_snapshots(snap_before, snap_after)
+            if not changes:
+                continue
+            org_name = (snap_after.get("organization_name")
+                       or snap_before.get("organization_name") or "")
+            events.append({
+                "changed_at": h.changed_at,
+                "changed_by": h.changed_by or "",
+                "member_id": member_id,
+                "org_name": org_name,
+                "changes": changes,
+            })
+
+    events.sort(key=lambda e: e["changed_at"] or datetime.min, reverse=True)
+    return events[:limit]
 
 
 def get_import_batches(session: Session) -> list:

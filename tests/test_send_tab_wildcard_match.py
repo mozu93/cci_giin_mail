@@ -19,6 +19,9 @@ class _Member:
         self.name_kana = ""
         self.title = ""
         self.position = None
+        self.committee_id = None
+        self.committee_role = None
+        self.display_order = None
         self.email_addresses = [_Email(f"{member_number}@example.com")]
 
 

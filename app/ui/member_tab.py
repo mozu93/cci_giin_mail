@@ -8,12 +8,13 @@ from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QColor, QKeySequence, QShortcut
 from app.database.connection import get_session
 from app.database.models import Position
-from app.services.member_service import get_members, delete_member
+from app.services.member_service import get_members, delete_member, committee_role_display
+from app.services.committee_service import get_committees
 
 
 _COLUMN_LABELS = [
     "写真",
-    "会員番号", "会議所役職", "委員会", "事業所名", "事業所名フリガナ",
+    "会員番号", "会議所役職", "委員会", "委員会役職", "事業所名", "事業所名フリガナ",
     "氏名", "氏名フリガナ", "役職名",
     "メール(件数)", "最終更新日",
 ]
@@ -61,11 +62,16 @@ class MemberTab(QWidget):
         self._pos_filter = QComboBox()
         self._pos_filter.addItem("すべての役職", None)
         self._pos_filter.currentIndexChanged.connect(self._load)
+        self._committee_filter = QComboBox()
+        self._committee_filter.addItem("すべての委員会", None)
+        self._committee_filter.currentIndexChanged.connect(self._load)
         self._show_inactive = QCheckBox("議員退任者を含む")
         self._show_inactive.stateChanged.connect(self._load)
         row1.addWidget(self._search, 2)
         row1.addWidget(QLabel("役職:"))
         row1.addWidget(self._pos_filter)
+        row1.addWidget(QLabel("委員会:"))
+        row1.addWidget(self._committee_filter)
         row1.addWidget(self._show_inactive)
         row1.addStretch()
         layout.addLayout(row1)
@@ -100,12 +106,16 @@ class MemberTab(QWidget):
         btn_order = QPushButton("副会頭の就任順")
         btn_order.clicked.connect(self._order_settings)
 
+        btn_recent = QPushButton("最近の更新")
+        btn_recent.clicked.connect(self._show_recent_changes)
+
         row2.addWidget(btn_add)
         row2.addWidget(self._btn_edit)
         row2.addWidget(self._btn_history)
         row2.addWidget(self._btn_retire)
         row2.addWidget(btn_file)
         row2.addWidget(btn_order)
+        row2.addWidget(btn_recent)
         row2.addStretch()
         layout.addLayout(row2)
 
@@ -125,10 +135,10 @@ class MemberTab(QWidget):
         layout.addLayout(font_row)
 
         # 一覧テーブル
-        self._table = QTableWidget(0, 11)
+        self._table = QTableWidget(0, 12)
         self._table.setHorizontalHeaderLabels(_COLUMN_LABELS)
         self._table.horizontalHeader().setSectionResizeMode(
-            4, QHeaderView.ResizeMode.Interactive)
+            5, QHeaderView.ResizeMode.Interactive)
         self._table.horizontalHeader().setStyleSheet(
             "QHeaderView::section {"
             " background-color: #1E293B; color: white;"
@@ -138,7 +148,7 @@ class MemberTab(QWidget):
             "QTableWidget::item:selected { background-color: #C8E9FA; color: black; }"
         )
         self._table.setColumnWidth(0, 44)
-        self._table.setColumnWidth(4, 200)
+        self._table.setColumnWidth(5, 200)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -152,7 +162,7 @@ class MemberTab(QWidget):
         self._table.horizontalHeader().customContextMenuRequested.connect(
             self._show_column_menu)
         from app.services.settings_service import get_hidden_columns
-        for col in get_hidden_columns("member_tab"):
+        for col in get_hidden_columns("member_tab_v2"):
             if 0 <= col < len(_COLUMN_LABELS):
                 self._table.setColumnHidden(col, True)
 
@@ -207,12 +217,32 @@ class MemberTab(QWidget):
         finally:
             session.close()
 
+    def _load_committees(self):
+        session = get_session()
+        try:
+            committees = get_committees(session)
+            current = self._committee_filter.currentData()
+            self._committee_filter.blockSignals(True)
+            self._committee_filter.clear()
+            self._committee_filter.addItem("すべての委員会", None)
+            for c in committees:
+                self._committee_filter.addItem(c.name, c.id)
+            if current is not None:
+                for i in range(self._committee_filter.count()):
+                    if self._committee_filter.itemData(i) == current:
+                        self._committee_filter.setCurrentIndex(i)
+                        break
+            self._committee_filter.blockSignals(False)
+        finally:
+            session.close()
+
     def _load(self):
         selected_member_id = None
         row = self._table.currentRow()
         if row >= 0 and self._table.item(row, 0):
             selected_member_id = self._table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         self._load_positions()
+        self._load_committees()
         active_only = not self._show_inactive.isChecked()
         session = get_session()
         self._table.setSortingEnabled(False)
@@ -220,6 +250,7 @@ class MemberTab(QWidget):
             members = get_members(
                 session,
                 position_id=self._pos_filter.currentData(),
+                committee_id=self._committee_filter.currentData(),
                 keyword=self._search.text().strip() or None,
                 active_only=active_only,
             )
@@ -250,11 +281,12 @@ class MemberTab(QWidget):
                 committee_name = m.committee.name if m.committee else ""
                 pos_sort_order = m.position.sort_order if m.position else 10**9
 
-                # Cols 1-8: テキスト（旧 0-7）
+                # Cols 1-9
                 values = [
                     m.member_number,
                     pos_name,
                     committee_name,
+                    committee_role_display(m),
                     m.organization_name,
                     m.organization_kana or "",
                     m.name,
@@ -272,18 +304,18 @@ class MemberTab(QWidget):
                         item.setForeground(gray)
                     self._table.setItem(row, i + 1, item)
 
-                # Col 9: メール件数（詳細は編集画面で確認）
+                # Col 10: メール件数（詳細は編集画面で確認）
                 item = QTableWidgetItem(f"{len(m.email_addresses)}件")
                 if is_retired:
                     item.setForeground(gray)
-                self._table.setItem(row, 9, item)
+                self._table.setItem(row, 10, item)
 
-                # Col 10: 最終更新日
+                # Col 11: 最終更新日
                 upd = m.updated_at.strftime("%Y/%m/%d") if m.updated_at else ""
                 item = QTableWidgetItem(upd)
                 if is_retired:
                     item.setForeground(gray)
-                self._table.setItem(row, 10, item)
+                self._table.setItem(row, 11, item)
             active_count = sum(1 for m in members if m.is_active)
             if active_only:
                 self._count_label.setText(f"{len(members)} 件")
@@ -295,6 +327,7 @@ class MemberTab(QWidget):
             no_filter = (
                 not self._search.text().strip()
                 and self._pos_filter.currentData() is None
+                and self._committee_filter.currentData() is None
                 and not self._show_inactive.isChecked()
             )
             self._empty_hint.setVisible(no_filter and len(members) == 0)
@@ -325,7 +358,7 @@ class MemberTab(QWidget):
         from app.services.settings_service import set_hidden_columns
         hidden = [c for c in range(len(_COLUMN_LABELS))
                   if self._table.isColumnHidden(c)]
-        set_hidden_columns("member_tab", hidden)
+        set_hidden_columns("member_tab_v2", hidden)
 
     def _on_selection_changed(self):
         has_selection = self._table.currentRow() >= 0
@@ -421,6 +454,15 @@ class MemberTab(QWidget):
         dlg = MemberHistoryDialog(session, member_id, parent=self)
         dlg.exec()
         session.close()
+
+    def _show_recent_changes(self):
+        from app.ui.dialogs.recent_changes_dialog import RecentChangesDialog
+        session = get_session()
+        try:
+            dlg = RecentChangesDialog(session, parent=self)
+            dlg.exec()
+        finally:
+            session.close()
 
     def _order_settings(self):
         from app.ui.dialogs.order_settings_dialog import OrderSettingsDialog

@@ -6,10 +6,23 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from app.services.settings_service import get_font_size, set_font_size
+from app.services.member_service import committee_role_display
 from app.utils import to_katakana
 
 _NO_EMAIL_TEXT = "（メール無し）"
 _ORANGE = QColor("#F97316")
+
+# 2列目「委員会役職」は委員会で絞り込んでいる時だけ表示する
+_COL_CHECK = 0
+_COL_MEMBER_NO = 1
+_COL_COMMITTEE_ROLE = 2
+_COL_POSITION = 3
+_COL_ORG = 4
+_COL_TITLE = 5
+_COL_NAME = 6
+_COL_EMAIL = 7
+_COL_ORG_KANA = 8
+_COL_NAME_KANA = 9
 
 
 class RecipientPanel(QWidget):
@@ -20,6 +33,8 @@ class RecipientPanel(QWidget):
     def __init__(self):
         super().__init__()
         self._members: list = []
+        self._keyword: str = ""
+        self._id_restriction: set | None = None
         self._build()
 
     # ─── 公開API ───────────────────────────────────────────
@@ -41,7 +56,7 @@ class RecipientPanel(QWidget):
             cb = self._table.cellWidget(row, 0)
             if not (cb and cb.isChecked()):
                 continue
-            item = self._table.item(row, 3)
+            item = self._table.item(row, _COL_ORG)
             mid = item.data(Qt.ItemDataRole.UserRole) if item else None
             if mid and mid not in seen_ids:
                 m = member_cache.get(mid)
@@ -53,7 +68,7 @@ class RecipientPanel(QWidget):
     def set_checks_by_member_ids(self, member_ids: set):
         self._table.setUpdatesEnabled(False)
         for row in range(self._table.rowCount()):
-            item = self._table.item(row, 3)
+            item = self._table.item(row, _COL_ORG)
             mid = item.data(Qt.ItemDataRole.UserRole) if item else None
             cb = self._table.cellWidget(row, 0)
             if cb and mid is not None:
@@ -62,6 +77,10 @@ class RecipientPanel(QWidget):
                 cb.blockSignals(False)
         self._table.setUpdatesEnabled(True)
         self._update_count()
+
+    def set_committee_role_column_visible(self, visible: bool):
+        """委員会で絞り込んでいる時だけ「委員会役職」列を表示する"""
+        self._table.setColumnHidden(_COL_COMMITTEE_ROLE, not visible)
 
     def clear_checks(self):
         self._table.setUpdatesEnabled(False)
@@ -101,15 +120,30 @@ class RecipientPanel(QWidget):
         self._update_count()
 
     def filter(self, keyword: str):
-        if not keyword:
-            for row in range(self._table.rowCount()):
-                self._table.setRowHidden(row, False)
-            return
-        kw = to_katakana(keyword).lower()
+        self._keyword = keyword or ""
+        self._apply_row_visibility()
+
+    def restrict_to_member_ids(self, member_ids: set | None):
+        """委員会・役職などの絞り込みモードで一致した会員だけを一覧に残す。
+        None を渡すと絞り込みを解除する（名簿から選択モードなど）。"""
+        self._id_restriction = member_ids
+        self._apply_row_visibility()
+
+    def _apply_row_visibility(self):
+        kw = to_katakana(self._keyword).lower() if self._keyword else ""
         for row in range(self._table.rowCount()):
+            if self._id_restriction is not None:
+                org_item = self._table.item(row, _COL_ORG)
+                mid = org_item.data(Qt.ItemDataRole.UserRole) if org_item else None
+                if mid not in self._id_restriction:
+                    self._table.setRowHidden(row, True)
+                    continue
+            if not kw:
+                self._table.setRowHidden(row, False)
+                continue
             match = any(
                 (item := self._table.item(row, col)) and kw in item.text().lower()
-                for col in (1, 3, 5, 7, 8)
+                for col in (_COL_MEMBER_NO, _COL_ORG, _COL_NAME, _COL_ORG_KANA, _COL_NAME_KANA)
             )
             self._table.setRowHidden(row, not match)
 
@@ -159,23 +193,25 @@ class RecipientPanel(QWidget):
         btn_row.addWidget(btn_fu)
         layout.addLayout(btn_row)
 
-        self._table = QTableWidget(0, 9)
+        self._table = QTableWidget(0, 10)
         self._table.setHorizontalHeaderLabels(
-            ["送信", "会員番号", "会議所役職名", "事業所名", "役職名", "氏名",
+            ["送信", "会員番号", "委員会役職", "会議所役職名", "事業所名", "役職名", "氏名",
              "メールアドレス（To／CC）", "事業所名フリガナ", "氏名フリガナ"])
         h = self._table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        for col in range(1, 7):
+        for col in range(1, 8):
             h.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         self._table.setColumnWidth(0, 44)
-        self._table.setColumnWidth(1, 70)
-        self._table.setColumnWidth(2, 110)
-        self._table.setColumnWidth(3, 200)
-        self._table.setColumnWidth(4, 90)
-        self._table.setColumnWidth(5, 90)
-        self._table.setColumnWidth(6, 360)
-        self._table.setColumnHidden(7, True)
-        self._table.setColumnHidden(8, True)
+        self._table.setColumnWidth(_COL_MEMBER_NO, 70)
+        self._table.setColumnWidth(_COL_COMMITTEE_ROLE, 90)
+        self._table.setColumnWidth(_COL_POSITION, 110)
+        self._table.setColumnWidth(_COL_ORG, 200)
+        self._table.setColumnWidth(_COL_TITLE, 90)
+        self._table.setColumnWidth(_COL_NAME, 90)
+        self._table.setColumnWidth(_COL_EMAIL, 360)
+        self._table.setColumnHidden(_COL_COMMITTEE_ROLE, True)
+        self._table.setColumnHidden(_COL_ORG_KANA, True)
+        self._table.setColumnHidden(_COL_NAME_KANA, True)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
 
@@ -206,28 +242,30 @@ class RecipientPanel(QWidget):
         cb.setChecked(checked)
         cb.stateChanged.connect(self._update_count)
         self._table.setCellWidget(row, 0, cb)
-        self._table.setItem(row, 1, QTableWidgetItem(member.member_number))
-        self._table.setItem(row, 2, QTableWidgetItem(pos_name))
+        self._table.setItem(row, _COL_MEMBER_NO, QTableWidgetItem(member.member_number))
+        self._table.setItem(
+            row, _COL_COMMITTEE_ROLE, QTableWidgetItem(committee_role_display(member)))
+        self._table.setItem(row, _COL_POSITION, QTableWidgetItem(pos_name))
         org_item = QTableWidgetItem(member.organization_name)
         org_item.setData(Qt.ItemDataRole.UserRole, member.id)
-        self._table.setItem(row, 3, org_item)
-        self._table.setItem(row, 4, QTableWidgetItem(member.title or ""))
+        self._table.setItem(row, _COL_ORG, org_item)
+        self._table.setItem(row, _COL_TITLE, QTableWidgetItem(member.title or ""))
         name_item = QTableWidgetItem(member.name)
-        self._table.setItem(row, 5, name_item)
+        self._table.setItem(row, _COL_NAME, name_item)
         if member.email_addresses:
             addresses = [email.address for email in member.email_addresses]
             address_text = f"To: {addresses[0]}"
             if len(addresses) > 1:
                 address_text += f" / CC: {', '.join(addresses[1:])}"
-            self._table.setItem(row, 6, QTableWidgetItem(address_text))
+            self._table.setItem(row, _COL_EMAIL, QTableWidgetItem(address_text))
         else:
             addr_item = QTableWidgetItem(_NO_EMAIL_TEXT)
             addr_item.setForeground(_ORANGE)
             org_item.setForeground(_ORANGE)
             name_item.setForeground(_ORANGE)
-            self._table.setItem(row, 6, addr_item)
-        self._table.setItem(row, 7, QTableWidgetItem(org_kana))
-        self._table.setItem(row, 8, QTableWidgetItem(name_kana))
+            self._table.setItem(row, _COL_EMAIL, addr_item)
+        self._table.setItem(row, _COL_ORG_KANA, QTableWidgetItem(org_kana))
+        self._table.setItem(row, _COL_NAME_KANA, QTableWidgetItem(name_kana))
 
     def _update_count(self):
         checked = no_email = 0
@@ -236,11 +274,11 @@ class RecipientPanel(QWidget):
             cb = self._table.cellWidget(row, 0)
             if cb and cb.isChecked():
                 checked += 1
-                org_item = self._table.item(row, 3)
+                org_item = self._table.item(row, _COL_ORG)
                 mid = org_item.data(Qt.ItemDataRole.UserRole) if org_item else None
                 if mid is not None:
                     checked_member_ids.add(mid)
-                item = self._table.item(row, 6)
+                item = self._table.item(row, _COL_EMAIL)
                 if item and item.text() == _NO_EMAIL_TEXT:
                     no_email += 1
         self._count_label.setText(f"{len(checked_member_ids)}社選択")

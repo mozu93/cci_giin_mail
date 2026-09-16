@@ -11,6 +11,8 @@ from app.services.member_service import get_member_history, get_member, member_t
 _FIELD_LABELS = {
     "member_number":     "会員番号",
     "position_name":     "会議所役職",
+    "committee_name":    "委員会",
+    "committee_role":    "委員会役職",
     "organization_name": "事業所名",
     "organization_kana": "事業所名フリガナ",
     "title":             "役職名",

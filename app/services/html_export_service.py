@@ -106,7 +106,12 @@ def _badge_row(summary: dict) -> str:
 
 def _meeting_html(meeting, attendance: list[dict],
                   pre_summary: dict, rec_summary: dict) -> str:
-    scope = "全員" if not meeting.target_position_ids else "役職指定"
+    if meeting.target_position_ids:
+        scope = "役職指定"
+    elif meeting.target_committee_ids:
+        scope = "委員会指定"
+    else:
+        scope = "全員"
     date_str = meeting.date.strftime("%Y/%m/%d")
     anchor = f"meeting-{meeting.id}"
 

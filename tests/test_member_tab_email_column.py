@@ -9,7 +9,7 @@ def test_table_has_10_columns_with_single_email_column(qtbot, monkeypatch):
 
     headers = [tab._table.horizontalHeaderItem(i).text()
                for i in range(tab._table.columnCount())]
-    assert tab._table.columnCount() == 11
+    assert tab._table.columnCount() == 12
     assert "メール(件数)" in headers
     email_col = headers.index("メール(件数)")
     assert tab._table.item(0, email_col).text() == "2件"
@@ -32,6 +32,8 @@ class _Member:
         self.title = ""
         self.position = None
         self.committee = None
+        self.committee_id = None
+        self.committee_role = None
         self.email_addresses = [_Email("a@example.com"), _Email("b@example.com")]
         self.is_active = True
         self.updated_at = None

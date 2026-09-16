@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from app.database.connection import get_session
-from app.services.member_service import get_members
+from app.services.member_service import get_members, sort_members_by_committee_role
 from app.services.template_service import (
     get_templates, get_template, create_template, update_template
 )
@@ -362,6 +362,18 @@ class SendTab(QWidget):
         self._committee_row = QHBoxLayout()
         self._committee_checks: dict[int, QCheckBox] = {}
         cp.addLayout(self._committee_row)
+
+        crow = QHBoxLayout()
+        crow.addWidget(QLabel("役割で絞り込み（未選択時は全員）："))
+        self._committee_role_checks: dict[str, QCheckBox] = {}
+        for role in ("担当副会頭", "委員長", "副委員長"):
+            cb = QCheckBox(role)
+            cb.stateChanged.connect(self._on_committee_select)
+            crow.addWidget(cb)
+            self._committee_role_checks[role] = cb
+        crow.addStretch()
+        cp.addLayout(crow)
+
         self._committee_panel.setVisible(False)
         layout.addWidget(self._committee_panel)
 
@@ -532,6 +544,19 @@ class SendTab(QWidget):
         self._job_name = QLineEdit()
         self._job_name.setPlaceholderText("例：2026年6月 総会案内")
         f.addRow("ジョブ名", self._job_name)
+
+        sender_row = QHBoxLayout()
+        self._rb_send_proxy = QRadioButton("代理送信")
+        self._rb_send_self = QRadioButton("自分のアドレス")
+        sender_group = QButtonGroup(self)
+        sender_group.addButton(self._rb_send_proxy)
+        sender_group.addButton(self._rb_send_self)
+        sender_row.addWidget(self._rb_send_proxy)
+        sender_row.addWidget(self._rb_send_self)
+        sender_row.addStretch()
+        f.addRow("送信元", sender_row)
+        self._rb_send_self.toggled.connect(self._save_sender_choice)
+
         self._cc_edit = QLineEdit()
         self._cc_edit.setPlaceholderText(
             "事務局アドレス（全企業へのメールに追加）。複数はカンマ等で区切る")
@@ -571,6 +596,7 @@ class SendTab(QWidget):
         layout.addWidget(self._progress)
         layout.addWidget(self._progress_label)
         self._update_test_button_label()
+        self._update_sender_options()
         return grp
 
     # ──────────────────────────────────────────────────────
@@ -580,6 +606,33 @@ class SendTab(QWidget):
     def refresh(self):
         self._load_combos()
         self._update_test_button_label()
+        self._update_sender_options()
+
+    def _save_sender_choice(self, send_as_self: bool):
+        from app.utils.app_config import set_send_as_self
+        set_send_as_self(send_as_self)
+
+    def _update_sender_options(self):
+        """送信元の選択肢を最新の設定内容に合わせる。
+        既定は従来動作と同じく「代理送信」（代理差出人が未設定なら自分のアドレス）。"""
+        from app.utils.app_config import is_send_as_self
+        graph_config = get_graph_config()
+        from_addr = (graph_config.get("from_address") or "").strip()
+        account = (graph_config.get("account_username") or "").strip()
+        self._rb_send_proxy.setText(
+            f"代理送信（{from_addr}）" if from_addr else "代理送信（設定タブで未設定）")
+        self._rb_send_proxy.setEnabled(bool(from_addr))
+        self._rb_send_self.setText(
+            f"自分のアドレス（{account}）" if account else "自分のアドレス（認証アカウント本人）")
+
+        if not self._rb_send_proxy.isChecked() and not self._rb_send_self.isChecked():
+            # 初回表示: 保存された選択（既定は代理送信）を反映する
+            self._rb_send_self.blockSignals(True)
+            self._rb_send_self.setChecked(is_send_as_self())
+            self._rb_send_proxy.setChecked(not is_send_as_self())
+            self._rb_send_self.blockSignals(False)
+        if not from_addr and self._rb_send_proxy.isChecked():
+            self._rb_send_self.setChecked(True)
 
     def _update_test_button_label(self):
         graph_config = get_graph_config()
@@ -618,6 +671,9 @@ class SendTab(QWidget):
         selected_committee_ids = {
             cid for cid, cb in self._committee_checks.items() if cb.isChecked()
         }
+        selected_committee_roles = {
+            role for role, cb in self._committee_role_checks.items() if cb.isChecked()
+        }
         selected_template_id = self._template_combo.currentData()
         selected_signature_id = self._sig_combo.currentData()
         recipient_keyword = self._recipient._search.text()
@@ -638,9 +694,24 @@ class SendTab(QWidget):
                     self._committee_checks[cid].blockSignals(True)
                     self._committee_checks[cid].setChecked(True)
                     self._committee_checks[cid].blockSignals(False)
+            for role in selected_committee_roles:
+                if role in self._committee_role_checks:
+                    self._committee_role_checks[role].blockSignals(True)
+                    self._committee_role_checks[role].setChecked(True)
+                    self._committee_role_checks[role].blockSignals(False)
 
             self._members = get_members(session)
-            self._recipient.load_members(self._members)
+            self._recipient.set_committee_role_column_visible(
+                self._rb_by_committee.isChecked())
+            self._recipient.load_members(self._ordered_members())
+            if self._rb_by_pos.isChecked():
+                self._on_pos_select()
+            elif self._rb_by_committee.isChecked():
+                self._on_committee_select()
+            elif self._rb_by_attend.isChecked():
+                self._on_attend_filter()
+            else:
+                self._recipient.restrict_to_member_ids(None)
             self._recipient.set_checks_by_member_ids(selected_recipient_ids)
             self._recipient.filter(recipient_keyword)
 
@@ -686,6 +757,8 @@ class SendTab(QWidget):
             cb.setChecked(False)
         for cb in self._committee_checks.values():
             cb.setChecked(False)
+        for cb in self._committee_role_checks.values():
+            cb.setChecked(False)
         for cb in self._status_checks.values():
             cb.setChecked(False)
         self._recipient.clear_checks()
@@ -707,6 +780,14 @@ class SendTab(QWidget):
         self._progress.setVisible(False)
         self._progress_label.setText("")
 
+    def _ordered_members(self) -> list:
+        """委員会で選ぶモードの時だけ委員会内の並び順
+        （担当副会頭→委員長→副委員長→委員）を適用する。
+        それ以外は名簿管理タブと同じ会議所役職順のまま。"""
+        if self._rb_by_committee.isChecked():
+            return sort_members_by_committee_role(self._members)
+        return self._members
+
     def _on_mode_change(self):
         is_pos = self._rb_by_pos.isChecked()
         is_committee = self._rb_by_committee.isChecked()
@@ -716,7 +797,16 @@ class SendTab(QWidget):
         self._attend_panel.setVisible(is_attend)
         if is_attend:
             self._load_meeting_combo()
-        self._recipient.clear_checks()
+        self._recipient.set_committee_role_column_visible(is_committee)
+        self._recipient.load_members(self._ordered_members())
+        if is_pos:
+            self._on_pos_select()
+        elif is_committee:
+            self._on_committee_select()
+        elif is_attend:
+            self._on_attend_filter()
+        else:
+            self._recipient.restrict_to_member_ids(None)
 
     def _load_meeting_combo(self):
         from app.services.meeting_service import get_meetings
@@ -726,7 +816,12 @@ class SendTab(QWidget):
             self._meeting_combo.clear()
             self._meeting_combo.addItem("（会議を選択）", None)
             for m in get_meetings(session):
-                scope = "全員" if not m.target_position_ids else "役職指定"
+                if m.target_position_ids:
+                    scope = "役職指定"
+                elif m.target_committee_ids:
+                    scope = "委員会指定"
+                else:
+                    scope = "全員"
                 self._meeting_combo.addItem(
                     f"{m.date.strftime('%Y/%m/%d')}　{m.name}　（{scope}）", m.id)
             self._meeting_combo.blockSignals(False)
@@ -734,33 +829,50 @@ class SendTab(QWidget):
             session.close()
 
     def _on_pos_select(self):
+        if not self._rb_by_pos.isChecked():
+            return
         selected_pos_ids = {
             pid for pid, cb in self._pos_checks.items() if cb.isChecked()
         }
         if not selected_pos_ids:
             self._recipient.clear_checks()
+            self._recipient.restrict_to_member_ids(None)
             return
         member_ids = {m.id for m in self._members if m.position_id in selected_pos_ids}
         self._recipient.set_checks_by_member_ids(member_ids)
+        self._recipient.restrict_to_member_ids(member_ids)
 
     def _on_committee_select(self):
+        if not self._rb_by_committee.isChecked():
+            return
         selected_committee_ids = {
             cid for cid, cb in self._committee_checks.items() if cb.isChecked()
         }
         if not selected_committee_ids:
             self._recipient.clear_checks()
+            self._recipient.restrict_to_member_ids(None)
             return
-        member_ids = {m.id for m in self._members
-                     if m.committee_id in selected_committee_ids}
+        selected_roles = {
+            role for role, cb in self._committee_role_checks.items() if cb.isChecked()
+        }
+        member_ids = {
+            m.id for m in self._members
+            if m.committee_id in selected_committee_ids
+            and (not selected_roles or m.committee_role in selected_roles)
+        }
         self._recipient.set_checks_by_member_ids(member_ids)
+        self._recipient.restrict_to_member_ids(member_ids)
 
     def _on_attend_filter(self):
+        if not self._rb_by_attend.isChecked():
+            return
         from app.services.meeting_service import get_member_ids_by_status
 
         meeting_id = self._meeting_combo.currentData()
         if not meeting_id:
             self._attend_source_label.setText("")
             self._recipient.clear_checks()
+            self._recipient.restrict_to_member_ids(None)
             return
 
         self._attend_source_label.setText(
@@ -771,11 +883,13 @@ class SendTab(QWidget):
             statuses = [s for s, cb in self._status_checks.items() if cb.isChecked()]
             if not statuses:
                 self._recipient.clear_checks()
+                self._recipient.restrict_to_member_ids(None)
                 return
             member_ids = get_member_ids_by_status(session, meeting_id, statuses)
         finally:
             session.close()
         self._recipient.set_checks_by_member_ids(member_ids)
+        self._recipient.restrict_to_member_ids(member_ids)
 
     # ──────────────────────────────────────────────────────
     # テンプレート・署名
@@ -1095,6 +1209,9 @@ class SendTab(QWidget):
             QMessageBox.warning(self, "エラー",
                                 "設定タブでテスト送信先アドレスを設定してください。")
             return
+        if self._rb_send_self.isChecked():
+            graph_config = dict(graph_config)
+            graph_config["from_address"] = ""
         t = targets[0]
         job_id = None
         session = get_session()
@@ -1228,6 +1345,11 @@ class SendTab(QWidget):
             save_config(config)
             graph_config = graph
 
+        if self._rb_send_self.isChecked():
+            # 「自分のアドレス」選択時は代理差出人を使わず認証アカウント本人から送信する
+            graph_config = dict(graph_config)
+            graph_config["from_address"] = ""
+
         tmpl_name = self._template_combo.currentText()
         has_attach = any(t["attachments"] for t in targets)
         no_email_count = sum(1 for t in targets if not t["to_address"])
@@ -1235,7 +1357,7 @@ class SendTab(QWidget):
             f"　ジョブ名　　: {job_name}\n"
             f"　操作者　　　: {self._staff_name}\n"
             f"　認証アカウント: {account_username or '取得不可'}\n"
-            f"　代理差出人　: {graph_config.get('from_address') or '認証アカウント本人'}\n"
+            f"　送信元　　　: {graph_config.get('from_address') or '認証アカウント本人'}\n"
             f"　事務局CC　　: {self._cc_edit.text().strip() or 'なし'}\n"
             f"　共通BCC　　 : {self._bcc_edit.text().strip() or 'なし'}\n"
             f"　送信モード　: {'テストモード（全件をテスト送信先へ振替）' if test_mode else '通常送信'}\n"

@@ -19,6 +19,8 @@ class _Member:
         self.title = ""
         self.position = position
         self.committee = None
+        self.committee_id = None
+        self.committee_role = None
         self.email_addresses = []
         self.is_active = True
         self.updated_at = None
@@ -66,7 +68,7 @@ def test_role_column_sorts_by_position_order_then_kana(qtbot, monkeypatch):
     tab._table.sortItems(2, Qt.SortOrder.AscendingOrder)
 
     org_names_in_order = [
-        tab._table.item(r, 4).text() for r in range(tab._table.rowCount())
+        tab._table.item(r, 5).text() for r in range(tab._table.rowCount())
     ]
     # 会頭(sort_order=1)のorg2が先頭、続いて議員(sort_order=5)内はフリガナ順(アイコ→ハナコ)
     assert org_names_in_order == ["org2", "org3", "org1"]
@@ -93,7 +95,7 @@ def test_role_column_sorts_vice_chairs_by_display_order_not_kana(qtbot, monkeypa
     tab._table.sortItems(2, Qt.SortOrder.AscendingOrder)
 
     org_names_in_order = [
-        tab._table.item(r, 4).text() for r in range(tab._table.rowCount())
+        tab._table.item(r, 5).text() for r in range(tab._table.rowCount())
     ]
     assert org_names_in_order == ["org1", "org2", "org3"]
 
@@ -115,6 +117,6 @@ def test_role_column_places_no_position_members_last(qtbot, monkeypatch):
     tab._table.sortItems(2, Qt.SortOrder.AscendingOrder)
 
     org_names_in_order = [
-        tab._table.item(r, 4).text() for r in range(tab._table.rowCount())
+        tab._table.item(r, 5).text() for r in range(tab._table.rowCount())
     ]
     assert org_names_in_order == ["org2", "org1"]

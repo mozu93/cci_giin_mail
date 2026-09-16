@@ -10,7 +10,7 @@ from app.database.connection import get_session
 from app.services.meeting_service import (
     get_attendance_data, get_reception_summary, update_actual_status,
     export_reception_xlsx, format_minutes_attendee_text,
-    build_attendance_export_filename,
+    build_attendance_export_filename, is_committee_meeting,
 )
 from app.services.reception_log_service import create_log
 from app.services.settings_service import get_font_size, set_font_size
@@ -24,6 +24,16 @@ _STATUS_COLORS = {
     "欠席": "#FEE2E2",
 }
 _ACTUAL_OPTIONS = ["", "出席", "代理", "委任", "欠席"]
+
+# 1列目「委員会役職」は委員会指定の会議でのみ表示し、それ以外は非表示にする
+_REC_COMMITTEE_ROLE_COL = 1
+_REC_POSITION_COL = 2
+_REC_ORG_COL = 3
+_REC_TITLE_COL = 4
+_REC_NAME_COL = 5
+_REC_STATUS_COL = 6
+_REC_ACTUAL_COL = 7
+_REC_PROXY_COL = 8
 
 
 class _NoWheelComboBox(QComboBox):
@@ -160,8 +170,9 @@ class ReceptionWidget(QWidget):
         photo_vl.addStretch()
         body_row.addWidget(photo_w)
 
-        _rec_headers = ["会員番号", "事業所名", "会議所役職", "氏名", "事前", "当日受付", "代理情報"]
-        self._rec_table = _ReceptionTable(0, 7)
+        _rec_headers = ["会員番号", "委員会役職", "会議所役職", "事業所名", "役職名", "氏名",
+                        "事前", "当日受付", "代理情報"]
+        self._rec_table = _ReceptionTable(0, len(_rec_headers))
         self._rec_table.setHorizontalHeaderLabels(_rec_headers)
         h = self._rec_table.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -169,14 +180,16 @@ class ReceptionWidget(QWidget):
         style_table_header(self._rec_table)
         from app.ui.widgets.column_visibility import setup_column_visibility_menu
         setup_column_visibility_menu(
-            self._rec_table, _rec_headers, "reception_table", self)
+            self._rec_table, _rec_headers, "reception_table_v2", self)
         self._rec_table.setColumnWidth(0, 80)
-        self._rec_table.setColumnWidth(1, 200)
-        self._rec_table.setColumnWidth(2, 120)
-        self._rec_table.setColumnWidth(3, 100)
-        self._rec_table.setColumnWidth(4, 70)
-        self._rec_table.setColumnWidth(5, 90)
-        self._rec_table.setColumnWidth(6, 160)
+        self._rec_table.setColumnWidth(_REC_COMMITTEE_ROLE_COL, 100)
+        self._rec_table.setColumnWidth(_REC_POSITION_COL, 120)
+        self._rec_table.setColumnWidth(_REC_ORG_COL, 200)
+        self._rec_table.setColumnWidth(_REC_TITLE_COL, 100)
+        self._rec_table.setColumnWidth(_REC_NAME_COL, 100)
+        self._rec_table.setColumnWidth(_REC_STATUS_COL, 70)
+        self._rec_table.setColumnWidth(_REC_ACTUAL_COL, 90)
+        self._rec_table.setColumnWidth(_REC_PROXY_COL, 160)
         self._rec_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._rec_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._rec_table.currentCellChanged.connect(
@@ -207,6 +220,7 @@ class ReceptionWidget(QWidget):
                  "合計": 0, "監事出席": 0, "議決権数": 0})
             self._minutes_text.clear()
             self._rec_table.setRowCount(0)
+            self._rec_table.setColumnHidden(_REC_COMMITTEE_ROLE_COL, True)
             return
         session = get_session()
         try:
@@ -217,8 +231,10 @@ class ReceptionWidget(QWidget):
                         session, self._meeting_id, d["member_id"], "委任")
                     d["actual_status"] = "委任"
             summary = get_reception_summary(session, self._meeting_id)
+            is_committee = is_committee_meeting(session, self._meeting_id)
         finally:
             session.close()
+        self._rec_table.setColumnHidden(_REC_COMMITTEE_ROLE_COL, not is_committee)
 
         self._update_rec_summary(summary)
         self._minutes_text.setText(format_minutes_attendee_text(self._rec_data))
@@ -236,8 +252,10 @@ class ReceptionWidget(QWidget):
                     p for p in [d["proxy_title"], d["proxy_name"]] if p)
             effective = d.get("actual_status") or d["status"]
             bg = _STATUS_COLORS.get(effective)
-            for col, val in enumerate([d["member_number"], d["org_name"],
-                                       d["position"], d["name"], d["status"]]):
+            values = [d["member_number"], d.get("committee_role", ""),
+                     d["position"], d["org_name"], d.get("title", ""),
+                     d["name"], d["status"]]
+            for col, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if bg:
                     item.setBackground(QColor(bg))
@@ -246,10 +264,10 @@ class ReceptionWidget(QWidget):
                 self._rec_table.setItem(row, col, item)
             actual = d.get("actual_status") or ""
             if self._readonly:
-                item5 = QTableWidgetItem(actual)
+                item_actual = QTableWidgetItem(actual)
                 if bg:
-                    item5.setBackground(QColor(bg))
-                self._rec_table.setItem(row, 5, item5)
+                    item_actual.setBackground(QColor(bg))
+                self._rec_table.setItem(row, _REC_ACTUAL_COL, item_actual)
             else:
                 combo = _NoWheelComboBox()
                 combo.addItems(_ACTUAL_OPTIONS)
@@ -259,11 +277,11 @@ class ReceptionWidget(QWidget):
                 mid = d["member_id"]
                 combo.currentTextChanged.connect(
                     lambda text, m=mid: self._save_actual_status(m, text))
-                self._rec_table.setCellWidget(row, 5, combo)
-            item6 = QTableWidgetItem(proxy_info)
+                self._rec_table.setCellWidget(row, _REC_ACTUAL_COL, combo)
+            item_proxy = QTableWidgetItem(proxy_info)
             if bg:
-                item6.setBackground(QColor(bg))
-            self._rec_table.setItem(row, 6, item6)
+                item_proxy.setBackground(QColor(bg))
+            self._rec_table.setItem(row, _REC_PROXY_COL, item_proxy)
         self._rec_table.setUpdatesEnabled(True)
         scrollbar.setValue(scroll_pos)
         self._filter_reception()
@@ -297,7 +315,8 @@ class ReceptionWidget(QWidget):
             effective = d.get("actual_status") or d["status"]
             bg = _STATUS_COLORS.get(effective)
             qbg = QColor(bg) if bg else None
-            for col in [0, 1, 2, 3, 4, 6]:
+            for col in [0, _REC_COMMITTEE_ROLE_COL, _REC_POSITION_COL, _REC_ORG_COL,
+                       _REC_TITLE_COL, _REC_NAME_COL, _REC_STATUS_COL, _REC_PROXY_COL]:
                 item = self._rec_table.item(row, col)
                 if item:
                     if qbg:
@@ -306,13 +325,13 @@ class ReceptionWidget(QWidget):
                         item.setData(Qt.ItemDataRole.BackgroundRole, None)
             new_val = d.get("actual_status") or ""
             if self._readonly:
-                item5 = self._rec_table.item(row, 5)
-                if item5 and item5.text() != new_val:
-                    item5.setText(new_val)
+                item_actual = self._rec_table.item(row, _REC_ACTUAL_COL)
+                if item_actual and item_actual.text() != new_val:
+                    item_actual.setText(new_val)
                     if qbg:
-                        item5.setBackground(qbg)
+                        item_actual.setBackground(qbg)
             else:
-                combo = self._rec_table.cellWidget(row, 5)
+                combo = self._rec_table.cellWidget(row, _REC_ACTUAL_COL)
                 if combo and combo.currentText() != new_val:
                     combo.blockSignals(True)
                     combo.setCurrentText(new_val)

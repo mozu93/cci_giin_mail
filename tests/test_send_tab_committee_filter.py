@@ -10,6 +10,8 @@ class _Member:
         self.position = None
         self.position_id = None
         self.committee_id = committee_id
+        self.committee_role = None
+        self.display_order = None
         self.email_addresses = []
 
 
@@ -47,3 +49,7 @@ def test_committee_filter_checks_only_matching_members(qtbot, monkeypatch):
 
     selected = tab._recipient.get_selected_members()
     assert [m.id for m in selected] == [1]
+
+    visible_rows = [r for r in range(tab._recipient._table.rowCount())
+                    if not tab._recipient._table.isRowHidden(r)]
+    assert len(visible_rows) == 1

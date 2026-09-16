@@ -14,6 +14,8 @@ class _Member:
     position = None
     position_id = None
     committee_id = None
+    committee_role = None
+    display_order = None
     email_addresses = []
 
 

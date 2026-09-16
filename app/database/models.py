@@ -40,6 +40,7 @@ class Member(Base):
     member_number = Column(String, unique=True, nullable=False)
     position_id = Column(Integer, ForeignKey("positions.id"), nullable=True)
     committee_id = Column(Integer, ForeignKey("committees.id"), nullable=True)
+    committee_role = Column(String, nullable=True)  # 担当副会頭/委員長/副委員長; NULL=委員
     organization_name = Column(String, nullable=False)
     organization_kana = Column(String, default="")
     title = Column(String, default="")
@@ -88,6 +89,8 @@ class MemberHistory(Base):
     change_reason = Column(String, nullable=False)
     snapshot = Column(Text, nullable=False)  # JSON: members全フィールド＋email_addresses配列
     import_batch_id = Column(String, nullable=True)  # インポート一括操作の識別子
+    # 一括変更モード中の変更。履歴には残すが「最近の更新」一覧には表示しない
+    exclude_from_recent = Column(Boolean, nullable=False, default=False)
 
     member = relationship("Member", back_populates="history")
 
@@ -172,6 +175,7 @@ class Meeting(Base):
     name = Column(String, nullable=False)
     date = Column(Date, nullable=False)
     target_position_ids = Column(Text, nullable=True)  # JSON list of position IDs; NULL=全員
+    target_committee_ids = Column(Text, nullable=True)  # JSON list of committee IDs; NULL=全員
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     records = relationship("AttendanceRecord", back_populates="meeting",
                            cascade="all, delete-orphan")

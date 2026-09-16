@@ -25,6 +25,11 @@ def _migrate_sqlite(engine):
                 "ALTER TABLE meetings ADD COLUMN target_position_ids TEXT"
             ))
             conn.commit()
+        if "target_committee_ids" not in meetings_cols:
+            conn.execute(text(
+                "ALTER TABLE meetings ADD COLUMN target_committee_ids TEXT"
+            ))
+            conn.commit()
 
         members_cols = {
             row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
@@ -59,6 +64,12 @@ def _migrate_sqlite(engine):
                 "ALTER TABLE member_history ADD COLUMN import_batch_id TEXT"
             ))
             conn.commit()
+        if "exclude_from_recent" not in history_cols:
+            conn.execute(text(
+                "ALTER TABLE member_history"
+                " ADD COLUMN exclude_from_recent BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
 
         members_cols = {
             row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
@@ -76,6 +87,11 @@ def _migrate_sqlite(engine):
         if "committee_id" not in members_cols:
             conn.execute(text(
                 "ALTER TABLE members ADD COLUMN committee_id INTEGER"
+            ))
+            conn.commit()
+        if "committee_role" not in members_cols:
+            conn.execute(text(
+                "ALTER TABLE members ADD COLUMN committee_role TEXT"
             ))
             conn.commit()
 
@@ -141,7 +157,18 @@ def _migrate_postgresql(engine):
     from sqlalchemy import inspect, text
     insp = inspect(engine)
     members_cols = {col["name"] for col in insp.get_columns("members")}
+    meetings_cols = {col["name"] for col in insp.get_columns("meetings")}
+    history_cols = {col["name"] for col in insp.get_columns("member_history")}
     with engine.begin() as conn:
+        if "target_committee_ids" not in meetings_cols:
+            conn.execute(text(
+                "ALTER TABLE meetings ADD COLUMN target_committee_ids TEXT"))
+
+        if "exclude_from_recent" not in history_cols:
+            conn.execute(text(
+                "ALTER TABLE member_history"
+                " ADD COLUMN exclude_from_recent BOOLEAN NOT NULL DEFAULT FALSE"))
+
         if "photo_thumb" not in members_cols:
             conn.execute(text("ALTER TABLE members ADD COLUMN photo_thumb BYTEA"))
         if "photo_full" not in members_cols:
@@ -149,6 +176,8 @@ def _migrate_postgresql(engine):
 
         if "committee_id" not in members_cols:
             conn.execute(text("ALTER TABLE members ADD COLUMN committee_id INTEGER"))
+        if "committee_role" not in members_cols:
+            conn.execute(text("ALTER TABLE members ADD COLUMN committee_role VARCHAR"))
 
         staff_cols = {col["name"] for col in insp.get_columns("staff")}
         if "is_admin" not in staff_cols:

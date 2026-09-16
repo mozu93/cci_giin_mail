@@ -33,7 +33,7 @@ def test_preentry_status_combo_ignores_wheel_scroll(qtbot, db_session, monkeypat
     qtbot.addWidget(w)
     w.load(meeting.id)
 
-    combo = w._pre_table.cellWidget(0, 5)
+    combo = w._pre_table.cellWidget(0, 6)
     before = combo.currentText()
     event = _make_wheel_event()
     combo.wheelEvent(event)
@@ -119,16 +119,16 @@ def test_meeting_tab_refresh_reflects_member_roster_updates(
     tab = MeetingTab(staff_name="担当者A")
     qtbot.addWidget(tab)
     assert tab._current_meeting_id == meeting_id
-    assert tab._preentry._pre_table.item(0, 1).text() == "変更前商事"
+    assert tab._preentry._pre_table.item(0, 2).text() == "変更前商事"
 
     # 名簿管理タブ側で事業所名を更新（会議管理タブはまだ古い表示のまま）
     update_session = SessionLocal()
     update_member(update_session, member_id, "担当者A", "事業所名変更",
                   organization_name="変更後商事")
     update_session.close()
-    assert tab._preentry._pre_table.item(0, 1).text() == "変更前商事"
+    assert tab._preentry._pre_table.item(0, 2).text() == "変更前商事"
 
     # 会議管理タブに戻る（main_windowのタブ切替でrefresh()が呼ばれる想定）
     tab.refresh()
 
-    assert tab._preentry._pre_table.item(0, 1).text() == "変更後商事"
+    assert tab._preentry._pre_table.item(0, 2).text() == "変更後商事"

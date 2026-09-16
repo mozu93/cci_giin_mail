@@ -8,7 +8,8 @@ from PyQt6.QtCore import Qt
 from sqlalchemy.orm import Session
 from app.database.models import Member, Position
 from app.services.member_service import (
-    create_member, update_member, set_email_addresses, record_member_history
+    create_member, update_member, set_email_addresses, record_member_history,
+    validate_committee_role
 )
 from app.services.committee_service import get_committees
 from app.utils import to_hankaku_kana
@@ -85,6 +86,7 @@ class MemberEditDialog(QDialog):
             lambda: self._name_kana.setText(to_hankaku_kana(self._name_kana.text())))
         self._position_combo = _NoWheelComboBox()
         self._committee_combo = _NoWheelComboBox()
+        self._committee_role_combo = _NoWheelComboBox()
         self._notes = QLineEdit()
 
         self._positions = self._session.query(Position).order_by(Position.sort_order).all()
@@ -96,10 +98,16 @@ class MemberEditDialog(QDialog):
         self._committee_combo.addItem("（なし）", None)
         for c in self._committees:
             self._committee_combo.addItem(c.name, c.id)
+        self._committee_combo.currentIndexChanged.connect(self._on_committee_change)
+
+        for role in ("（なし）", "担当副会頭", "委員長", "副委員長"):
+            self._committee_role_combo.addItem(role, None if role == "（なし）" else role)
+        self._committee_role_combo.setEnabled(False)
 
         form.addRow("会員番号 *", self._member_number)
         form.addRow("会議所役職", self._position_combo)
         form.addRow("委員会", self._committee_combo)
+        form.addRow("委員会内の役職", self._committee_role_combo)
         form.addRow("事業所名 *", self._org_name)
         form.addRow("事業所名フリガナ", self._org_kana)
         form.addRow("役職名", self._title)
@@ -151,6 +159,12 @@ class MemberEditDialog(QDialog):
         btn_row.addWidget(btn_save)
         layout.addLayout(btn_row)
 
+    def _on_committee_change(self):
+        has_committee = self._committee_combo.currentData() is not None
+        self._committee_role_combo.setEnabled(has_committee)
+        if not has_committee:
+            self._committee_role_combo.setCurrentIndex(0)
+
     def _select_photo(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "写真を選択", "",
@@ -189,6 +203,11 @@ class MemberEditDialog(QDialog):
             if c.id == member.committee_id:
                 self._committee_combo.setCurrentIndex(i + 1)
                 break
+        self._on_committee_change()
+        if member.committee_role:
+            idx = self._committee_role_combo.findData(member.committee_role)
+            if idx >= 0:
+                self._committee_role_combo.setCurrentIndex(idx)
         for i, ea in enumerate(member.email_addresses[:_MAX_EMAILS]):
             self._email_rows[i][0].setText(ea.address)
             self._email_rows[i][1].setText(ea.label or "")
@@ -219,6 +238,7 @@ class MemberEditDialog(QDialog):
         name_kana = to_hankaku_kana(self._name_kana.text().strip())
         position_id = self._position_combo.currentData()
         committee_id = self._committee_combo.currentData()
+        committee_role = self._committee_role_combo.currentData() if committee_id else None
         addresses = []
         for i, (addr_w, label_w) in enumerate(self._email_rows, start=1):
             addr = addr_w.text().strip()
@@ -237,6 +257,9 @@ class MemberEditDialog(QDialog):
             return
 
         try:
+            validate_committee_role(
+                self._session, committee_id, committee_role,
+                exclude_member_id=self._member.id if self._member else None)
             if self._member:
                 update_member(
                     self._session, self._member.id,
@@ -251,6 +274,7 @@ class MemberEditDialog(QDialog):
                     notes=self._notes.text().strip(),
                     position_id=position_id,
                     committee_id=committee_id,
+                    committee_role=committee_role,
                 )
                 set_email_addresses(self._session, self._member.id, addresses)
                 self._session.commit()
@@ -264,6 +288,7 @@ class MemberEditDialog(QDialog):
                     notes=self._notes.text().strip(),
                     position_id=position_id,
                     committee_id=committee_id,
+                    committee_role=committee_role,
                 )
                 set_email_addresses(self._session, m.id, addresses)
                 self._session.commit()
@@ -295,6 +320,7 @@ class MemberEditDialog(QDialog):
             self._notes.text().strip(),
             self._position_combo.currentData(),
             self._committee_combo.currentData(),
+            self._committee_role_combo.currentData(),
             emails,
         )
 

@@ -4,7 +4,9 @@ import re
 from datetime import date
 from sqlalchemy.orm import Session
 from app.database.models import Meeting, AttendanceRecord, Member
-from app.services.member_service import get_members
+from app.services.member_service import (
+    get_members, sort_members_by_committee_role, committee_role_display,
+)
 
 STATUS_OPTIONS = ["未回答", "出席", "代理", "委任", "欠席"]
 
@@ -21,12 +23,33 @@ def build_attendance_export_filename(
 
 
 def create_meeting(session: Session, name: str, meeting_date: date,
-                   target_position_ids: list[int] | None = None) -> Meeting:
-    ids_json = json.dumps(target_position_ids) if target_position_ids else None
-    m = Meeting(name=name, date=meeting_date, target_position_ids=ids_json)
+                   target_position_ids: list[int] | None = None,
+                   target_committee_ids: list[int] | None = None) -> Meeting:
+    pos_json = json.dumps(target_position_ids) if target_position_ids else None
+    committee_json = json.dumps(target_committee_ids) if target_committee_ids else None
+    m = Meeting(name=name, date=meeting_date, target_position_ids=pos_json,
+               target_committee_ids=committee_json)
     session.add(m)
     session.commit()
     return m
+
+
+def _filter_members_by_meeting_target(meeting: Meeting, members: list[Member]) -> list[Member]:
+    """会議の対象者設定（役職指定・委員会指定）に従って会員を絞り込む。
+    どちらも指定されている場合は、いずれかに該当する会員を対象とする（OR条件）。"""
+    target_position_ids = (
+        set(json.loads(meeting.target_position_ids))
+        if meeting.target_position_ids else None)
+    target_committee_ids = (
+        set(json.loads(meeting.target_committee_ids))
+        if meeting.target_committee_ids else None)
+    if target_position_ids is None and target_committee_ids is None:
+        return members
+    return [
+        m for m in members
+        if (target_position_ids is not None and m.position_id in target_position_ids)
+        or (target_committee_ids is not None and m.committee_id in target_committee_ids)
+    ]
 
 
 def get_meetings(session: Session) -> list[Meeting]:
@@ -57,6 +80,12 @@ def upsert_attendance(session: Session, meeting_id: int, member_id: int,
     return r
 
 
+def is_committee_meeting(session: Session, meeting_id: int) -> bool:
+    """会議が委員会指定（対象者を委員会で絞り込む設定）かどうかを返す。"""
+    meeting = session.get(Meeting, meeting_id)
+    return bool(meeting and meeting.target_committee_ids)
+
+
 def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
     """対象会員の出欠データをdictリストで返す（レコード未作成は未回答）。
 
@@ -67,9 +96,8 @@ def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
     会議日当日までの入会・情報更新は引き続き反映される。"""
     meeting = session.get(Meeting, meeting_id)
     members = get_members(session, active_only=True)
-    if meeting and meeting.target_position_ids:
-        target_ids = set(json.loads(meeting.target_position_ids))
-        members = [m for m in members if m.position_id in target_ids]
+    if meeting:
+        members = _filter_members_by_meeting_target(meeting, members)
     records = {
         r.member_id: r
         for r in session.query(AttendanceRecord)
@@ -82,6 +110,8 @@ def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
         if retired_ids:
             members = members + (
                 session.query(Member).filter(Member.id.in_(retired_ids)).all())
+    if meeting and meeting.target_committee_ids:
+        members = sort_members_by_committee_role(members)
     result = []
     for m in members:
         r = records.get(m.id)
@@ -93,6 +123,7 @@ def get_attendance_data(session: Session, meeting_id: int) -> list[dict]:
             "title":         m.title or "",
             "name":          m.name,
             "position":      m.position.name if m.position else "",
+            "committee_role": committee_role_display(m),
             "status":        r.status if r else "未回答",
             "actual_status": (r.actual_status or "") if r else "",
             "proxy_title":   r.proxy_title if r else "",
@@ -161,6 +192,7 @@ def export_reception_xlsx(session: Session, meeting_id: int, filepath: str) -> N
     from openpyxl.utils import get_column_letter
 
     meeting = session.get(Meeting, meeting_id)
+    is_committee = is_committee_meeting(session, meeting_id)
     data = get_attendance_data(session, meeting_id)
     summary = get_reception_summary(session, meeting_id)
     wb = openpyxl.Workbook()
@@ -176,6 +208,7 @@ def export_reception_xlsx(session: Session, meeting_id: int, filepath: str) -> N
     summary_header_row = section_row + 1
     summary_values_row = section_row + 2
     formula_row = section_row + 3
+    summary_col_count = 7
     ws.cell(section_row, 1, "【当日受付集計】").font = Font(bold=True, size=12)
 
     summary_headers = ["出席", "代理", "委任", "欠席", "未受付", "監事出席", "議決権数"]
@@ -204,11 +237,13 @@ def export_reception_xlsx(session: Session, meeting_id: int, filepath: str) -> N
     )
     ws.cell(formula_row, 1, formula)
     ws.merge_cells(start_row=formula_row, start_column=1,
-                   end_row=formula_row, end_column=7)
+                   end_row=formula_row, end_column=summary_col_count)
 
-    headers = [
-        "No.", "当日受付", "事業所名", "会議所役職", "氏名", "代理情報",
-    ]
+    headers = ["No.", "当日受付", "事業所名", "会議所役職", "氏名", "代理情報"]
+    widths = [6, 12, 34, 16, 16, 24]
+    if is_committee:
+        headers.insert(3, "委員会役職")
+        widths.insert(3, 16)
     for col, value in enumerate(headers, 1):
         cell = ws.cell(header_row, col, value)
         cell.fill = header_fill
@@ -219,28 +254,32 @@ def export_reception_xlsx(session: Session, meeting_id: int, filepath: str) -> N
         proxy = " ".join(
             value for value in (item.get("proxy_title", ""), item.get("proxy_name", ""))
             if value)
-        values = [
-            row_no, item.get("actual_status") or "", item["org_name"],
-            item["position"], item["name"], proxy,
-        ]
+        values = [row_no, item.get("actual_status") or "", item["org_name"],
+                 item["position"], item["name"], proxy]
+        if is_committee:
+            values.insert(3, item.get("committee_role", ""))
         for col, value in enumerate(values, 1):
             cell = ws.cell(header_row + row_no, col, value)
             cell.border = border
             cell.alignment = Alignment(vertical="center", shrink_to_fit=True)
 
-    widths = [6, 12, 34, 16, 16, 24, 12]
     for col, width in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(col)].width = width
+    # 名簿列に含まれない集計専用の列（議決権数など）にも幅を設定する
+    for col in range(len(widths) + 1, summary_col_count + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 12
     last_row = formula_row
+    last_col = len(headers)
+    last_col_letter = get_column_letter(last_col)
     ws.freeze_panes = f"A{header_row + 1}"
-    ws.auto_filter.ref = f"A{header_row}:F{last_row}"
+    ws.auto_filter.ref = f"A{header_row}:{last_col_letter}{last_row}"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.print_title_rows = f"{header_row}:{header_row}"
-    ws.print_area = f"A1:G{last_row}"
+    ws.print_area = f"A1:{get_column_letter(max(last_col, summary_col_count))}{last_row}"
     wb.save(filepath)
 
 
@@ -268,9 +307,7 @@ def get_member_ids_by_status(session: Session, meeting_id: int,
     if not meeting:
         return set()
     members = get_members(session, active_only=True)
-    if meeting.target_position_ids:
-        target_ids = set(json.loads(meeting.target_position_ids))
-        members = [m for m in members if m.position_id in target_ids]
+    members = _filter_members_by_meeting_target(meeting, members)
     if is_meeting_past(meeting):
         members = [m for m in members if m.created_at.date() <= meeting.date]
     records = {
@@ -296,22 +333,26 @@ def get_member_ids_by_status(session: Session, meeting_id: int,
 
 def export_csv(session: Session, meeting_id: int, filepath: str) -> None:
     meeting = session.get(Meeting, meeting_id)
+    is_committee = is_committee_meeting(session, meeting_id)
     data = get_attendance_data(session, meeting_id)
+    header = ["会員番号", "事業所名", "会議所役職", "氏名",
+             "ステータス", "代理役職名", "代理氏名"]
+    if is_committee:
+        header.insert(3, "委員会役職")
     with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow(["会議名", meeting.name if meeting else ""])
-        writer.writerow(["会員番号", "事業所名", "会議所役職", "氏名",
-                         "ステータス", "代理役職名", "代理氏名"])
+        writer.writerow(header)
         for d in data:
-            writer.writerow([
-                d["member_number"], d["org_name"], d["position"], d["name"],
-                d["status"], d["proxy_title"], d["proxy_name"],
-            ])
+            row = [d["member_number"], d["org_name"], d["position"], d["name"],
+                  d["status"], d["proxy_title"], d["proxy_name"]]
+            if is_committee:
+                row.insert(3, d.get("committee_role", ""))
+            writer.writerow(row)
 
 
 _XLSX_HEADERS = ["No.", "事前", "役職", "事業所名", "所属役職", "氏名", "代理"]
 _XLSX_FONT_SIZE = 11
-_XLSX_CENTER_COLUMNS = {1, 2, 6}  # No., 事前, 氏名
 # 列幅（ピクセル指定）。Excelの列幅（文字単位）へは (px - 5) / 7 で換算する
 # （既定フォントCalibri 11・既定列幅8.43文字=64pxを基準とした変換式）。
 _XLSX_COLUMN_WIDTHS_PX = [30, 45, 45, 235, 129, 93, 141]
@@ -367,20 +408,30 @@ def _calc_attendance_summary(data: list[dict]) -> dict:
 def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
     """会議の出欠一覧をA4縦向き印刷向けに整形したExcelファイルに書き出す。
     行順は会員一覧の並び順（会議所役職順）に従う。行数が多い場合は
-    自動的に複数ページに分かれて印刷される。"""
+    自動的に複数ページに分かれて印刷される。
+    委員会指定の会議は「委員会役職」列を追加し、出欠状況集計は出力しない
+    （委員会指定以外の会議は従来通り集計を出力する）。"""
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
 
     meeting = session.get(Meeting, meeting_id)
+    is_committee = is_committee_meeting(session, meeting_id)
     data = get_attendance_data(session, meeting_id)
-    summary = _calc_attendance_summary(data)
+    summary = None if is_committee else _calc_attendance_summary(data)
+
+    headers = list(_XLSX_HEADERS)
+    widths_px = list(_XLSX_COLUMN_WIDTHS_PX)
+    if is_committee:
+        headers.insert(2, "委員会役職")
+        widths_px.insert(2, 90)
+    center_columns = {headers.index(h) + 1 for h in ("No.", "事前", "氏名")}
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "出欠一覧"
 
-    n_cols = max(len(_XLSX_HEADERS), len(_SUMMARY_HEADERS))
+    n_cols = len(headers) if is_committee else max(len(headers), len(_SUMMARY_HEADERS))
     header_fill = PatternFill("solid", fgColor="1E40AF")
     header_font = Font(bold=True, color="FFFFFF", size=_XLSX_FONT_SIZE)
     data_font = Font(size=_XLSX_FONT_SIZE)
@@ -397,48 +448,51 @@ def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
 
     header_row = 4
     last_data_row = header_row + len(data)
+    last_row = last_data_row
 
-    # --- 名簿下部の出欠状況集計 ---
-    section_row = last_data_row + 2
-    ws.cell(row=section_row, column=1, value="【出欠状況集計】").font = Font(bold=True, size=12)
-    ws.merge_cells(start_row=section_row, start_column=1,
-                   end_row=section_row, end_column=n_cols)
+    # --- 名簿下部の出欠状況集計（委員会指定の会議では出力しない） ---
+    if summary is not None:
+        section_row = last_data_row + 2
+        ws.cell(row=section_row, column=1, value="【出欠状況集計】").font = Font(bold=True, size=12)
+        ws.merge_cells(start_row=section_row, start_column=1,
+                       end_row=section_row, end_column=n_cols)
 
-    summary_header_row = section_row + 1
-    for col, text in enumerate(_SUMMARY_HEADERS, start=1):
-        c = ws.cell(row=summary_header_row, column=col, value=text)
-        c.fill = header_fill
-        c.font = header_font
-        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        c.border = border
+        summary_header_row = section_row + 1
+        for col, text in enumerate(_SUMMARY_HEADERS, start=1):
+            c = ws.cell(row=summary_header_row, column=col, value=text)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            c.border = border
 
-    summary_values_row = section_row + 2
-    summary_values = [
-        summary["出席"], summary["代理"], summary["委任"], summary["欠席"],
-        summary["議決権数"], summary["実出席者数"], None, None,
-    ]
-    for col, val in enumerate(summary_values, start=1):
-        c = ws.cell(row=summary_values_row, column=col, value=val)
-        c.font = (Font(bold=True, size=_XLSX_FONT_SIZE)
-                  if col == _SUMMARY_TOTAL_COL else data_font)
-        c.alignment = Alignment(horizontal="center", vertical="center")
-        c.border = border
-    ws.cell(row=summary_values_row, column=_SUMMARY_OFFICE_COL).fill = input_fill
-    ws.cell(row=summary_values_row, column=_SUMMARY_TOTAL_COL).value = (
-        f"=SUM({get_column_letter(_SUMMARY_ACTUAL_COL)}{summary_values_row},"
-        f"{get_column_letter(_SUMMARY_OFFICE_COL)}{summary_values_row})"
-    )
+        summary_values_row = section_row + 2
+        summary_values = [
+            summary["出席"], summary["代理"], summary["委任"], summary["欠席"],
+            summary["議決権数"], summary["実出席者数"], None, None,
+        ]
+        for col, val in enumerate(summary_values, start=1):
+            c = ws.cell(row=summary_values_row, column=col, value=val)
+            c.font = (Font(bold=True, size=_XLSX_FONT_SIZE)
+                      if col == _SUMMARY_TOTAL_COL else data_font)
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            c.border = border
+        ws.cell(row=summary_values_row, column=_SUMMARY_OFFICE_COL).fill = input_fill
+        ws.cell(row=summary_values_row, column=_SUMMARY_TOTAL_COL).value = (
+            f"=SUM({get_column_letter(_SUMMARY_ACTUAL_COL)}{summary_values_row},"
+            f"{get_column_letter(_SUMMARY_OFFICE_COL)}{summary_values_row})"
+        )
 
-    note_row = section_row + 3
-    ws.cell(row=note_row, column=1,
-            value="※議決権数は出席・代理・委任の合計から、監事および四日市商工会議所を除いた人数です。"
-                  "ただし、専務理事は議決権数に含みます。"
-                  "事務局欄に人数を入力すると合計（飲み物用）が自動計算されます。").font = Font(
-        size=9, color="666666")
-    ws.merge_cells(start_row=note_row, start_column=1,
-                   end_row=note_row, end_column=n_cols)
+        note_row = section_row + 3
+        ws.cell(row=note_row, column=1,
+                value="※議決権数は出席・代理・委任の合計から、監事および四日市商工会議所を除いた人数です。"
+                      "ただし、専務理事は議決権数に含みます。"
+                      "事務局欄に人数を入力すると合計（飲み物用）が自動計算されます。").font = Font(
+            size=9, color="666666")
+        ws.merge_cells(start_row=note_row, start_column=1,
+                       end_row=note_row, end_column=n_cols)
+        last_row = note_row
 
-    for col, text in enumerate(_XLSX_HEADERS, start=1):
+    for col, text in enumerate(headers, start=1):
         c = ws.cell(row=header_row, column=col, value=text)
         c.fill = header_fill
         c.font = header_font
@@ -447,29 +501,30 @@ def export_xlsx(session: Session, meeting_id: int, filepath: str) -> None:
 
     for i, d in enumerate(data, start=1):
         proxy_info = " ".join(p for p in [d["proxy_title"], d["proxy_name"]] if p)
-        values = [i, d["status"], d["position"], d["org_name"], d["title"],
-                  d["name"], proxy_info]
+        values = [i, d["status"]]
+        if is_committee:
+            values.append(d.get("committee_role", ""))
+        values += [d["position"], d["org_name"], d["title"], d["name"], proxy_info]
         for col, val in enumerate(values, start=1):
             ws.cell(row=header_row + i, column=col, value=val)
 
-    last_row = note_row
     for row in ws.iter_rows(min_row=header_row + 1, max_row=last_data_row,
-                            max_col=len(_XLSX_HEADERS)):
+                            max_col=len(headers)):
         for cell in row:
             cell.border = border
             cell.font = data_font
             cell.alignment = Alignment(vertical="center", shrink_to_fit=True)
     for row_idx in range(header_row + 1, last_data_row + 1):
-        for col in _XLSX_CENTER_COLUMNS:
+        for col in center_columns:
             ws.cell(row=row_idx, column=col).alignment = Alignment(
                 horizontal="center", vertical="center", shrink_to_fit=True)
 
     # 列幅は指定ピクセル値で固定し、はみ出す分はセル書式の
     # 「縮小して全体を表示」でフォントサイズを自動調整させる。
-    for col, px in enumerate(_XLSX_COLUMN_WIDTHS_PX, start=1):
+    for col, px in enumerate(widths_px, start=1):
         ws.column_dimensions[get_column_letter(col)].width = _px_to_excel_width(px)
-    # 出欠状況集計のみで使う8列目（合計）の幅
-    for col in range(len(_XLSX_COLUMN_WIDTHS_PX) + 1, n_cols + 1):
+    # 出欠状況集計のみで使う列（名簿列と重ならない範囲）の幅
+    for col in range(len(widths_px) + 1, n_cols + 1):
         ws.column_dimensions[get_column_letter(col)].width = _px_to_excel_width(
             _SUMMARY_COLUMN_WIDTHS_PX[col - 1])
 

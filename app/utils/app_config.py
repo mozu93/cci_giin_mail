@@ -56,6 +56,31 @@ def get_graph_config() -> dict:
     return get_config().get("graph", {})
 
 
+def is_bulk_edit_mode() -> bool:
+    """一括変更モードかどうか（既定はオフ）。
+    オンの間の変更は、変更履歴には通常どおり残すが、名簿管理タブの
+    「最近の更新」一覧には表示しない（一括登録で重要な変更が埋もれないようにする）。"""
+    return bool(get_config().get("bulk_edit_mode", False))
+
+
+def set_bulk_edit_mode(enabled: bool) -> None:
+    config = get_config()
+    config["bulk_edit_mode"] = enabled
+    save_config(config)
+
+
+def is_send_as_self() -> bool:
+    """メール送信の送信元に「自分のアドレス」を使うかどうか。
+    既定はオフ（代理差出人が設定されていればそこから送信する従来動作）。"""
+    return bool(get_config().get("send_as_self", False))
+
+
+def set_send_as_self(enabled: bool) -> None:
+    config = get_config()
+    config["send_as_self"] = enabled
+    save_config(config)
+
+
 def get_db_type() -> str:
     """'sqlite' または 'postgresql' を返す（デフォルトは 'sqlite'）"""
     return get_config().get("db_type", "sqlite")

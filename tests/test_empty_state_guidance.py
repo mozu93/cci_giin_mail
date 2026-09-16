@@ -12,6 +12,7 @@ def test_member_tab_shows_guidance_when_empty(qtbot, monkeypatch):
     monkeypatch.setattr("app.ui.member_tab.get_session", lambda: _FakeSession())
     monkeypatch.setattr("app.ui.member_tab.get_members", lambda *a, **k: [])
     monkeypatch.setattr("app.ui.member_tab.MemberTab._load_positions", lambda self: None)
+    monkeypatch.setattr("app.ui.member_tab.MemberTab._load_committees", lambda self: None)
 
     from app.ui.member_tab import MemberTab
     tab = MemberTab()
@@ -26,6 +27,7 @@ def test_member_tab_hides_guidance_with_filter(qtbot, monkeypatch):
     monkeypatch.setattr("app.ui.member_tab.get_session", lambda: _FakeSession())
     monkeypatch.setattr("app.ui.member_tab.get_members", lambda *a, **k: [])
     monkeypatch.setattr("app.ui.member_tab.MemberTab._load_positions", lambda self: None)
+    monkeypatch.setattr("app.ui.member_tab.MemberTab._load_committees", lambda self: None)
 
     from app.ui.member_tab import MemberTab
     tab = MemberTab()

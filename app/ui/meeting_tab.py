@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 from app.database.connection import get_session
 from app.services.meeting_service import get_meetings, create_meeting, delete_meeting
 from app.services.position_service import get_positions
+from app.services.committee_service import get_committees
 from app.ui.dialogs.new_meeting_dialog import NewMeetingDialog
 from app.ui.meeting_widgets.preentry_widget import PreentryWidget
 from app.ui.meeting_widgets.reception_widget import ReceptionWidget
@@ -66,7 +67,12 @@ class MeetingTab(QWidget):
         self._meeting_combo.clear()
         self._meeting_combo.addItem("（会議を選択してください）", None)
         for m in meetings:
-            scope = "全員" if not m.target_position_ids else "役職指定"
+            if m.target_position_ids:
+                scope = "役職指定"
+            elif m.target_committee_ids:
+                scope = "委員会指定"
+            else:
+                scope = "全員"
             self._meeting_combo.addItem(
                 f"{m.date.strftime('%Y/%m/%d')}　{m.name}　（{scope}）", m.id)
         self._meeting_combo.blockSignals(False)
@@ -109,14 +115,16 @@ class MeetingTab(QWidget):
         session = get_session()
         try:
             positions = get_positions(session)
+            committees = get_committees(session)
         finally:
             session.close()
-        dlg = NewMeetingDialog(positions, self)
+        dlg = NewMeetingDialog(positions, committees, parent=self)
         if dlg.exec():
-            name, meeting_date, target_ids = dlg.get_values()
+            name, meeting_date, target_position_ids, target_committee_ids = dlg.get_values()
             session = get_session()
             try:
-                create_meeting(session, name, meeting_date, target_ids)
+                create_meeting(session, name, meeting_date,
+                               target_position_ids, target_committee_ids)
             finally:
                 session.close()
             self._load_meetings()

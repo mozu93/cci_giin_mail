@@ -16,6 +16,8 @@ class _Member:
         self.name_kana = ""
         self.title = ""
         self.position = None
+        self.committee_id = None
+        self.committee_role = None
         self.email_addresses = [_Email(a) for a in (emails or [])]
 
 
@@ -31,7 +33,7 @@ def test_recipient_panel_shows_one_row_and_count_per_company(qtbot):
 
     assert panel._table.rowCount() == 2
     assert panel._count_label.text() == "2社選択"
-    assert panel._table.item(0, 6).text() == (
+    assert panel._table.item(0, 7).text() == (
         "To: a@example.com / CC: b@example.com")
 
 

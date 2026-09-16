@@ -9,6 +9,7 @@ from app.services.meeting_service import (
 )
 from app.services.member_service import create_member, delete_member
 from app.services.position_service import create_position
+from app.services.committee_service import create_committee
 from app.services.reception_log_service import create_log, get_logs
 from datetime import date, datetime, timedelta
 
@@ -271,6 +272,31 @@ def test_export_xlsx_summary_note_mentions_exclusion_rule(db_session, tmp_path):
         if str(ws.cell(row=row, column=1).value or "").startswith("※議決権数"))
     assert "監事" in note
     assert "四日市商工会議所" in note
+
+
+def test_export_xlsx_committee_meeting_has_no_summary_section(db_session, tmp_path):
+    """委員会指定の会議は出欠状況集計セクションを出力しない。"""
+    committee = create_committee(db_session, "総務委員会", 1)
+    position = create_position(db_session, "議員", 1)
+    m1 = create_member(db_session, "A-101", "○○商事", "出席太郎",
+                       position_id=position.id, committee_id=committee.id)
+    meeting = create_meeting(db_session, "委員会会議", _FUTURE_DATE,
+                             target_committee_ids=[committee.id])
+    upsert_attendance(db_session, meeting.id, m1.id, "出席")
+
+    path = tmp_path / "attendance_committee_no_summary.xlsx"
+    export_xlsx(db_session, meeting.id, str(path))
+
+    wb = openpyxl.load_workbook(path)
+    ws = wb.active
+    all_values = [
+        ws.cell(row=row, column=col).value
+        for row in range(1, ws.max_row + 1)
+        for col in range(1, ws.max_column + 1)
+    ]
+    assert "【出欠状況集計】" not in all_values
+    assert "議決権数" not in all_values
+    assert "委員会役職" in all_values
 
 
 def test_reception_voting_count_uses_actual_status_and_subtracts_attending_auditors(

@@ -36,7 +36,7 @@ def test_toggling_column_off_hides_it_and_persists(qtbot, monkeypatch):
     tab._toggle_column(3, visible=False)
 
     assert tab._table.isColumnHidden(3) is True
-    assert saved["member_tab"] == [3]
+    assert saved["member_tab_v2"] == [3]
 
 
 def test_toggling_column_back_on_shows_it_again(qtbot, monkeypatch):
@@ -57,7 +57,7 @@ def test_toggling_column_back_on_shows_it_again(qtbot, monkeypatch):
     tab._toggle_column(3, visible=True)
 
     assert tab._table.isColumnHidden(3) is False
-    assert saved["member_tab"] == []
+    assert saved["member_tab_v2"] == []
 
 
 def test_hidden_columns_restored_on_load(qtbot, monkeypatch):
@@ -65,7 +65,7 @@ def test_hidden_columns_restored_on_load(qtbot, monkeypatch):
     monkeypatch.setattr("app.ui.member_tab.get_members", lambda *a, **k: [])
     monkeypatch.setattr(
         "app.services.settings_service.get_hidden_columns",
-        lambda key: [3, 5] if key == "member_tab" else [])
+        lambda key: [3, 5] if key == "member_tab_v2" else [])
 
     from app.ui.member_tab import MemberTab
     tab = MemberTab()

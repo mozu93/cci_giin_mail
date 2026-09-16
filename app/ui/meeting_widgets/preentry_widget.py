@@ -8,7 +8,7 @@ from PyQt6.QtCore import Qt
 from app.database.connection import get_session
 from app.services.meeting_service import (
     STATUS_OPTIONS, upsert_attendance, get_attendance_data, export_csv, export_xlsx,
-    build_attendance_export_filename,
+    build_attendance_export_filename, is_committee_meeting,
 )
 from app.services.settings_service import get_font_size, set_font_size
 from app.utils import to_katakana
@@ -16,10 +16,14 @@ from app.ui.meeting_widgets import count_label
 from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
 from app.utils.app_config import get_graph_config
 
-_PRE_COL_KEYS = ["position", "org_name", "org_kana", "title", "name",
-                 "status", "proxy_title", "proxy_name"]
-_PRE_HEADERS  = ["会議所役職名", "事業所名", "事業所名フリガナ", "役職名", "氏名",
+# 0列目「委員会役職」は委員会指定の会議でのみ表示し、それ以外は非表示にする
+_PRE_TEXT_KEYS = ["committee_role", "position", "org_name", "org_kana", "title", "name"]
+_PRE_COL_KEYS = _PRE_TEXT_KEYS + ["status", "proxy_title", "proxy_name"]
+_PRE_HEADERS  = ["委員会役職", "会議所役職名", "事業所名", "事業所名フリガナ", "役職名", "氏名",
                  "ステータス", "代理役職名", "代理者氏名"]
+_STATUS_COL = len(_PRE_TEXT_KEYS)
+_PROXY_TITLE_COL = _STATUS_COL + 1
+_PROXY_NAME_COL = _STATUS_COL + 2
 
 
 class _NoWheelComboBox(QComboBox):
@@ -132,15 +136,16 @@ class PreentryWidget(QWidget):
         style_table_header(self._pre_table)
         from app.ui.widgets.column_visibility import setup_column_visibility_menu
         setup_column_visibility_menu(
-            self._pre_table, _PRE_HEADERS, "preentry_table", self)
-        self._pre_table.setColumnWidth(0, 120)
-        self._pre_table.setColumnWidth(1, 200)
-        self._pre_table.setColumnWidth(2, 150)
-        self._pre_table.setColumnWidth(3, 100)
+            self._pre_table, _PRE_HEADERS, "preentry_table_v2", self)
+        self._pre_table.setColumnWidth(0, 100)
+        self._pre_table.setColumnWidth(1, 120)
+        self._pre_table.setColumnWidth(2, 200)
+        self._pre_table.setColumnWidth(3, 150)
         self._pre_table.setColumnWidth(4, 100)
-        self._pre_table.setColumnWidth(5, 80)
-        self._pre_table.setColumnWidth(6, 110)
-        self._pre_table.setColumnWidth(7, 110)
+        self._pre_table.setColumnWidth(5, 100)
+        self._pre_table.setColumnWidth(_STATUS_COL, 80)
+        self._pre_table.setColumnWidth(_PROXY_TITLE_COL, 110)
+        self._pre_table.setColumnWidth(_PROXY_NAME_COL, 110)
         h.sectionClicked.connect(self._on_pre_header_click)
         self._pre_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._pre_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -170,13 +175,16 @@ class PreentryWidget(QWidget):
         if not self._meeting_id:
             self._preentry_data = []
             self._sort_keys.clear()
+            self._pre_table.setColumnHidden(0, True)
             self._update_preentry_summary()
             return
         session = get_session()
         try:
             self._preentry_data = get_attendance_data(session, self._meeting_id)
+            is_committee = is_committee_meeting(session, self._meeting_id)
         finally:
             session.close()
+        self._pre_table.setColumnHidden(0, not is_committee)
         self._sort_keys.clear()
         self._original_ids = [d["member_id"] for d in self._preentry_data]
         self._update_pre_headers()
@@ -187,15 +195,15 @@ class PreentryWidget(QWidget):
         self._pre_table.setRowCount(0)
         for i, d in enumerate(self._preentry_data):
             self._pre_table.insertRow(i)
-            for col in range(5):
+            for col in range(len(_PRE_TEXT_KEYS)):
                 self._pre_table.setItem(
-                    i, col, QTableWidgetItem(d.get(_PRE_COL_KEYS[col], "")))
+                    i, col, QTableWidgetItem(d.get(_PRE_TEXT_KEYS[col], "")))
             if self._readonly:
-                self._pre_table.setItem(i, 5, QTableWidgetItem(d["status"]))
+                self._pre_table.setItem(i, _STATUS_COL, QTableWidgetItem(d["status"]))
                 self._pre_table.setItem(
-                    i, 6, QTableWidgetItem(d.get("proxy_title", "")))
+                    i, _PROXY_TITLE_COL, QTableWidgetItem(d.get("proxy_title", "")))
                 self._pre_table.setItem(
-                    i, 7, QTableWidgetItem(d.get("proxy_name", "")))
+                    i, _PROXY_NAME_COL, QTableWidgetItem(d.get("proxy_name", "")))
             else:
                 mid = d["member_id"]
                 combo = _NoWheelComboBox()
@@ -203,7 +211,7 @@ class PreentryWidget(QWidget):
                 combo.setCurrentText(d["status"])
                 combo.currentTextChanged.connect(
                     lambda text, m=mid: self._on_status_change_by_id(m, text))
-                self._pre_table.setCellWidget(i, 5, combo)
+                self._pre_table.setCellWidget(i, _STATUS_COL, combo)
                 is_proxy = d["status"] == "代理"
                 title_edit = QLineEdit(d["proxy_title"])
                 name_edit  = QLineEdit(d["proxy_name"])
@@ -213,8 +221,8 @@ class PreentryWidget(QWidget):
                     lambda m=mid: self._save_proxy_by_id(m))
                 name_edit.editingFinished.connect(
                     lambda m=mid: self._save_proxy_by_id(m))
-                self._pre_table.setCellWidget(i, 6, title_edit)
-                self._pre_table.setCellWidget(i, 7, name_edit)
+                self._pre_table.setCellWidget(i, _PROXY_TITLE_COL, title_edit)
+                self._pre_table.setCellWidget(i, _PROXY_NAME_COL, name_edit)
         self._pre_table.setUpdatesEnabled(True)
         self._apply_status_filter()
         self._update_preentry_summary()
@@ -332,8 +340,8 @@ class PreentryWidget(QWidget):
             return
         d = self._preentry_data[row]
         d["status"] = text
-        title_edit = self._pre_table.cellWidget(row, 6)
-        name_edit  = self._pre_table.cellWidget(row, 7)
+        title_edit = self._pre_table.cellWidget(row, _PROXY_TITLE_COL)
+        name_edit  = self._pre_table.cellWidget(row, _PROXY_NAME_COL)
         is_proxy = (text == "代理")
         if title_edit:
             title_edit.setEnabled(is_proxy)
@@ -354,8 +362,8 @@ class PreentryWidget(QWidget):
         if row >= len(self._preentry_data):
             return
         d = self._preentry_data[row]
-        title_edit = self._pre_table.cellWidget(row, 6)
-        name_edit  = self._pre_table.cellWidget(row, 7)
+        title_edit = self._pre_table.cellWidget(row, _PROXY_TITLE_COL)
+        name_edit  = self._pre_table.cellWidget(row, _PROXY_NAME_COL)
         d["proxy_title"] = title_edit.text().strip() if title_edit else ""
         d["proxy_name"]  = name_edit.text().strip() if name_edit else ""
         self._save_row(row)
