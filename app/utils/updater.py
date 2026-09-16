@@ -12,7 +12,11 @@ from typing import Optional
 
 from packaging.version import Version
 
-GITHUB_API_URL = "https://api.github.com/repos/mozu93/cci_giin_mail/releases/latest"
+# ソースコードは非公開リポジトリ（mozu93/cci_giin_mail）で管理し、
+# インストーラーだけを公開配布リポジトリでReleaseする。
+# 詳細は docs/ソース非公開・配布リポジトリ分離の仕組み.md を参照。
+GITHUB_API_URL = (
+    "https://api.github.com/repos/mozu93/cci_giin_mail-releases/releases/latest")
 _TIMEOUT = 8
 _ALLOWED_DOWNLOAD_HOSTS = {
     "github.com",

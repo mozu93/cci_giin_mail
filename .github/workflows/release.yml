@@ -7,6 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
+  # v1.2.3 の移行Releaseを旧配布先（このリポジトリ）へ作成するために必要。
+  # 全端末が v1.2.3 以降になったら、このジョブと下の移行用ステップは削除できる。
   contents: write
 
 jobs:
@@ -60,7 +62,26 @@ jobs:
           "$hash  $(Split-Path -Leaf $installer)" |
             Set-Content -Encoding ascii -LiteralPath "$installer.sha256"
 
-      - name: Create GitHub Release
+      # 公開配布リポジトリ。v1.2.3以降のアプリはここを更新確認先にする。
+      - name: Create public distribution release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: mozu93/cci_giin_mail-releases
+          tag_name: ${{ github.ref_name }}
+          name: "議員メール配信アプリ v${{ steps.ver.outputs.VERSION }}"
+          body_path: RELEASE_NOTES.md
+          files: |
+            installer_output/CCIMail_Setup_${{ steps.ver.outputs.VERSION }}.exe
+            installer_output/CCIMail_Setup_${{ steps.ver.outputs.VERSION }}.exe.sha256
+          draft: false
+          prerelease: false
+          # 公開配布リポジトリへの書き込み権限だけを持つFine-grained PAT。
+          token: ${{ secrets.RELEASES_REPO_TOKEN }}
+
+      # 移行用。v1.2.2以前のアプリはこのリポジトリを更新確認先としているため、
+      # 全端末が v1.2.3 以降になるまでは旧配布先にも同じインストーラーを出す。
+      # 移行完了後にこのステップと permissions の contents: write を削除する。
+      - name: Create legacy release (migration only)
         uses: softprops/action-gh-release@v2
         with:
           name: "議員メール配信アプリ v${{ steps.ver.outputs.VERSION }}"
