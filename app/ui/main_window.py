@@ -25,11 +25,11 @@ class MainWindow(QMainWindow):
             session.close()
         self._is_admin = bool(staff and staff.is_admin)
         if readonly:
-            title = "商工会議所メール配信システム　【閲覧専用】"
+            title = "議員メール配信アプリ　【閲覧専用】"
         elif staff_name:
-            title = f"商工会議所メール配信システム　［{staff_name}］"
+            title = f"議員メール配信アプリ　［{staff_name}］"
         else:
-            title = "商工会議所メール配信システム"
+            title = "議員メール配信アプリ"
         self.setWindowTitle(title)
         self.resize(1280, 728)
         self.setMinimumSize(700, 500)

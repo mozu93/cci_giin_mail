@@ -17,7 +17,7 @@ def test_main_window_creates(main_window):
 
 def test_main_window_title(main_window):
     """ウィンドウタイトルが正しい"""
-    assert main_window.windowTitle() == "商工会議所メール配信システム"
+    assert main_window.windowTitle() == "議員メール配信アプリ"
 
 
 def test_main_window_has_six_tabs(main_window):

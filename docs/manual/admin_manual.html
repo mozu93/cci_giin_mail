@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>商工会議所メール配信システム 管理者マニュアル</title>
+<title>議員メール配信アプリ 管理者マニュアル</title>
 <style>
   :root {
     --blue:   #2563EB;
@@ -119,8 +119,9 @@
 
 <main>
 
-<h1>商工会議所メール配信システム<br>管理者マニュアル</h1>
-<p class="version">対象バージョン: v1.2.1 ／ 対象読者: 管理者権限を持つ職員 ／ 想定環境: Windows 10 / 11　社内LAN</p>
+<h1>議員メール配信アプリ<br>管理者マニュアル</h1>
+<p class="version">対象バージョン: v1.2.2 ／ 対象読者: 管理者権限を持つ職員 ／ 想定環境: Windows 10 / 11　社内LAN</p>
+<div class="note">v1.2.2以降、アプリの名称が「商工会議所メール配信システム」から「議員メール配信アプリ」に変わりました。更新すると旧名称のショートカットは自動的に削除され、新しい名称のショートカットが作成されます。インストール先・設定ファイル・認証情報・データベースはそのまま引き継がれるため、管理者による再設定は不要です。</div>
 
 <div id="toc">
   <h3>このマニュアルについて</h3>
@@ -382,7 +383,7 @@ net start postgresql-cci_mail</pre>
 <ol class="steps">
   <li><code>https://portal.azure.com</code> にアクセスし、管理者権限のあるMicrosoft 365アカウントでログイン</li>
   <li>「Azure Active Directory」→「アプリの登録」→「新規登録」</li>
-  <li>名前に「商工会議所メール配信システム」などわかりやすい名前を入力</li>
+  <li>名前に「議員メール配信アプリ」などわかりやすい名前を入力</li>
   <li>「サポートされているアカウントの種類」は「この組織ディレクトリのみに含まれるアカウント」を選択</li>
   <li>「リダイレクトURI」は「パブリック クライアント/ネイティブ」を選び、<code>http://localhost</code> を入力</li>
   <li>「登録」をクリック</li>
@@ -505,7 +506,7 @@ net start postgresql-cci_mail</pre>
 <p>「ヘルプ」→「更新を確認」を実行してください。更新確認は起動時と30分ごとにも自動実行されます。接続エラーが表示された場合は、職員PCから <code>api.github.com</code>、<code>github.com</code>、<code>objects.githubusercontent.com</code> へのHTTPS通信が許可されているか確認してください。</p>
 
 <hr>
-<p style="color:#9CA3AF;font-size:12px;">このマニュアルは商工会議所メール配信システム専用です。同一サーバーで請求書発行システム（CCI請求管理システム）を併用している場合、第1〜6章のサーバー設定は共通の作業として一度行えば両システムで使い回せます。</p>
+<p style="color:#9CA3AF;font-size:12px;">このマニュアルは議員メール配信アプリ専用です。同一サーバーで請求書発行システム（CCI請求管理システム）を併用している場合、第1〜6章のサーバー設定は共通の作業として一度行えば両システムで使い回せます。</p>
 
 </main>
 </body>
