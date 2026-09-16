@@ -16,6 +16,39 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      # トークン未設定・期限切れのままビルドへ数分かけないよう、最初に検査する。
+      # 実際にこの検査が無いまま、ビルド成功後のRelease作成で
+      # 「Parameter token or opts.auth is required」により失敗した事象がある。
+      - name: Verify RELEASES_REPO_TOKEN
+        shell: pwsh
+        env:
+          RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RELEASES_REPO_TOKEN)) {
+            throw "RELEASES_REPO_TOKEN が未設定です。公開配布リポジトリ " +
+              "(mozu93/cci_giin_mail-releases) への Contents: Read and write 権限を持つ " +
+              "Fine-grained PAT を、このリポジトリの Actions secret に登録してください。"
+          }
+          $headers = @{
+            Authorization = "Bearer $env:RELEASES_REPO_TOKEN"
+            Accept        = "application/vnd.github+json"
+            "User-Agent"  = "cci-mail-release"
+          }
+          try {
+            $repo = Invoke-RestMethod -Method Get -Headers $headers `
+              -Uri "https://api.github.com/repos/mozu93/cci_giin_mail-releases"
+          } catch {
+            throw "RELEASES_REPO_TOKEN で公開配布リポジトリにアクセスできません。" +
+              "期限切れ・Revoke済み・対象リポジトリ未選択のいずれかの可能性があります: " +
+              $_.Exception.Message
+          }
+          # 権限の見え方はトークン種別で変わりうるため、ここでは警告に留める。
+          if (-not $repo.permissions.push) {
+            Write-Host "::warning::RELEASES_REPO_TOKEN に書き込み権限が無いように見えます。" +
+              "Release作成に失敗する場合は Contents: Read and write を確認してください。"
+          }
+          Write-Host "配布先リポジトリへの認証を確認した: $($repo.full_name)"
+
       - name: Checkout
         uses: actions/checkout@v4
 
