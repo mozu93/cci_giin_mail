@@ -25,6 +25,7 @@ from app.services.position_service import (
 )
 from app.database.models import Member
 from app.utils.validators import is_valid_email
+from app.ui.theme import style
 
 
 class SettingsTab(QWidget):
@@ -602,7 +603,7 @@ class _DataWidget(QWidget):
             "この操作は取り消せません。開発・テスト時のみ使用してください。"
         ))
         btn = QPushButton("一括削除を実行")
-        btn.setStyleSheet("color: #DC2626; border: 1px solid #DC2626;")
+        style(btn, "color: ${danger}; border: 1px solid ${danger};")
         btn.clicked.connect(self._bulk_delete)
         grp_layout.addWidget(btn)
         layout.addWidget(grp)

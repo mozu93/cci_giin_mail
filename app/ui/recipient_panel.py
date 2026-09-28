@@ -4,13 +4,12 @@ from PyQt6.QtWidgets import (
     QCheckBox, QLabel, QLineEdit, QPushButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
 from app.services.settings_service import get_font_size, set_font_size
 from app.services.member_service import committee_role_display
 from app.utils import to_katakana
+from app.ui.theme import qcolor, style
 
 _NO_EMAIL_TEXT = "（メール無し）"
-_ORANGE = QColor("#F97316")
 
 # 2列目「委員会役職」は委員会で絞り込んでいる時だけ表示する
 _COL_CHECK = 0
@@ -227,7 +226,7 @@ class RecipientPanel(QWidget):
         layout.addWidget(self._table)
 
         self._no_email_label = QLabel("")
-        self._no_email_label.setStyleSheet("color: #DC2626;")
+        style(self._no_email_label, "color: ${danger};")
         layout.addWidget(self._no_email_label)
 
     def _append_row(self, member, checked: bool):
@@ -260,9 +259,10 @@ class RecipientPanel(QWidget):
             self._table.setItem(row, _COL_EMAIL, QTableWidgetItem(address_text))
         else:
             addr_item = QTableWidgetItem(_NO_EMAIL_TEXT)
-            addr_item.setForeground(_ORANGE)
-            org_item.setForeground(_ORANGE)
-            name_item.setForeground(_ORANGE)
+            orange = qcolor("orange")
+            addr_item.setForeground(orange)
+            org_item.setForeground(orange)
+            name_item.setForeground(orange)
             self._table.setItem(row, _COL_EMAIL, addr_item)
         self._table.setItem(row, _COL_ORG_KANA, QTableWidgetItem(org_kana))
         self._table.setItem(row, _COL_NAME_KANA, QTableWidgetItem(name_kana))

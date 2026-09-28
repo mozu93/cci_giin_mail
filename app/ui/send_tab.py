@@ -28,6 +28,7 @@ from app.services.send_job_service import create_job, start_job, finish_job, add
 from app.utils.app_config import get_config, save_config, get_graph_config
 from app.ui.recipient_panel import RecipientPanel
 from app.utils.validators import is_valid_email
+from app.ui.theme import style
 
 
 _BASE_PLACEHOLDERS = ["{事業所名}", "{役職名}", "{氏名}", "{会議所役職名}"]
@@ -387,7 +388,7 @@ class SendTab(QWidget):
         mrow.addWidget(self._meeting_combo, 1)
         ap.addLayout(mrow)
         self._attend_source_label = QLabel("")
-        self._attend_source_label.setStyleSheet("color: #6B7280; font-size: 11px;")
+        style(self._attend_source_label, "color: ${text_muted}; font-size: 11px;")
         ap.addWidget(self._attend_source_label)
         srow = QHBoxLayout()
         srow.addWidget(QLabel("対象:"))
@@ -436,9 +437,10 @@ class SendTab(QWidget):
         for ph in placeholders:
             btn = QPushButton(ph)
             btn.setFlat(True)
-            btn.setStyleSheet(
-                "font-size: 12px; color: #1E40AF; padding: 2px 6px;"
-                "border: 1px solid #BFDBFE; border-radius: 3px;")
+            style(
+                btn,
+                "font-size: 12px; color: ${accent}; padding: 2px 6px;"
+                "border: 1px solid ${accent_border}; border-radius: 3px;")
             btn.clicked.connect(lambda checked, p=ph: self._insert_placeholder(p))
             ph_row.addWidget(btn)
         ph_row.addStretch()
@@ -575,12 +577,12 @@ class SendTab(QWidget):
         btn_preview = QPushButton("差し込みプレビュー")
         btn_preview.clicked.connect(self._show_send_preview)
         self._btn_send = QPushButton("送信実行")
-        self._btn_send.setStyleSheet(
-            "font-weight: bold; background-color: #1E40AF; color: white;")
+        style(self._btn_send,
+              "font-weight: bold; background-color: ${primary_fill}; color: ${on_fill};")
         self._btn_send.clicked.connect(self._execute_send)
         self._btn_cancel = QPushButton("送信を中止")
-        self._btn_cancel.setStyleSheet(
-            "background-color: #DC2626; color: white;")
+        style(self._btn_cancel,
+              "background-color: ${danger_fill}; color: ${on_fill};")
         self._btn_cancel.setVisible(False)
         self._btn_cancel.clicked.connect(self._cancel_send)
         btn_row.addWidget(self._btn_test)
@@ -641,11 +643,12 @@ class SendTab(QWidget):
         if graph_config.get("test_mode"):
             self._test_mode_label.setText(
                 f"【テストモード】本番宛先へは送信せず、すべて {addr or '未設定'} へ送ります。")
-            self._test_mode_label.setStyleSheet(
-                "background: #FEF3C7; color: #92400E; padding: 6px; font-weight: bold;")
+            style(
+                self._test_mode_label,
+                "background: ${notice}; color: ${notice_text}; padding: 6px; font-weight: bold;")
         else:
             self._test_mode_label.clear()
-            self._test_mode_label.setStyleSheet("")
+            style(self._test_mode_label, "")
 
     def _rebuild_check_row(self, row: QHBoxLayout, checks: dict, items: list,
                           on_change) -> None:

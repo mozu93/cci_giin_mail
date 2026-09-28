@@ -14,6 +14,7 @@ from app.services.template_service import (
 )
 from app.services.signature_service import get_signatures
 from app.services.staff_service import get_staff_by_name
+from app.ui.theme import style
 
 _BASE_PLACEHOLDERS = ["{事業所名}", "{役職名}", "{氏名}", "{会議所役職名}"]
 _MERGE_PLACEHOLDERS = ["{col1}", "{col2}", "{col3}", "{col4}", "{col5}"]
@@ -57,7 +58,7 @@ class TemplateTab(QWidget):
         self._empty_hint = QLabel(
             "テンプレートがまだありません。「新規」ボタンから作成してください。")
         self._empty_hint.setWordWrap(True)
-        self._empty_hint.setStyleSheet("color: #64748B; padding: 4px;")
+        style(self._empty_hint, "color: ${text_muted}; padding: 4px;")
         self._empty_hint.setVisible(False)
         left_layout.addWidget(self._empty_hint)
         splitter.addWidget(left)
@@ -87,9 +88,10 @@ class TemplateTab(QWidget):
         for ph in placeholders:
             btn = QPushButton(ph)
             btn.setFlat(True)
-            btn.setStyleSheet(
-                "font-size: 12px; color: #1E40AF; padding: 2px 6px;"
-                "border: 1px solid #BFDBFE; border-radius: 3px;")
+            style(
+                btn,
+                "font-size: 12px; color: ${accent}; padding: 2px 6px;"
+                "border: 1px solid ${accent_border}; border-radius: 3px;")
             btn.clicked.connect(lambda checked, p=ph: self._insert_placeholder(p))
             btn_row.addWidget(btn)
         btn_row.addStretch()

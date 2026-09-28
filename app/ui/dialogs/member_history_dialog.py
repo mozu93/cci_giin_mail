@@ -4,9 +4,9 @@ from PyQt6.QtWidgets import (
     QHeaderView, QPushButton, QSplitter, QLabel
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
 from sqlalchemy.orm import Session
 from app.services.member_service import get_member_history, get_member, member_to_snapshot
+from app.ui.theme import qcolor, style
 
 _FIELD_LABELS = {
     "member_number":     "会員番号",
@@ -23,7 +23,6 @@ _FIELD_LABELS = {
     "position_id":       "会議所役職ID（旧）",
 }
 
-_HIGHLIGHT = QColor("#FEF3C7")   # 差分行: 黄色
 
 
 class MemberHistoryDialog(QDialog):
@@ -62,7 +61,7 @@ class MemberHistoryDialog(QDialog):
         bl.setSpacing(4)
 
         self._compare_label = QLabel("履歴を選択すると、1つ前のデータとの対比を表示します")
-        self._compare_label.setStyleSheet("color:#6B7280; font-size:11px;")
+        style(self._compare_label, "color: ${text_muted}; font-size:11px;")
         bl.addWidget(self._compare_label)
 
         self._compare_table = QTableWidget(0, 3)
@@ -169,4 +168,4 @@ class MemberHistoryDialog(QDialog):
         self._compare_table.setItem(r, 2, QTableWidgetItem(s_new))
         if s_old != s_new:
             for c in range(3):
-                self._compare_table.item(r, c).setBackground(_HIGHLIGHT)
+                self._compare_table.item(r, c).setBackground(qcolor("tint_amber"))  # 差分行: 黄色

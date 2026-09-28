@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from sqlalchemy.orm import Session
 from app.services.member_service import get_import_batches, revert_import_batch
+from app.ui.theme import style
 
 
 class ImportRevertDialog(QDialog):
@@ -40,8 +41,8 @@ class ImportRevertDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         self._btn_revert = QPushButton("選択したインポートを取り消す")
         self._btn_revert.setEnabled(False)
-        self._btn_revert.setStyleSheet(
-            "font-weight: bold; background-color: #DC2626; color: white;")
+        style(self._btn_revert,
+              "font-weight: bold; background-color: ${danger_fill}; color: ${on_fill};")
         self._btn_revert.clicked.connect(self._revert)
         self._table.itemSelectionChanged.connect(
             lambda: self._btn_revert.setEnabled(

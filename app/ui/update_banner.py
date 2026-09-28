@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton, QProgressBar, QMessageBox,
 )
 from PyQt6.QtCore import QThread, QTimer, pyqtSignal
+from app.ui.theme import style
 
 
 class _VersionCheckThread(QThread):
@@ -72,22 +73,24 @@ class UpdateBanner(QWidget):
         self.check_now()
 
     def _init_ui(self):
-        self.setStyleSheet(
-            "background: #FEF9C3; border-bottom: 1px solid #FDE047;"
+        style(
+            self,
+            "background: ${banner}; border-bottom: 1px solid ${banner_border};"
         )
         self.setFixedHeight(40)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 0, 12, 0)
 
         self._lbl = QLabel()
-        self._lbl.setStyleSheet("color: #713F12; font-size: 12px;")
+        style(self._lbl, "color: ${banner_text}; font-size: 12px;")
 
         self._btn_dl = QPushButton("ダウンロード")
         self._btn_dl.setFixedHeight(28)
-        self._btn_dl.setStyleSheet(
-            "QPushButton { background: #2563EB; color: white; border-radius: 5px; "
+        style(
+            self._btn_dl,
+            "QPushButton { background: ${info_fill}; color: ${on_fill}; border-radius: 5px; "
             "padding: 0 12px; font-size: 12px; }"
-            "QPushButton:hover { background: #1D4ED8; }"
+            "QPushButton:hover { background: ${info_fill_hover}; }"
         )
         self._btn_dl.clicked.connect(self._start_download)
 
@@ -97,10 +100,11 @@ class UpdateBanner(QWidget):
 
         self._btn_install = QPushButton("今すぐ更新して再起動")
         self._btn_install.setFixedHeight(28)
-        self._btn_install.setStyleSheet(
-            "QPushButton { background: #16A34A; color: white; border-radius: 5px; "
+        style(
+            self._btn_install,
+            "QPushButton { background: ${success_fill}; color: ${on_fill}; border-radius: 5px; "
             "padding: 0 12px; font-size: 12px; }"
-            "QPushButton:hover { background: #15803D; }"
+            "QPushButton:hover { background: ${success_fill_hover}; }"
         )
         self._btn_install.setVisible(False)
         self._btn_install.clicked.connect(self._install)

@@ -1,11 +1,12 @@
 from PyQt6.QtWidgets import QTableWidget
+from app.ui.theme import style
 
 _STYLE = (
     "QHeaderView::section {"
-    " background-color: #1E293B; color: white;"
-    " padding: 4px; font-weight: bold; border: 1px solid #334155; }"
+    " background-color: ${header}; color: ${header_text};"
+    " padding: 4px; font-weight: bold; border: 1px solid ${header_border}; }"
 )
 
 
 def style_table_header(table: QTableWidget) -> None:
-    table.horizontalHeader().setStyleSheet(_STYLE)
+    style(table.horizontalHeader(), _STYLE)

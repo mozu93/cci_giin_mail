@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from sqlalchemy.orm import Session
 from app.services.member_service import get_recent_changes
+from app.ui.theme import style
 
 _INITIAL_COUNT = 10
 _MAX_COUNT = 30
@@ -26,7 +27,7 @@ class RecentChangesDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self._info_label = QLabel("")
-        self._info_label.setStyleSheet("color:#6B7280; font-size:11px;")
+        style(self._info_label, "color: ${text_muted}; font-size:11px;")
         layout.addWidget(self._info_label)
 
         self._table = QTableWidget(0, 6)

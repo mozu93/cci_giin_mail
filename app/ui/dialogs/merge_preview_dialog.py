@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from app.services.import_service import load_member_file
 from app.services.email_service import render_body
+from app.ui.theme import style
 
 _COL_KEYS = ["col1", "col2", "col3", "col4", "col5"]
 
@@ -66,7 +67,7 @@ class MergePreviewDialog(QDialog):
         row_sel_row.addWidget(self._preview_combo)
         row_sel_row.addStretch()
         note = QLabel("※ 事業所名・氏名は実際の送信時に差し込まれます")
-        note.setStyleSheet("color: #6B7280; font-size: 11px;")
+        style(note, "color: ${text_muted}; font-size: 11px;")
         row_sel_row.addWidget(note)
         preview_layout.addLayout(row_sel_row)
 

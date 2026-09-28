@@ -3,7 +3,6 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
     QComboBox, QMessageBox,
 )
-from PyQt6.QtGui import QColor
 from app.database.connection import get_session
 from app.services.member_service import get_members
 from app.services.attendance_mail_service import (
@@ -13,6 +12,7 @@ from app.utils.app_config import (
     get_attendance_mail_subject_filter, save_attendance_mail_subject_filter,
 )
 from app.ui.dialogs.attendance_mail_alias_dialog import AttendanceMailAliasDialog
+from app.ui.theme import qcolor, style
 
 
 class _NoWheelComboBox(QComboBox):
@@ -138,7 +138,7 @@ class AttendanceMailImportDialog(QDialog):
             org_text = row.org_name_raw or "（事業所名を読み取れませんでした）"
             org_item = QTableWidgetItem(org_text)
             if not row.org_name_raw:
-                org_item.setBackground(QColor("#FEE2E2"))
+                org_item.setBackground(qcolor("tint_red"))
             self._table.setItem(r, self._COL_ORG, org_item)
             self._table.setItem(r, self._COL_NAME, QTableWidgetItem(row.name_raw))
             self._table.setItem(r, self._COL_STATUS, QTableWidgetItem(row.status))
@@ -160,7 +160,7 @@ class AttendanceMailImportDialog(QDialog):
                     selected_index = i
             combo.setCurrentIndex(selected_index)
             if selected_index == 0:
-                combo.setStyleSheet("background-color: #FEE2E2;")
+                style(combo, "background-color: ${tint_red};")
             self._table.setCellWidget(r, self._COL_MEMBER, combo)
 
     def _apply(self):

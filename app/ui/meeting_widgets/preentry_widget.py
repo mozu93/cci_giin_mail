@@ -64,12 +64,12 @@ class PreentryWidget(QWidget):
 
         pre_grp = QGroupBox("出欠集計")
         pre_cnt = QHBoxLayout(pre_grp)
-        self._lbl_attend     = count_label("出席: 0",  "#16A34A")
-        self._lbl_proxy      = count_label("代理: 0",  "#2563EB")
-        self._lbl_delegate   = count_label("委任: 0",  "#CA8A04")
-        self._lbl_absent     = count_label("欠席: 0",  "#DC2626")
-        self._lbl_unanswered = count_label("未回答: 0", "#6B7280")
-        self._lbl_total      = count_label("合計: 0",  "#1E40AF", bold=True)
+        self._lbl_attend     = count_label("出席: 0",  "success")
+        self._lbl_proxy      = count_label("代理: 0",  "info")
+        self._lbl_delegate   = count_label("委任: 0",  "warning")
+        self._lbl_absent     = count_label("欠席: 0",  "danger")
+        self._lbl_unanswered = count_label("未回答: 0", "text_muted")
+        self._lbl_total      = count_label("合計: 0",  "accent", bold=True)
         for lbl in [self._lbl_attend, self._lbl_proxy, self._lbl_delegate,
                     self._lbl_absent, self._lbl_unanswered, self._lbl_total]:
             pre_cnt.addWidget(lbl)

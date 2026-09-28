@@ -5,11 +5,13 @@ from PyQt6.QtWidgets import (
     QMessageBox, QCheckBox, QMenu
 )
 from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QColor, QKeySequence, QShortcut
+from PyQt6.QtGui import QKeySequence, QShortcut
 from app.database.connection import get_session
 from app.database.models import Position
 from app.services.member_service import get_members, delete_member, committee_role_display
 from app.services.committee_service import get_committees
+from app.ui.theme import qcolor, style
+from app.ui.widgets.table_header_style import style_table_header
 
 
 _COLUMN_LABELS = [
@@ -79,8 +81,8 @@ class MemberTab(QWidget):
         # ツールバー 2行目：操作ボタン
         row2 = QHBoxLayout()
         btn_add = QPushButton("追加")
-        btn_add.setStyleSheet(
-            "font-weight: bold; background-color: #1E40AF; color: white;")
+        style(btn_add,
+              "font-weight: bold; background-color: ${primary_fill}; color: ${on_fill};")
         btn_add.clicked.connect(self._add)
 
         self._btn_edit = QPushButton("編集")
@@ -91,8 +93,8 @@ class MemberTab(QWidget):
         self._btn_history.clicked.connect(self._show_history)
         self._btn_retire = QPushButton("議員退任")
         self._btn_retire.setEnabled(False)
-        self._btn_retire.setStyleSheet(
-            "background-color: #DC2626; color: white;")
+        style(self._btn_retire,
+              "background-color: ${danger_fill}; color: ${on_fill};")
         self._btn_retire.clicked.connect(self._delete)
 
         btn_file = QPushButton("ファイル")
@@ -139,13 +141,11 @@ class MemberTab(QWidget):
         self._table.setHorizontalHeaderLabels(_COLUMN_LABELS)
         self._table.horizontalHeader().setSectionResizeMode(
             5, QHeaderView.ResizeMode.Interactive)
-        self._table.horizontalHeader().setStyleSheet(
-            "QHeaderView::section {"
-            " background-color: #1E293B; color: white;"
-            " padding: 4px; font-weight: bold; border: 1px solid #334155; }"
-        )
-        self._table.setStyleSheet(
-            "QTableWidget::item:selected { background-color: #C8E9FA; color: black; }"
+        style_table_header(self._table)
+        style(
+            self._table,
+            "QTableWidget::item:selected { background-color: ${table_selection};"
+            " color: ${table_selection_text}; }"
         )
         self._table.setColumnWidth(0, 44)
         self._table.setColumnWidth(5, 200)
@@ -181,7 +181,7 @@ class MemberTab(QWidget):
         self._empty_hint = QLabel(
             "会員データがまだ登録されていません。「追加」ボタン、または"
             "「ファイル→インポート」から会員を登録してください。")
-        self._empty_hint.setStyleSheet("color: #64748B; padding: 8px;")
+        style(self._empty_hint, "color: ${text_muted}; padding: 8px;")
         self._empty_hint.setVisible(False)
         layout.addWidget(self._empty_hint)
 
@@ -256,7 +256,7 @@ class MemberTab(QWidget):
             )
             self._members = members
             self._table.setRowCount(0)
-            gray = QColor("#9CA3AF")
+            gray = qcolor("text_faint")
             from app.services.photo_service import bytes_to_pixmap
             from PyQt6.QtCore import Qt as _Qt
             for m in members:

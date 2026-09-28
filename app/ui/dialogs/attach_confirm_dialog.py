@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QPushButton, QHBoxLayout, QLabel
 )
-from PyQt6.QtGui import QColor
+from app.ui.theme import qcolor, style
 
 
 class AttachConfirmDialog(QDialog):
@@ -26,7 +26,7 @@ class AttachConfirmDialog(QDialog):
 
         if missing:
             warn = QLabel("× の企業はファイルが見つかりません。確定すると添付なしで送信されます。")
-            warn.setStyleSheet("color: #DC2626;")
+            style(warn, "color: ${danger};")
             layout.addWidget(warn)
 
         layout.addWidget(QLabel(
@@ -53,7 +53,7 @@ class AttachConfirmDialog(QDialog):
             self._table.setItem(row, 3, QTableWidgetItem(fname))
             found_item = QTableWidgetItem("○" if r["found"] else "×")
             if not r["found"]:
-                found_item.setForeground(QColor("#DC2626"))
+                found_item.setForeground(qcolor("danger"))
             self._table.setItem(row, 4, found_item)
 
         btn_row = QHBoxLayout()

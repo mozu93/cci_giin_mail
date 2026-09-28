@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 from app.database.connection import get_session
 from app.services.staff_service import get_all_staff, create_staff
 from app.services.settings_service import get_last_staff, set_last_staff
+from app.ui.theme import style
 
 
 class LoginDialog(QDialog):
@@ -29,7 +30,7 @@ class LoginDialog(QDialog):
             "担当者が登録されていません。\n「職員を追加」ボタンで最初の職員を登録してください。"
         )
         self._hint.setWordWrap(True)
-        self._hint.setStyleSheet("color: #c0392b;")
+        style(self._hint, "color: ${danger};")
         layout.addWidget(self._hint)
 
         btn_row = QHBoxLayout()
@@ -49,18 +50,19 @@ class LoginDialog(QDialog):
         # 区切り線
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: #CBD5E1;")
+        style(line, "color: ${border};")
         layout.addWidget(line)
 
         # 閲覧専用ボタン
         readonly_lbl = QLabel("出欠確認のみ行う場合（編集不可）")
-        readonly_lbl.setStyleSheet("color: #64748B; font-size: 11px;")
+        style(readonly_lbl, "color: ${text_muted}; font-size: 11px;")
         layout.addWidget(readonly_lbl)
         btn_readonly = QPushButton("閲覧専用でログイン")
-        btn_readonly.setStyleSheet(
-            "QPushButton { background-color: #F1F5F9; color: #475569; "
-            "border: 1px solid #94A3B8; }"
-            "QPushButton:hover { background-color: #E2E8F0; }"
+        style(
+            btn_readonly,
+            "QPushButton { background-color: ${subtle_button}; color: ${subtle_button_text}; "
+            "border: 1px solid ${border_strong}; }"
+            "QPushButton:hover { background-color: ${subtle_button_hover}; }"
         )
         btn_readonly.clicked.connect(self._login_readonly)
         layout.addWidget(btn_readonly)

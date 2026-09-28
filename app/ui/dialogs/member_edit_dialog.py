@@ -14,6 +14,7 @@ from app.services.member_service import (
 from app.services.committee_service import get_committees
 from app.utils import to_hankaku_kana
 from app.utils.validators import is_valid_email
+from app.ui.theme import style
 
 _MAX_EMAILS = 5
 
@@ -56,8 +57,9 @@ class MemberEditDialog(QDialog):
         self._photo_label = QLabel("写真なし")
         self._photo_label.setFixedSize(90, 113)
         self._photo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._photo_label.setStyleSheet(
-            "border: 1px solid #D1D5DB; background: #F3F4F6; color: #9CA3AF;")
+        style(
+            self._photo_label,
+            "border: 1px solid ${photo_border}; background: ${photo_bg}; color: ${text_faint};")
         btn_photo_select = QPushButton("写真を選択")
         btn_photo_select.clicked.connect(self._select_photo)
         btn_photo_delete = QPushButton("削除")

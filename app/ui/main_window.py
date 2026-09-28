@@ -11,6 +11,7 @@ from app.ui.send_tab import SendTab
 from app.ui.template_tab import TemplateTab
 from app.ui.settings_tab import SettingsTab
 from app.ui.history_tab import HistoryTab
+from app.ui.theme import style
 
 
 class MainWindow(QMainWindow):
@@ -109,13 +110,14 @@ class MainWindow(QMainWindow):
     def _setup_statusbar(self):
         from app.version import __version__
         sb = self.statusBar()
-        sb.setStyleSheet(
-            "QStatusBar { background: #F8FAFC; border-top: 1px solid #E2E8F0; "
-            "font-size: 12px; color: #64748B; }"
+        style(
+            sb,
+            "QStatusBar { background: ${statusbar}; border-top: 1px solid ${statusbar_border}; "
+            "font-size: 12px; color: ${text_muted}; }"
             "QStatusBar::item { border: none; }"
         )
         ver_lbl = QLabel(f"v{__version__}")
-        ver_lbl.setStyleSheet("color: #94A3B8; font-size: 11px; padding: 0 8px;")
+        style(ver_lbl, "color: ${text_faint}; font-size: 11px; padding: 0 8px;")
         sb.addPermanentWidget(ver_lbl)
 
     def closeEvent(self, event):

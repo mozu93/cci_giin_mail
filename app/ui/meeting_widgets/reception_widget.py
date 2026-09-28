@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor, QPixmap, QFont
+from PyQt6.QtGui import QPixmap, QFont
 from app.database.connection import get_session
 from app.services.meeting_service import (
     get_attendance_data, get_reception_summary, update_actual_status,
@@ -16,12 +16,13 @@ from app.services.reception_log_service import create_log
 from app.services.settings_service import get_font_size, set_font_size
 from app.utils import to_katakana
 from app.ui.meeting_widgets import count_label
+from app.ui.theme import qcolor, style
 
 _STATUS_COLORS = {
-    "出席": "#DCFCE7",
-    "代理": "#DBEAFE",
-    "委任": "#FEF9C3",
-    "欠席": "#FEE2E2",
+    "出席": "tint_green",
+    "代理": "tint_blue",
+    "委任": "tint_yellow",
+    "欠席": "tint_red",
 }
 _ACTUAL_OPTIONS = ["", "出席", "代理", "委任", "欠席"]
 
@@ -82,12 +83,12 @@ class ReceptionWidget(QWidget):
         count_grp = QGroupBox("当日受付集計（3秒ごと自動更新）")
         count_layout = QVBoxLayout(count_grp)
         count_row = QHBoxLayout()
-        self._lbl_attend   = count_label("出席: 0",   "#16A34A")
-        self._lbl_proxy    = count_label("代理: 0",   "#2563EB")
-        self._lbl_delegate = count_label("委任: 0",   "#CA8A04")
-        self._lbl_absent   = count_label("欠席: 0",   "#DC2626")
-        self._lbl_pending  = count_label("未受付: 0", "#6B7280")
-        self._lbl_total    = count_label("合計: 0",   "#1E40AF", bold=True)
+        self._lbl_attend   = count_label("出席: 0",   "success")
+        self._lbl_proxy    = count_label("代理: 0",   "info")
+        self._lbl_delegate = count_label("委任: 0",   "warning")
+        self._lbl_absent   = count_label("欠席: 0",   "danger")
+        self._lbl_pending  = count_label("未受付: 0", "text_muted")
+        self._lbl_total    = count_label("合計: 0",   "accent", bold=True)
         for lbl in [self._lbl_attend, self._lbl_proxy, self._lbl_delegate,
                     self._lbl_absent, self._lbl_pending, self._lbl_total]:
             count_row.addWidget(lbl)
@@ -98,7 +99,7 @@ class ReceptionWidget(QWidget):
         voting_font = self._lbl_voting.font()
         voting_font.setBold(True)
         self._lbl_voting.setFont(voting_font)
-        self._lbl_voting.setStyleSheet("color: #7C3AED; padding: 4px;")
+        style(self._lbl_voting, "color: ${purple}; padding: 4px;")
         count_layout.addWidget(self._lbl_voting)
         layout.addWidget(count_grp)
 
@@ -157,14 +158,15 @@ class ReceptionWidget(QWidget):
         self._rec_photo_label = QLabel()
         self._rec_photo_label.setFixedSize(96, 120)
         self._rec_photo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._rec_photo_label.setStyleSheet(
-            "border: 1px solid #D1D5DB; background: #F9FAFB; color: #9CA3AF;")
+        style(
+            self._rec_photo_label,
+            "border: 1px solid ${photo_border}; background: ${photo_bg}; color: ${text_faint};")
         self._rec_photo_label.setText("写真なし")
         self._rec_name_label = QLabel("")
         self._rec_name_label.setWordWrap(True)
         self._rec_name_label.setFixedWidth(106)
         self._rec_name_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self._rec_name_label.setStyleSheet("font-size: 10px; color: #374151;")
+        style(self._rec_name_label, "font-size: 10px; color: ${text};")
         photo_vl.addWidget(self._rec_photo_label)
         photo_vl.addWidget(self._rec_name_label)
         photo_vl.addStretch()
@@ -258,7 +260,7 @@ class ReceptionWidget(QWidget):
             for col, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if bg:
-                    item.setBackground(QColor(bg))
+                    item.setBackground(qcolor(bg))
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, d["member_id"])
                 self._rec_table.setItem(row, col, item)
@@ -266,7 +268,7 @@ class ReceptionWidget(QWidget):
             if self._readonly:
                 item_actual = QTableWidgetItem(actual)
                 if bg:
-                    item_actual.setBackground(QColor(bg))
+                    item_actual.setBackground(qcolor(bg))
                 self._rec_table.setItem(row, _REC_ACTUAL_COL, item_actual)
             else:
                 combo = _NoWheelComboBox()
@@ -280,7 +282,7 @@ class ReceptionWidget(QWidget):
                 self._rec_table.setCellWidget(row, _REC_ACTUAL_COL, combo)
             item_proxy = QTableWidgetItem(proxy_info)
             if bg:
-                item_proxy.setBackground(QColor(bg))
+                item_proxy.setBackground(qcolor(bg))
             self._rec_table.setItem(row, _REC_PROXY_COL, item_proxy)
         self._rec_table.setUpdatesEnabled(True)
         scrollbar.setValue(scroll_pos)
@@ -314,7 +316,7 @@ class ReceptionWidget(QWidget):
         for row, d in enumerate(new_data):
             effective = d.get("actual_status") or d["status"]
             bg = _STATUS_COLORS.get(effective)
-            qbg = QColor(bg) if bg else None
+            qbg = qcolor(bg) if bg else None
             for col in [0, _REC_COMMITTEE_ROLE_COL, _REC_POSITION_COL, _REC_ORG_COL,
                        _REC_TITLE_COL, _REC_NAME_COL, _REC_STATUS_COL, _REC_PROXY_COL]:
                 item = self._rec_table.item(row, col)

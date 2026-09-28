@@ -3,6 +3,7 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QPlainTextEdit, QPushButton, QHBoxLayout,
 )
+from app.ui.theme import style
 
 
 def format_recipient_details(targets: list[dict]) -> str:
@@ -56,7 +57,7 @@ class SendConfirmDialog(QDialog):
         layout.addWidget(details, 1)
 
         warning = QLabel("送信後は取り消せません。宛先を確認してください。")
-        warning.setStyleSheet("color: #DC2626; font-weight: bold;")
+        style(warning, "color: ${danger}; font-weight: bold;")
         layout.addWidget(warning)
 
         buttons = QHBoxLayout()
