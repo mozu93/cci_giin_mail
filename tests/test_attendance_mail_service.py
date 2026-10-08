@@ -1,4 +1,6 @@
-from app.services.attendance_mail_service import parse_body, normalize_org_name, STATUS_MAP
+import pytest
+from app.services.attendance_mail_service import (
+    parse_body, normalize_org_name, STATUS_MAP, map_status)
 
 _SAMPLE_BODY = """
 【出　　欠】出席(※代理)
@@ -57,6 +59,49 @@ def test_status_map_covers_four_patterns():
     assert STATUS_MAP["出席(※代理)"] == "代理"
     assert STATUS_MAP["委任"] == "委任"
     assert STATUS_MAP["欠席"] == "欠席"
+
+def test_parse_body_accepts_label_variants():
+    body = """
+【ご出欠】不参加
+【貴社名】三重相互株式会社
+【お名前】三重太郎
+【代理役職】監査役
+【代理出席者名】別所　喜三生
+【備考】なし
+"""
+    fields = parse_body(body)
+    assert fields["status_raw"] == "不参加"
+    assert fields["org_name"] == "三重相互株式会社"
+    assert fields["name"] == "三重太郎"
+    assert fields["proxy_title"] == "監査役"
+    assert fields["proxy_name"] == "別所　喜三生"
+
+
+@pytest.mark.parametrize("label,key", [
+    ("会社名", "org_name"), ("企業名", "org_name"),
+    ("名前", "name"), ("役職", "title"), ("ご役職名", "title"),
+    ("代理者氏名", "proxy_name"),
+])
+def test_parse_body_other_label_variants(label, key):
+    assert parse_body(f"【{label}】値A")[key] == "値A"
+
+
+def test_parse_body_prefers_first_label_with_value():
+    fields = parse_body("【氏名】\n【お名前】三重太郎")
+    assert fields["name"] == "三重太郎"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("出席", "出席"), ("参加", "出席"),
+    ("代理出席", "代理"), ("代理参加", "代理"),
+    ("出席(※代理)", "代理"), ("出席（※代理）", "代理"),
+    ("出席 (代理)", "代理"),
+    ("委任", "委任"), ("欠席", "欠席"), ("不参加", "欠席"),
+    ("", ""), ("未定", ""),
+])
+def test_map_status_variants(raw, expected):
+    assert map_status(raw) == expected
+
 
 
 def test_normalize_org_name_strips_company_suffixes_and_spaces():
@@ -606,3 +651,35 @@ def test_commit_rows_skips_rows_with_unrecognized_status(db_session):
     assert result["applied"] == 0
     assert result["skipped"] == 1
     assert db_session.query(ProcessedAttendanceMail).count() == 0
+
+
+_SAMPLE_BODY_V2 = """
+【出欠】
+　出席
+【事業所名】
+　大東電気株式会社
+【ご役職名】
+　代表取締役
+【氏名】
+　伊東 克浩
+【ご連絡先電話番号】
+　09070264501
+【メールアドレス】
+　ito@daito-elc.co.jp
+【備考（何かお問合せ等ございましたらご入力ください）】
+"""
+
+
+def test_parse_body_new_format_with_title_and_annotated_notes():
+    fields = parse_body(_SAMPLE_BODY_V2)
+    assert fields["status_raw"] == "出席"
+    assert fields["org_name"] == "大東電気株式会社"
+    assert fields["title"] == "代表取締役"
+    assert fields["name"] == "伊東 克浩"
+    assert fields["proxy_title"] == ""
+    assert fields["notes"] == ""
+
+
+def test_parse_body_annotated_notes_value():
+    body = "【備考（お問合せ等）】　来月変更します"
+    assert parse_body(body)["notes"] == "来月変更します"

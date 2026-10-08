@@ -1,4 +1,5 @@
 import re
+import unicodedata
 import requests
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,10 +14,29 @@ _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 STATUS_MAP = {
     "出席": "出席",
+    "参加": "出席",
     "出席(※代理)": "代理",
+    "出席(代理)": "代理",
+    "代理出席": "代理",
+    "代理参加": "代理",
     "委任": "委任",
     "欠席": "欠席",
+    "不参加": "欠席",
 }
+
+
+def _normalize_status_key(raw: str) -> str:
+    """出欠回答の表記ゆれ（全角/半角の括弧、空白）を吸収した照合キーにする。"""
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", raw))
+
+
+_STATUS_LOOKUP = {_normalize_status_key(k): v for k, v in STATUS_MAP.items()}
+
+
+def map_status(raw: str) -> str:
+    """メール本文の出欠回答を 出席/代理/委任/欠席 に変換する（不明なら空文字）。"""
+    return _STATUS_LOOKUP.get(_normalize_status_key(raw), "")
+
 
 _ORG_SUFFIXES = ["株式会社", "有限会社", "合同会社",
                 "㈱", "（株）", "(株)",
@@ -29,13 +49,16 @@ _CHAR_VARIANTS = {
     "鐵": "鉄",
 }
 
+# フォームによってラベル名が揺れるため、各項目に複数の表記を許容する。
+# 先頭から順に試し、最初に値が取れたものを採用する。
 _FIELD_LABELS = {
-    "status_raw":   "出欠",
-    "org_name":     "事業所名",
-    "name":         "氏名",
-    "proxy_title":  "代理役職",
-    "proxy_name":   "代理者名",
-    "notes":        "備考",
+    "status_raw":   ["出欠", "ご出欠"],
+    "org_name":     ["事業所名", "貴社名", "会社名", "企業名"],
+    "name":         ["氏名", "お名前", "名前"],
+    "title":        ["ご役職名", "役職名", "役職"],
+    "proxy_title":  ["代理役職"],
+    "proxy_name":   ["代理者名", "代理出席者名", "代理者氏名"],
+    "notes":        ["備考"],
 }
 
 
@@ -44,7 +67,9 @@ def _label_pattern(label: str) -> str:
 
 
 def _extract(body_text: str, label: str) -> str:
-    pattern = r"【" + _label_pattern(label) + r"】\s*(.*?)(?=【|\Z)"
+    # ラベル直後に「（何かお問合せ等ございましたら…）」のような注記が付く形式も許容する
+    pattern = (r"【" + _label_pattern(label) + r"(?:[（(][^】]*)?】"
+               + r"\s*(.*?)(?=【|\Z)")
     m = re.search(pattern, body_text, re.DOTALL)
     if not m:
         return ""
@@ -53,7 +78,11 @@ def _extract(body_text: str, label: str) -> str:
 
 def parse_body(body_text: str) -> dict:
     """メール本文から【ラベル】: 値 形式の各項目を抽出する。"""
-    return {key: _extract(body_text, label) for key, label in _FIELD_LABELS.items()}
+    result = {}
+    for key, labels in _FIELD_LABELS.items():
+        result[key] = next(
+            (v for v in (_extract(body_text, lb) for lb in labels) if v), "")
+    return result
 
 
 def normalize_org_name(name: str) -> str:
@@ -189,12 +218,16 @@ def build_preview(session: Session, meeting_id: int,
     by_org: dict[str, AttendanceMailRow] = {}
     for msg in messages:
         fields = parse_body(msg["body_text"])
+        # 役職が別ラベルで送られる形式は「役職　氏名」の形に統一する
+        name_raw = fields["name"]
+        if fields["title"] and fields["title"] not in name_raw:
+            name_raw = f"{fields['title']}　{name_raw}".strip()
         member = match_member(session, fields["org_name"])
         row = AttendanceMailRow(
             message_id=msg["id"],
             org_name_raw=fields["org_name"],
-            name_raw=fields["name"],
-            status=STATUS_MAP.get(fields["status_raw"], ""),
+            name_raw=name_raw,
+            status=map_status(fields["status_raw"]),
             proxy_title=fields["proxy_title"],
             proxy_name=fields["proxy_name"],
             notes=fields["notes"],
