@@ -480,7 +480,7 @@ class SendTab(QWidget):
         body_layout.setContentsMargins(0, 0, 0, 0)
 
         common_row = QHBoxLayout()
-        btn_common = QPushButton("全社共通ファイルを選択")
+        btn_common = QPushButton("全社共通ファイルを追加（複数可）")
         btn_common.clicked.connect(self._select_common_attach)
         btn_common_clear = QPushButton("クリア")
         btn_common_clear.setFixedWidth(52)
@@ -1016,15 +1016,35 @@ class SendTab(QWidget):
             self._merge_status.setText("（差し込みなし — col1〜col5は空で送信）")
 
     def _select_common_attach(self):
-        paths, _ = QFileDialog.getOpenFileNames(self, "添付ファイルを選択", "")
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "添付ファイルを追加（Ctrl/Shiftで複数選択可）", "")
         if paths:
-            self._common_attachments = paths
-            self._common_label.setText(
-                ", ".join(os.path.basename(p) for p in paths))
+            self._add_common_attach_paths(paths)
+
+    def _add_common_attach_paths(self, paths: list[str]):
+        """選択済みの共通添付に追加する（重複パスは除く）。"""
+        existing = {os.path.normcase(os.path.normpath(p))
+                    for p in self._common_attachments}
+        for p in paths:
+            key = os.path.normcase(os.path.normpath(p))
+            if key not in existing:
+                self._common_attachments.append(p)
+                existing.add(key)
+        self._refresh_common_label()
+
+    def _refresh_common_label(self):
+        paths = self._common_attachments
+        if not paths:
+            self._common_label.setText("（未選択）")
+            self._common_label.setToolTip("")
+            return
+        names = ", ".join(os.path.basename(p) for p in paths)
+        self._common_label.setText(f"{len(paths)}件: {names}")
+        self._common_label.setToolTip("\n".join(paths))
 
     def _clear_common_attach(self):
         self._common_attachments = []
-        self._common_label.setText("（未選択）")
+        self._refresh_common_label()
 
     def _select_indiv_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "フォルダを選択")
