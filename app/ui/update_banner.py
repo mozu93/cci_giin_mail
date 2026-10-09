@@ -64,6 +64,8 @@ class UpdateBanner(QWidget):
         self._expected_sha256 = ""
         self._tmp_exe_path = ""
         self._manual_check = False
+        self._prompted_tag = ""
+        self._install_after_download = False
         self._init_ui()
         self.setVisible(False)
         self._retry_timer = QTimer(self)
@@ -131,8 +133,31 @@ class UpdateBanner(QWidget):
     def _on_update_found(self, tag: str, url: str, expected_sha256: str):
         self._download_url = url
         self._expected_sha256 = expected_sha256
+        busy = bool(self._tmp_exe_path) or (
+            hasattr(self, "_dl_thread") and self._dl_thread.isRunning())
+        if busy:
+            self._manual_check = False
+            return
         self._lbl.setText(f"新しいバージョン {tag} が利用可能です")
         self.setVisible(True)
+        if self._manual_check or tag != self._prompted_tag:
+            self._prompted_tag = tag
+            self._prompt_update(tag)
+        self._manual_check = False
+
+    def _prompt_update(self, tag: str):
+        from app.version import __version__
+        ret = QMessageBox.question(
+            self, "アップデートのお知らせ",
+            f"新しいバージョン {tag} が公開されています"
+            f"（現在: v{__version__}）。\n\n"
+            "今すぐダウンロードして更新しますか？\n"
+            "「いいえ」を選んでも、画面上部のバーから後で更新できます。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if ret == QMessageBox.StandardButton.Yes:
+            self._install_after_download = True
+            self._start_download()
 
     def _on_up_to_date(self):
         if self._manual_check:
@@ -171,8 +196,21 @@ class UpdateBanner(QWidget):
         self._progress.setVisible(False)
         self._lbl.setText("ダウンロード完了。アプリを再起動して更新します。")
         self._btn_install.setVisible(True)
+        if self._install_after_download:
+            self._install_after_download = False
+            ret = QMessageBox.question(
+                self, "アップデートの準備完了",
+                "ダウンロードが完了しました。\n"
+                "アプリを終了してインストーラーを起動します。\n"
+                "作業中の内容があれば保存してください。\n\n"
+                "今すぐ更新しますか？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            if ret == QMessageBox.StandardButton.Yes:
+                self._install()
 
     def _on_download_failed(self):
+        self._install_after_download = False
         self._progress.setVisible(False)
         self._btn_dl.setVisible(True)
         self._lbl.setText("ダウンロードに失敗しました。後で再試行してください。")

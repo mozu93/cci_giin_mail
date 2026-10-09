@@ -71,6 +71,7 @@ class TemplateTab(QWidget):
         self._name = QLineEdit()
         self._subject = QLineEdit()
         self._body = QTextEdit()
+        self._body.setAcceptRichText(False)
         self._body.setMinimumHeight(200)
         self._sig_combo = QComboBox()
         form.addRow("テンプレート名", self._name)
