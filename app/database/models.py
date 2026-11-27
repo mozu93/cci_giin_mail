@@ -176,6 +176,8 @@ class Meeting(Base):
     date = Column(Date, nullable=False)
     target_position_ids = Column(Text, nullable=True)  # JSON list of position IDs; NULL=全員
     target_committee_ids = Column(Text, nullable=True)  # JSON list of committee IDs; NULL=全員
+    # 種別: "会議"=出席/代理/委任/欠席を選ぶ、"イベント"=出席チェックのみ
+    kind = Column(String, nullable=False, default="会議", server_default="会議")
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     records = relationship("AttendanceRecord", back_populates="meeting",
                            cascade="all, delete-orphan")

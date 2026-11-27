@@ -9,8 +9,11 @@ from app.database.connection import get_session
 from app.services.meeting_service import (
     STATUS_OPTIONS, upsert_attendance, get_attendance_data, export_csv, export_xlsx,
     build_attendance_export_filename, is_committee_meeting,
+    is_event, set_event_attendance,
 )
-from app.services.settings_service import get_font_size, set_font_size
+from app.services.settings_service import (
+    get_font_size, set_font_size, get_hidden_columns,
+)
 from app.utils import to_katakana
 from app.ui.meeting_widgets import count_label
 from app.ui.dialogs.attendance_mail_import_dialog import AttendanceMailImportDialog
@@ -41,13 +44,16 @@ class PreentryWidget(QWidget):
         self._preentry_data: list[dict] = []
         self._sort_keys: list[tuple[int, bool]] = []
         self._original_ids: list[int] = []
+        self._is_event = False
         self._build()
 
     def load(self, meeting_id: int | None):
         self._meeting_id = meeting_id
-        if self._btn_mail_import is not None:
-            self._btn_mail_import.setEnabled(meeting_id is not None)
         self._load_preentry()
+        if self._btn_mail_import is not None:
+            # 出欠連絡メールの取り込みは会議専用（イベントは出席チェックのみ）
+            self._btn_mail_import.setEnabled(
+                meeting_id is not None and not self._is_event)
 
     def _open_mail_import(self):
         if self._meeting_id is None:
@@ -69,6 +75,8 @@ class PreentryWidget(QWidget):
         self._lbl_delegate   = count_label("委任: 0",  "warning")
         self._lbl_absent     = count_label("欠席: 0",  "danger")
         self._lbl_unanswered = count_label("未回答: 0", "text_muted")
+        self._event_only_hidden = [
+            self._lbl_proxy, self._lbl_delegate, self._lbl_absent]
         self._lbl_total      = count_label("合計: 0",  "accent", bold=True)
         for lbl in [self._lbl_attend, self._lbl_proxy, self._lbl_delegate,
                     self._lbl_absent, self._lbl_unanswered, self._lbl_total]:
@@ -175,6 +183,8 @@ class PreentryWidget(QWidget):
         if not self._meeting_id:
             self._preentry_data = []
             self._sort_keys.clear()
+            self._is_event = False
+            self._apply_kind_layout()
             self._pre_table.setColumnHidden(0, True)
             self._update_preentry_summary()
             return
@@ -182,13 +192,28 @@ class PreentryWidget(QWidget):
         try:
             self._preentry_data = get_attendance_data(session, self._meeting_id)
             is_committee = is_committee_meeting(session, self._meeting_id)
+            self._is_event = is_event(session, self._meeting_id)
         finally:
             session.close()
         self._pre_table.setColumnHidden(0, not is_committee)
+        self._apply_kind_layout()
         self._sort_keys.clear()
         self._original_ids = [d["member_id"] for d in self._preentry_data]
         self._update_pre_headers()
         self._render_preentry()
+
+    def _apply_kind_layout(self):
+        """イベントは出席チェックだけなので、代理関連の列と集計、
+        代理・委任・欠席の表示絞り込みを隠す。"""
+        ev = self._is_event
+        persisted_hidden = set(get_hidden_columns("preentry_table_v2"))
+        for col in (_PROXY_TITLE_COL, _PROXY_NAME_COL):
+            self._pre_table.setColumnHidden(col, ev or col in persisted_hidden)
+        for lbl in self._event_only_hidden:
+            lbl.setVisible(not ev)
+        for s, cb in self._status_filter_checks.items():
+            if s in ("代理", "委任", "欠席"):
+                cb.setVisible(not ev)
 
     def _render_preentry(self):
         self._pre_table.setUpdatesEnabled(False)
@@ -204,6 +229,18 @@ class PreentryWidget(QWidget):
                     i, _PROXY_TITLE_COL, QTableWidgetItem(d.get("proxy_title", "")))
                 self._pre_table.setItem(
                     i, _PROXY_NAME_COL, QTableWidgetItem(d.get("proxy_name", "")))
+            elif self._is_event:
+                mid = d["member_id"]
+                cb = QCheckBox()
+                cb.setChecked(d["status"] == "出席")
+                cb.toggled.connect(
+                    lambda checked, m=mid: self._on_event_check(m, checked))
+                holder = QWidget()
+                hl = QHBoxLayout(holder)
+                hl.setContentsMargins(0, 0, 0, 0)
+                hl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                hl.addWidget(cb)
+                self._pre_table.setCellWidget(i, _STATUS_COL, holder)
             else:
                 mid = d["member_id"]
                 combo = _NoWheelComboBox()
@@ -300,6 +337,8 @@ class PreentryWidget(QWidget):
         rank_sym = "①②③④⑤⑥⑦⑧"
         labels = []
         for col, base in enumerate(_PRE_HEADERS):
+            if col == _STATUS_COL and self._is_event:
+                base = "出席"
             for rank, (c, asc) in enumerate(self._sort_keys):
                 if c == col:
                     arrow = "↑" if asc else "↓"
@@ -324,6 +363,21 @@ class PreentryWidget(QWidget):
             (i for i, d in enumerate(self._preentry_data) if d["member_id"] == member_id),
             -1,
         )
+
+    def _on_event_check(self, member_id: int, checked: bool):
+        row = self._find_row(member_id)
+        if row < 0 or not self._meeting_id:
+            return
+        d = self._preentry_data[row]
+        d["status"] = "出席" if checked else "未回答"
+        d["actual_status"] = "出席" if checked else ""
+        session = get_session()
+        try:
+            set_event_attendance(session, self._meeting_id, member_id, checked)
+        finally:
+            session.close()
+        self._apply_status_filter()
+        self._update_preentry_summary()
 
     def _on_status_change_by_id(self, member_id: int, text: str):
         row = self._find_row(member_id)

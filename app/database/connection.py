@@ -31,6 +31,12 @@ def _migrate_sqlite(engine):
             ))
             conn.commit()
 
+        if "kind" not in meetings_cols:
+            conn.execute(text(
+                "ALTER TABLE meetings ADD COLUMN kind TEXT NOT NULL DEFAULT '会議'"
+            ))
+            conn.commit()
+
         members_cols = {
             row[1] for row in conn.execute(text("PRAGMA table_info(members)"))
         }
@@ -163,6 +169,9 @@ def _migrate_postgresql(engine):
         if "target_committee_ids" not in meetings_cols:
             conn.execute(text(
                 "ALTER TABLE meetings ADD COLUMN target_committee_ids TEXT"))
+        if "kind" not in meetings_cols:
+            conn.execute(text(
+                "ALTER TABLE meetings ADD COLUMN kind VARCHAR NOT NULL DEFAULT '会議'"))
 
         if "exclude_from_recent" not in history_cols:
             conn.execute(text(

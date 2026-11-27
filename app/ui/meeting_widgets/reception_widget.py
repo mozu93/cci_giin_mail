@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
+    QCheckBox, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QLabel, QLineEdit, QComboBox, QApplication, QSizePolicy,
     QFileDialog, QMessageBox,
@@ -11,9 +11,12 @@ from app.services.meeting_service import (
     get_attendance_data, get_reception_summary, update_actual_status,
     export_reception_xlsx, format_minutes_attendee_text,
     build_attendance_export_filename, is_committee_meeting,
+    is_event, set_event_attendance,
 )
 from app.services.reception_log_service import create_log
-from app.services.settings_service import get_font_size, set_font_size
+from app.services.settings_service import (
+    get_font_size, set_font_size, get_hidden_columns,
+)
 from app.utils import to_katakana
 from app.ui.meeting_widgets import count_label
 from app.ui.theme import qcolor, style
@@ -56,6 +59,7 @@ class ReceptionWidget(QWidget):
         self._readonly = readonly
         self._meeting_id: int | None = None
         self._rec_data: list[dict] = []
+        self._is_event = False
         self._build()
         self._timer = QTimer()
         self._timer.setInterval(3000)
@@ -92,6 +96,8 @@ class ReceptionWidget(QWidget):
         for lbl in [self._lbl_attend, self._lbl_proxy, self._lbl_delegate,
                     self._lbl_absent, self._lbl_pending, self._lbl_total]:
             count_row.addWidget(lbl)
+        self._event_only_hidden = [
+            self._lbl_proxy, self._lbl_delegate, self._lbl_absent]
         count_row.addStretch()
         count_layout.addLayout(count_row)
         self._lbl_voting = QLabel(
@@ -136,15 +142,16 @@ class ReceptionWidget(QWidget):
         layout.addLayout(search_row)
 
         minutes_row = QHBoxLayout()
-        minutes_row.addWidget(QLabel("議事録用氏名:"))
+        self._minutes_label = QLabel("議事録用氏名:")
+        minutes_row.addWidget(self._minutes_label)
         self._minutes_text = QLineEdit()
         self._minutes_text.setReadOnly(True)
         self._minutes_text.setPlaceholderText(
             "当日受付で出席・代理・委任を入力すると、ここに1行で表示されます")
         minutes_row.addWidget(self._minutes_text, 1)
-        btn_copy = QPushButton("テキストをコピー")
-        btn_copy.clicked.connect(self._copy_minutes_text)
-        minutes_row.addWidget(btn_copy)
+        self._btn_copy_minutes = QPushButton("テキストをコピー")
+        self._btn_copy_minutes.clicked.connect(self._copy_minutes_text)
+        minutes_row.addWidget(self._btn_copy_minutes)
         layout.addLayout(minutes_row)
 
         body_row = QHBoxLayout()
@@ -223,12 +230,16 @@ class ReceptionWidget(QWidget):
             self._minutes_text.clear()
             self._rec_table.setRowCount(0)
             self._rec_table.setColumnHidden(_REC_COMMITTEE_ROLE_COL, True)
+            self._is_event = False
+            self._apply_kind_layout()
             return
         session = get_session()
         try:
             self._rec_data = get_attendance_data(session, self._meeting_id)
+            self._is_event = is_event(session, self._meeting_id)
             for d in self._rec_data:
-                if d["status"] == "委任" and not d.get("actual_status"):
+                if (not self._is_event and d["status"] == "委任"
+                        and not d.get("actual_status")):
                     update_actual_status(
                         session, self._meeting_id, d["member_id"], "委任")
                     d["actual_status"] = "委任"
@@ -237,6 +248,7 @@ class ReceptionWidget(QWidget):
         finally:
             session.close()
         self._rec_table.setColumnHidden(_REC_COMMITTEE_ROLE_COL, not is_committee)
+        self._apply_kind_layout()
 
         self._update_rec_summary(summary)
         self._minutes_text.setText(format_minutes_attendee_text(self._rec_data))
@@ -270,6 +282,21 @@ class ReceptionWidget(QWidget):
                 if bg:
                     item_actual.setBackground(qcolor(bg))
                 self._rec_table.setItem(row, _REC_ACTUAL_COL, item_actual)
+            elif self._is_event:
+                cb = QCheckBox()
+                cb.blockSignals(True)
+                cb.setChecked(actual == "出席")
+                cb.blockSignals(False)
+                mid = d["member_id"]
+                cb.toggled.connect(
+                    lambda checked, m=mid: self._save_actual_status(
+                        m, "出席" if checked else ""))
+                holder = QWidget()
+                hl = QHBoxLayout(holder)
+                hl.setContentsMargins(0, 0, 0, 0)
+                hl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                hl.addWidget(cb)
+                self._rec_table.setCellWidget(row, _REC_ACTUAL_COL, holder)
             else:
                 combo = _NoWheelComboBox()
                 combo.addItems(_ACTUAL_OPTIONS)
@@ -332,6 +359,14 @@ class ReceptionWidget(QWidget):
                     item_actual.setText(new_val)
                     if qbg:
                         item_actual.setBackground(qbg)
+            elif self._is_event:
+                holder = self._rec_table.cellWidget(row, _REC_ACTUAL_COL)
+                cb = holder.findChild(QCheckBox) if holder else None
+                want = new_val == "出席"
+                if cb and cb.isChecked() != want:
+                    cb.blockSignals(True)
+                    cb.setChecked(want)
+                    cb.blockSignals(False)
             else:
                 combo = self._rec_table.cellWidget(row, _REC_ACTUAL_COL)
                 if combo and combo.currentText() != new_val:
@@ -339,6 +374,20 @@ class ReceptionWidget(QWidget):
                     combo.setCurrentText(new_val)
                     combo.blockSignals(False)
         self._filter_reception()
+
+    def _apply_kind_layout(self):
+        """イベントは出席チェックだけなので、代理・委任・欠席の集計、
+        議決権数、議事録用氏名、代理情報の列を隠す。"""
+        ev = self._is_event
+        for lbl in self._event_only_hidden:
+            lbl.setVisible(not ev)
+        self._lbl_voting.setVisible(not ev)
+        self._minutes_label.setVisible(not ev)
+        self._minutes_text.setVisible(not ev)
+        self._btn_copy_minutes.setVisible(not ev)
+        persisted_hidden = set(get_hidden_columns("reception_table_v2"))
+        self._rec_table.setColumnHidden(
+            _REC_PROXY_COL, ev or _REC_PROXY_COL in persisted_hidden)
 
     def _update_rec_summary(self, summary: dict):
         self._lbl_attend.setText(f"出席: {summary['出席']}")
@@ -395,7 +444,12 @@ class ReceptionWidget(QWidget):
             old = next(
                 (d.get("actual_status") or "" for d in self._rec_data
                  if d["member_id"] == member_id), "")
-            update_actual_status(session, self._meeting_id, member_id, actual_status)
+            if self._is_event:
+                set_event_attendance(
+                    session, self._meeting_id, member_id, actual_status == "出席")
+            else:
+                update_actual_status(
+                    session, self._meeting_id, member_id, actual_status)
             if self._staff_name:
                 create_log(session, self._meeting_id, member_id,
                            self._staff_name, old, actual_status)
@@ -405,6 +459,8 @@ class ReceptionWidget(QWidget):
         for item in self._rec_data:
             if item["member_id"] == member_id:
                 item["actual_status"] = actual_status
+                if self._is_event:
+                    item["status"] = "出席" if actual_status == "出席" else "未回答"
                 break
         self._update_rec_summary(summary)
         self._minutes_text.setText(format_minutes_attendee_text(self._rec_data))
