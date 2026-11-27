@@ -330,19 +330,23 @@ class SendTab(QWidget):
         self._rb_by_pos = QRadioButton("役職で選ぶ")
         self._rb_by_committee = QRadioButton("委員会で選ぶ")
         self._rb_by_attend = QRadioButton("会議の出欠で選ぶ")
+        self._rb_by_numbers = QRadioButton("会員番号一覧から選ぶ")
         bg = QButtonGroup(self)
         bg.addButton(self._rb_by_list)
         bg.addButton(self._rb_by_pos)
         bg.addButton(self._rb_by_committee)
         bg.addButton(self._rb_by_attend)
+        bg.addButton(self._rb_by_numbers)
         self._rb_by_list.toggled.connect(self._on_mode_change)
         self._rb_by_pos.toggled.connect(self._on_mode_change)
         self._rb_by_committee.toggled.connect(self._on_mode_change)
         self._rb_by_attend.toggled.connect(self._on_mode_change)
+        self._rb_by_numbers.toggled.connect(self._on_mode_change)
         mode_row.addWidget(self._rb_by_list)
         mode_row.addWidget(self._rb_by_pos)
         mode_row.addWidget(self._rb_by_committee)
         mode_row.addWidget(self._rb_by_attend)
+        mode_row.addWidget(self._rb_by_numbers)
         mode_row.addStretch()
         layout.addLayout(mode_row)
 
@@ -402,6 +406,19 @@ class SendTab(QWidget):
         ap.addLayout(srow)
         self._attend_panel.setVisible(False)
         layout.addWidget(self._attend_panel)
+
+        self._numbers_panel = QWidget()
+        np_layout = QHBoxLayout(self._numbers_panel)
+        np_layout.setContentsMargins(0, 0, 0, 0)
+        btn_numbers = QPushButton("会員番号の一覧（CSV/Excel）をインポート")
+        btn_numbers.clicked.connect(self._import_member_numbers)
+        np_layout.addWidget(btn_numbers)
+        self._numbers_status = QLabel("")
+        style(self._numbers_status, "color: ${text_muted}; font-size: 11px;")
+        np_layout.addWidget(self._numbers_status, 1)
+        self._numbers_panel.setVisible(False)
+        layout.addWidget(self._numbers_panel)
+        self._number_import_ids: set | None = None
 
         self._rb_by_list.setChecked(True)
         return grp
@@ -713,6 +730,9 @@ class SendTab(QWidget):
                 self._on_committee_select()
             elif self._rb_by_attend.isChecked():
                 self._on_attend_filter()
+            elif (self._rb_by_numbers.isChecked()
+                    and self._number_import_ids is not None):
+                self._recipient.restrict_to_member_ids(self._number_import_ids)
             else:
                 self._recipient.restrict_to_member_ids(None)
             self._recipient.set_checks_by_member_ids(selected_recipient_ids)
@@ -795,6 +815,11 @@ class SendTab(QWidget):
         is_pos = self._rb_by_pos.isChecked()
         is_committee = self._rb_by_committee.isChecked()
         is_attend = self._rb_by_attend.isChecked()
+        is_numbers = self._rb_by_numbers.isChecked()
+        self._numbers_panel.setVisible(is_numbers)
+        if not is_numbers:
+            self._number_import_ids = None
+            self._numbers_status.setText("")
         self._pos_panel.setVisible(is_pos)
         self._committee_panel.setVisible(is_committee)
         self._attend_panel.setVisible(is_attend)
@@ -810,6 +835,44 @@ class SendTab(QWidget):
             self._on_attend_filter()
         else:
             self._recipient.restrict_to_member_ids(None)
+
+    def _import_member_numbers(self):
+        """会員番号の一覧ファイルを読み込み、該当する会員だけにチェックを入れる。"""
+        from app.services.import_service import load_member_file
+        from app.ui.dialogs.member_number_import_dialog import (
+            MemberNumberImportDialog,
+        )
+        path, _ = QFileDialog.getOpenFileName(
+            self, "会員番号の一覧を選択", "",
+            "CSV/Excel (*.csv *.xlsx *.xls);;すべてのファイル (*)")
+        if not path:
+            return
+        try:
+            headers, data_rows = load_member_file(path)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "読み込みエラー", f"ファイルを読み込めませんでした。\n{e}")
+            return
+        rows = ([headers] if headers else []) + data_rows
+        if not rows:
+            QMessageBox.warning(self, "読み込みエラー", "ファイルにデータがありません。")
+            return
+        dlg = MemberNumberImportDialog(rows, self._members, parent=self)
+        if not dlg.exec():
+            return
+        member_ids = dlg.get_target_ids()
+        ret = QMessageBox.question(
+            self, "送信先の確認",
+            f"{len(member_ids)}件の会員にチェックを入れます。よろしいですか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        self._number_import_ids = member_ids
+        self._recipient.set_checks_by_member_ids(member_ids)
+        self._recipient.restrict_to_member_ids(member_ids)
+        self._numbers_status.setText(
+            f"{os.path.basename(path)} から {len(member_ids)}件を選択中")
 
     def _load_meeting_combo(self):
         from app.services.meeting_service import get_meetings
