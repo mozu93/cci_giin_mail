@@ -878,8 +878,27 @@ class SendTab(QWidget):
             self._recipient.restrict_to_member_ids(None)
             return
 
-        self._attend_source_label.setText(
-            "※ 未回答は「事前登録」、出席・代理・委任・欠席は「当日受付」の結果を使用します")
+        from app.services.meeting_service import is_event
+        session = get_session()
+        try:
+            event_mode = is_event(session, meeting_id)
+        finally:
+            session.close()
+        for s, cb in self._status_checks.items():
+            if s in ("欠席", "委任", "代理"):
+                cb.setVisible(not event_mode)
+                if event_mode:
+                    cb.blockSignals(True)
+                    cb.setChecked(False)
+                    cb.blockSignals(False)
+            elif s == "未回答":
+                cb.setText("未出席" if event_mode else "未回答")
+        if event_mode:
+            self._attend_source_label.setText(
+                "※ イベントは出席チェックの有無で判定します（チェック無し＝未出席）")
+        else:
+            self._attend_source_label.setText(
+                "※ 未回答は「事前登録」、出席・代理・委任・欠席は「当日受付」の結果を使用します")
 
         session = get_session()
         try:

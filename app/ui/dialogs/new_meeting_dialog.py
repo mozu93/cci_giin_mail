@@ -20,6 +20,16 @@ class NewMeetingDialog(QDialog):
         self._date = QDateEdit(QDate.currentDate())
         self._date.setCalendarPopup(True)
         self._date.setDisplayFormat("yyyy/MM/dd")
+        self._rb_kind_meeting = QRadioButton("会議（出席・代理・委任・欠席を選ぶ）")
+        self._rb_kind_event = QRadioButton("イベント（出席をチェックするだけ）")
+        self._rb_kind_meeting.setChecked(True)
+        kind_grp = QButtonGroup(self)
+        kind_grp.addButton(self._rb_kind_meeting)
+        kind_grp.addButton(self._rb_kind_event)
+        kind_box = QVBoxLayout()
+        kind_box.addWidget(self._rb_kind_meeting)
+        kind_box.addWidget(self._rb_kind_event)
+        form.addRow("種別", kind_box)
         form.addRow("会議名", self._name)
         form.addRow("開催日", self._date)
         layout.addLayout(form)
@@ -76,7 +86,7 @@ class NewMeetingDialog(QDialog):
 
     def _ok(self):
         if not self._name.text().strip():
-            QMessageBox.warning(self, "エラー", "会議名を入力してください。")
+            QMessageBox.warning(self, "エラー", "名称を入力してください。")
             return
         if self._rb_pos.isChecked() and not any(
                 cb.isChecked() for cb in self._pos_checks.values()):
@@ -87,6 +97,10 @@ class NewMeetingDialog(QDialog):
             QMessageBox.warning(self, "エラー", "委員会を1つ以上選択してください。")
             return
         self.accept()
+
+    def get_kind(self) -> str:
+        from app.services.meeting_service import KIND_EVENT, KIND_MEETING
+        return KIND_EVENT if self._rb_kind_event.isChecked() else KIND_MEETING
 
     def get_values(self) -> tuple[str, date, list[int] | None, list[int] | None]:
         d = self._date.date()

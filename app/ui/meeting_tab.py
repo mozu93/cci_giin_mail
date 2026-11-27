@@ -3,7 +3,9 @@ from PyQt6.QtWidgets import (
     QComboBox, QPushButton, QLabel, QTabWidget, QMessageBox,
 )
 from app.database.connection import get_session
-from app.services.meeting_service import get_meetings, create_meeting, delete_meeting
+from app.services.meeting_service import (
+    get_meetings, create_meeting, delete_meeting, KIND_EVENT,
+)
 from app.services.position_service import get_positions
 from app.services.committee_service import get_committees
 from app.ui.dialogs.new_meeting_dialog import NewMeetingDialog
@@ -73,6 +75,8 @@ class MeetingTab(QWidget):
                 scope = "委員会指定"
             else:
                 scope = "全員"
+            if m.kind == KIND_EVENT:
+                scope = f"イベント／{scope}"
             self._meeting_combo.addItem(
                 f"{m.date.strftime('%Y/%m/%d')}　{m.name}　（{scope}）", m.id)
         self._meeting_combo.blockSignals(False)
@@ -124,7 +128,8 @@ class MeetingTab(QWidget):
             session = get_session()
             try:
                 create_meeting(session, name, meeting_date,
-                               target_position_ids, target_committee_ids)
+                               target_position_ids, target_committee_ids,
+                               kind=dlg.get_kind())
             finally:
                 session.close()
             self._load_meetings()

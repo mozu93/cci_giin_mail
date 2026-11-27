@@ -10,6 +10,9 @@ from app.services.member_service import (
 
 STATUS_OPTIONS = ["未回答", "出席", "代理", "委任", "欠席"]
 
+KIND_MEETING = "会議"
+KIND_EVENT = "イベント"
+
 
 def build_attendance_export_filename(
         meeting_name: str, kind: str, output_date: date | None = None) -> str:
@@ -24,11 +27,14 @@ def build_attendance_export_filename(
 
 def create_meeting(session: Session, name: str, meeting_date: date,
                    target_position_ids: list[int] | None = None,
-                   target_committee_ids: list[int] | None = None) -> Meeting:
+                   target_committee_ids: list[int] | None = None,
+                   kind: str = KIND_MEETING) -> Meeting:
+    if kind not in (KIND_MEETING, KIND_EVENT):
+        raise ValueError("種別は「会議」または「イベント」を指定してください。")
     pos_json = json.dumps(target_position_ids) if target_position_ids else None
     committee_json = json.dumps(target_committee_ids) if target_committee_ids else None
     m = Meeting(name=name, date=meeting_date, target_position_ids=pos_json,
-               target_committee_ids=committee_json)
+               target_committee_ids=committee_json, kind=kind)
     session.add(m)
     session.commit()
     return m
@@ -78,6 +84,34 @@ def upsert_attendance(session: Session, meeting_id: int, member_id: int,
     r.notes = notes
     session.commit()
     return r
+
+
+def is_event(session: Session, meeting_id: int | None) -> bool:
+    """会議がイベント（出席チェックのみで入力する種別）かどうかを返す。"""
+    if not meeting_id:
+        return False
+    meeting = session.get(Meeting, meeting_id)
+    return bool(meeting and meeting.kind == KIND_EVENT)
+
+
+def set_event_attendance(session: Session, meeting_id: int, member_id: int,
+                         attended: bool) -> None:
+    """イベントの出席チェックを保存する。
+
+    事前入力と当日受付のどちらからチェックしても同じ結果になるよう、
+    status（事前）と actual_status（当日）の両方へ同じ内容を書き込む。
+    チェックを外すと、事前は「未回答」、当日は空へ戻す。"""
+    r = (session.query(AttendanceRecord)
+         .filter_by(meeting_id=meeting_id, member_id=member_id)
+         .first())
+    if r is None:
+        r = AttendanceRecord(meeting_id=meeting_id, member_id=member_id)
+        session.add(r)
+    r.status = "出席" if attended else "未回答"
+    r.actual_status = "出席" if attended else ""
+    r.proxy_title = ""
+    r.proxy_name = ""
+    session.commit()
 
 
 def is_committee_meeting(session: Session, meeting_id: int) -> bool:
@@ -148,6 +182,11 @@ def update_actual_status(session: Session, meeting_id: int,
 def get_reception_summary(session: Session, meeting_id: int) -> dict:
     """当日受付ステータス（actual_status）による集計"""
     data = get_attendance_data(session, meeting_id)
+    if is_event(session, meeting_id):
+        attended = sum(1 for d in data if d["status"] == "出席")
+        return {"出席": attended, "代理": 0, "委任": 0, "欠席": 0,
+                "未受付": len(data) - attended, "合計": attended,
+                "監事出席": 0, "議決権数": 0}
     counts: dict[str, int] = {"出席": 0, "代理": 0, "委任": 0, "欠席": 0, "未受付": 0}
     for d in data:
         s = d.get("actual_status") or ""
@@ -315,6 +354,18 @@ def get_member_ids_by_status(session: Session, meeting_id: int,
         for r in session.query(AttendanceRecord)
         .filter_by(meeting_id=meeting_id).all()
     }
+    if meeting.kind == KIND_EVENT:
+        # イベントは出席チェックだけなので、チェック済み＝出席、
+        # 未チェック＝未回答（未出席）として判定する
+        result_ids = set()
+        for m in members:
+            r = records.get(m.id)
+            attended = bool(r and r.status == "出席")
+            if attended and "出席" in statuses:
+                result_ids.add(m.id)
+            elif not attended and "未回答" in statuses:
+                result_ids.add(m.id)
+        return result_ids
     result_ids = set()
     other_statuses = [s for s in statuses if s != "未回答"]
     for m in members:
