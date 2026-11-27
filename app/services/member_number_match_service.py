@@ -37,6 +37,24 @@ def _loose_key(normalized: str) -> str | None:
     return None
 
 
+def guess_has_header(rows: list[list], members: list[Member]) -> bool:
+    """1行目が見出し行かどうかを推測する。
+
+    1行目のセルが名簿の会員番号と一致する、または数字だけの値なら
+    見出しではなくデータ（見出し無しの一覧）とみなす。"""
+    if not rows:
+        return True
+    keys = {normalize_member_number(m.member_number) for m in members}
+    loose_keys = {k for k in (_loose_key(k) for k in keys) if k is not None}
+    for cell in rows[0]:
+        key = normalize_member_number(cell)
+        if not key:
+            continue
+        if key in keys or key.isdigit() or _loose_key(key) in loose_keys:
+            return False
+    return True
+
+
 def extract_numbers(rows: list[list], column: int, has_header: bool) -> list[str]:
     """行リストから指定列の会員番号を取り出す（空欄は除く）。"""
     body = rows[1:] if has_header else rows

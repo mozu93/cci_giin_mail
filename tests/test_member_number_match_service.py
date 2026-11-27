@@ -56,3 +56,13 @@ def test_resolve_target_ids_matched_and_unmatched(db_session):
     assert resolve_target_ids(members, r, MODE_UNMATCHED) == {b.id, c.id}
     with pytest.raises(ValueError):
         resolve_target_ids(members, r, "x")
+
+
+def test_guess_has_header(db_session):
+    a, b, c = _members(db_session)
+    members = get_members(db_session)
+    from app.services.member_number_match_service import guess_has_header
+    assert guess_has_header([["会員番号"], ["A-001"]], members) is True
+    assert guess_has_header([["A-001"], ["A-002"]], members) is False
+    assert guess_has_header([["2715"], ["802"]], members) is False
+    assert guess_has_header([["番号", "名前"], ["1", "x"]], members) is True

@@ -54,3 +54,21 @@ def test_dialog_disables_ok_when_nothing_selected(qtbot, db_session, monkeypatch
 
     assert dlg.get_target_ids() == set()
     assert not dlg._btn_ok.isEnabled()
+
+
+def test_dialog_headerless_numeric_file_is_not_treated_as_header(
+        qtbot, db_session, monkeypatch):
+    from app.ui.dialogs.member_number_import_dialog import MemberNumberImportDialog
+    monkeypatch.setattr(
+        "app.ui.dialogs.member_number_import_dialog.get_session",
+        lambda: db_session)
+    a = create_member(db_session, "2715", "○○商事", "山田太郎")
+    b = create_member(db_session, "802", "△△産業", "鈴木花子")
+    c = create_member(db_session, "9", "□□工業", "佐藤次郎")
+    members = get_members(db_session)
+    dlg = MemberNumberImportDialog([["2715"], ["802"]], members)
+    qtbot.addWidget(dlg)
+
+    assert not dlg._chk_header.isChecked()
+    dlg._rb_unmatched.setChecked(True)
+    assert dlg.get_target_ids() == {c.id}

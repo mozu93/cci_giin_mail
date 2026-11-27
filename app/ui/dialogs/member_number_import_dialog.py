@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QRadioButton, QButtonGroup, QPushButton, QLabel, QPlainTextEdit,
 )
 from app.services.member_number_match_service import (
-    MODE_MATCHED, MODE_UNMATCHED, extract_numbers, match_member_numbers,
-    resolve_target_ids,
+    MODE_MATCHED, MODE_UNMATCHED, extract_numbers, guess_has_header,
+    match_member_numbers, resolve_target_ids,
 )
 from app.database.connection import get_session
 
@@ -39,7 +39,8 @@ class MemberNumberImportDialog(QDialog):
         form = QFormLayout()
 
         self._chk_header = QCheckBox("1行目は見出し行")
-        self._chk_header.setChecked(True)
+        # 1行目が会員番号そのものなら見出しではないので、既定でオフにする
+        self._chk_header.setChecked(guess_has_header(self._rows, self._members))
         self._chk_header.toggled.connect(self._on_header_toggled)
         form.addRow("", self._chk_header)
 
